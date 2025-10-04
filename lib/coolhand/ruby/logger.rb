@@ -6,6 +6,12 @@ module Coolhand
     def self.log_to_api(call_data)
       config = Coolhand.configuration
 
+      payload = {
+        llm_request_log: {
+          raw_request: call_data
+        }
+      }
+
       uri = URI.parse(config.api_endpoint)
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = (uri.scheme == 'https')
@@ -13,7 +19,7 @@ module Coolhand
       request = Net::HTTP::Post.new(uri.request_uri)
       request['Content-Type'] = 'application/json'
       request['X-API-Key'] = config.api_key
-      request.body = call_data.to_json
+      request.body = payload.to_json
 
       log_request_summary(call_data, config.api_endpoint)
 
