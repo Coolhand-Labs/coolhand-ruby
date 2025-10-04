@@ -33,6 +33,7 @@ module Coolhand
     #     config.api_endpoint = 'https://api.openai.com'
     #     config.silent = false
     #     config.api_key = "xxx-yyy-zzz"
+    #     config.openai_address = "openai.com"
     #   end
     def configure
       yield(configuration)

@@ -21,7 +21,7 @@ module Coolhand
         def request(req, body = nil, &block)
           # Check if the request is destined for OpenAI or our own logging endpoint.
           # We must not intercept calls to our own logger, or we'll cause an infinite loop.
-          is_openai_call = address.include?('openai.com')
+          is_openai_call = address.include?(Coolhand.configuration.openai_address)
           is_coolhand_logging_call = address.include?('coolhand.io') || address.include?('localhost:3000')
 
           # If it's not an OpenAI call, just use the original method.
