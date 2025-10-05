@@ -29,7 +29,6 @@ module Coolhand
     # Example:
     #   Coolhand.configure do |config|
     #     config.environment = 'development'
-    #     config.log_model = 'LlmRequestLog'
     #     config.api_endpoint = 'https://api.openai.com'
     #     config.silent = false
     #     config.api_key = "xxx-yyy-zzz"
@@ -42,12 +41,6 @@ module Coolhand
       unless configuration.api_key.present?
         $stderr.puts '❌ Coolhand Error: API Key is required. Please set it in the configuration.'
         raise Error, 'API Key is required'
-      end
-
-      # Validate Log Model after configuration
-      unless configuration.log_model.present?
-        $stderr.puts '❌ Coolhand Error: Log Model is required. Please set it in the configuration.'
-        raise Error, 'Log Model is required'
       end
 
       # Validate API Endpoint after configuration
