@@ -64,5 +64,16 @@ module Coolhand
       @patched = true
       Coolhand.log '📡 Monitoring all outbound Net::HTTP requests...'
     end
+
+    def self.unpatch!
+      return unless @patched
+
+      Net::HTTP.class_eval do
+        alias_method :request, :original_request
+        remove_method :original_request
+      end
+
+      Coolhand.log '🔌 Net::HTTP unpatched.'
+    end
   end
 end

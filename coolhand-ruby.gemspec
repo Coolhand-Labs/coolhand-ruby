@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Intercepts and logs OpenAI API calls from a Ruby application."
   spec.description = "A Ruby gem to automatically monitor and log requests to the OpenAI API. It patches Net::HTTP to capture request and response data."
   spec.homepage = "https://coolhand.io/"
-  spec.required_ruby_version = ">= 2.6.0"
+  spec.required_ruby_version = ">= 3.0.0"
 
   spec.metadata["allowed_push_host"] = "TODO: Set to your gem server 'https://example.com'"
 

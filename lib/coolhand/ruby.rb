@@ -57,9 +57,20 @@ module Coolhand
       end
 
       # Apply the patch after configuration is set
-      Interceptor.patch!
+      # Interceptor.patch!
+      # log "✅ Coolhand ready - will log OpenAI calls to #{configuration.api_endpoint}"
+    end
 
-      log "✅ Coolhand ready - will log OpenAI calls to #{configuration.api_endpoint}"
+    def capture
+      unless block_given?
+        $stderr.puts '❌ Coolhand Error: Method .capture requires block.'
+        return
+      end
+
+      Interceptor.patch!
+      yield
+    ensure
+      Interceptor.unpatch!
     end
 
     # A simple logger that respects the 'silent' configuration option.
