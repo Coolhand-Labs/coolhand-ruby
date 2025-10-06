@@ -3,6 +3,7 @@
 require 'net/http'
 require 'uri'
 require 'thread'
+require 'faraday'
 
 require_relative "ruby/version"
 require_relative "ruby/configuration"
