@@ -3,12 +3,12 @@
 module Coolhand
   # Handles the formatting and sending of intercepted data to the Coolhand API.
   module Logger
-    def self.log_to_api(call_data)
+    def self.log_to_api(captured_data)
       config = Coolhand.configuration
 
       payload = {
         llm_request_log: {
-          raw_request: call_data
+          raw_request: captured_data
         }
       }
 
@@ -21,7 +21,8 @@ module Coolhand
       request['X-API-Key'] = config.api_key
       request.body = payload.to_json
 
-      log_request_summary(call_data, config.api_endpoint)
+      Coolhand.log "\n🎉 LOGGING OpenAI API Call #{uri}"
+      Coolhand.log captured_data
 
       begin
         response = http.request(request)
@@ -37,18 +38,6 @@ module Coolhand
       end
     ensure
       Coolhand.log '═' * 60 unless config.silent
-    end
-
-    def self.log_request_summary(data, endpoint)
-      return if Coolhand.configuration.silent
-
-      puts "\n🎉 LOGGING OpenAI API Call ##{data[:id]}"
-      puts "🕐 Time: #{data[:timestamp]}"
-      puts "🎯 #{data[:method]} #{data[:url]}"
-      puts "📊 Status: #{data[:status_code]} (#{data[:duration_ms]}ms)"
-      puts "🤖 Model: #{data.dig(:request_body, 'model') || 'N/A'}"
-      puts "💬 Messages: #{data.dig(:request_body, 'messages')&.length || 'N/A'}"
-      puts "📤 Sending to: #{endpoint}"
     end
   end
 end

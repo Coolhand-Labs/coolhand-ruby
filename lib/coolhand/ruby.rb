@@ -2,16 +2,12 @@
 
 require 'net/http'
 require 'uri'
-require 'json'
-require 'time'
 require 'thread'
 
 require_relative "ruby/version"
 require_relative "ruby/configuration"
 require_relative "ruby/interceptor"
 require_relative "ruby/logger"
-require_relative "ruby/log_formatter"
-require_relative "ruby/stats"
 
 # The main module for the Coolhand gem.
 # It provides the configuration interface and initializes the patching.
@@ -50,8 +46,9 @@ module Coolhand
       end
 
       # Apply the patch after configuration is set
-      # Interceptor.patch!
-      # log "✅ Coolhand ready - will log OpenAI calls to #{configuration.api_endpoint}"
+      Interceptor.patch!
+
+      log "✅ Coolhand ready - will log OpenAI calls to #{configuration.api_endpoint}"
     end
 
     def capture
