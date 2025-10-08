@@ -38,7 +38,7 @@ module Coolhand
 
       call_data = {
         id: SecureRandom.uuid,
-        timestamp: DateTime.current,
+        timestamp: DateTime.now,
         method: env.method,
         url: env.url.to_s,
         headers: sanitize_headers(env.request_headers),
