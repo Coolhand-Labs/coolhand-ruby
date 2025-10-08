@@ -83,9 +83,9 @@ DEPENDENCIES
   coolhand-ruby!
   faraday-typhoeus (~> 1.1)
   rake (~> 13.0)
-  rspec (~> 3.0)
-  rubocop (~> 1.21)
-  rubocop-performance (~> 1.23.1)
+  rspec (~> 3.12)
+  rubocop (~> 1.62)
+  rubocop-performance (~> 1.23)
   rubocop-rspec (~> 3.4.0)
   test-prof (~> 1.4.4)
 

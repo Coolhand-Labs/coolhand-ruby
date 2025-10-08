@@ -69,7 +69,8 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
-
+      - name: Mark repo as safe
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
       - name: Install Rubocop gems with specific versions
         run: |
           gem install rubocop:1.69.0 \
