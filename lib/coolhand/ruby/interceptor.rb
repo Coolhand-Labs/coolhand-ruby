@@ -83,8 +83,8 @@ module Coolhand
     def sanitize_headers(headers)
       sanitized = headers.transform_keys(&:to_s).dup
 
-      if sanitized['authorization']
-        sanitized['authorization'] = sanitized['authorization'].gsub(/Bearer .+/, 'Bearer [REDACTED]')
+      if sanitized['Authorization']
+        sanitized['Authorization'] = sanitized['Authorization'].gsub(/Bearer .+/, 'Bearer [REDACTED]')
       end
 
       %w[openai-api-key api-key].each do |key|
