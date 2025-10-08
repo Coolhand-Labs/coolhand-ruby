@@ -1,13 +1,167 @@
+# This is the configuration used to check the rubocop source code.
+
+require:
+  - rubocop-performance
+  - rubocop-rspec
+inherit_gem:
+  test-prof: config/rubocop-rspec.yml
+
 AllCops:
-  TargetRubyVersion: 2.6
+  NewCops: enable
+  Exclude:
+    - 'vendor/**/*'
+    - 'spec/fixtures/**/*'
+    - 'tmp/**/*'
+    - '.git/**/*'
+    - 'bin/*'
+  TargetRubyVersion: 3.0
+  SuggestExtensions: false
+  ActiveSupportExtensionsEnabled: true
+  DocumentationBaseURL: https://docs.rubocop.org/rubocop
+
+# Metrics rules
+Metrics/ModuleLength:
+  CountAsOne: ['array', 'hash', 'heredoc', 'method_call']
+  Max: 200
+
+Metrics/ClassLength:
+  CountAsOne: ['array', 'hash', 'heredoc', 'method_call']
+  Max: 200
+
+Metrics/BlockLength:
+  Max: 50
+  AllowedMethods:
+    - included
+  Exclude:
+    - '**/*.gemspec'
+    - 'spec/**/*'
+
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+Metrics/ParameterLists:
+  CountKeywordArgs: false
+
+Metrics/CollectionLiteralLength:
+  LengthThreshold: 500
+
+Metrics/MethodLength:
+  CountAsOne: ['array', 'hash', 'heredoc', 'method_call']
+  Max: 50
+
+# Bundle rules
+Bundler/OrderedGems:
+  Enabled: false
+
+# Style rules
+Style/WordArray:
+  MinSize: 5
 
 Style/StringLiterals:
-  Enabled: true
   EnforcedStyle: double_quotes
 
-Style/StringLiteralsInInterpolation:
-  Enabled: true
-  EnforcedStyle: double_quotes
+Style/GuardClause:
+  Enabled: false
 
+Style/SoleNestedConditional:
+  Enabled: false
+
+Style/TrailingCommaInArrayLiteral:
+  Enabled: false
+
+Style/TrailingCommaInHashLiteral:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/ClassAndModuleChildren:
+  Enabled: false
+
+Style/Alias:
+  EnforcedStyle: prefer_alias_method
+
+Style/DoubleNegation:
+  Enabled: false
+
+Style/InverseMethods:
+  Enabled: false
+
+# Layout rules
 Layout/LineLength:
   Max: 120
+
+Layout/ArgumentAlignment:
+  EnforcedStyle: with_fixed_indentation
+
+Layout/ParameterAlignment:
+  EnforcedStyle: with_fixed_indentation
+
+Layout/HashAlignment:
+  EnforcedLastArgumentHashStyle: ignore_implicit
+
+Layout/FirstArrayElementIndentation:
+  EnforcedStyle: consistent
+
+Layout/FirstHashElementIndentation:
+  EnforcedStyle: consistent
+
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: indented
+
+Layout/MultilineAssignmentLayout:
+  EnforcedStyle: same_line
+
+Layout/EndAlignment:
+  EnforcedStyleAlignWith: variable
+
+Naming/VariableNumber:
+  Enabled: false
+
+# Lint rules
+Lint/EmptyClass:
+  Enabled: false
+
+Lint/MissingSuper:
+  Enabled: false
+
+# RSpec rules
+RSpec/HookArgument:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/ExampleLength:
+  Enabled: false
+
+RSpec/LetSetup:
+  Enabled: false
+
+RSpec/InstanceVariable:
+  Enabled: false
+
+RSpec/MultipleMemoizedHelpers:
+  Enabled: false
+
+RSpec/NestedGroups:
+  Max: 6
+
+RSpec/MessageSpies:
+  Enabled: false
+
+RSpec/StubbedMock:
+  Enabled: false
+
+RSpec/DescribedClass:
+  Enabled: false
+
+# Performance rules
+Performance/MethodObjectAsBlock:
+  Enabled: true

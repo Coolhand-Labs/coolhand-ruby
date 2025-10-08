@@ -2,10 +2,6 @@
 
 RSpec.describe Coolhand::Ruby do
   it "has a version number" do
-    expect(Coolhand::Ruby::VERSION).not_to be nil
-  end
-
-  it "does something useful" do
-    expect(false).to eq(true)
+    expect(Coolhand::Ruby::VERSION).not_to be_nil
   end
 end

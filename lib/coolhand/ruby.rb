@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require 'net/http'
-require 'uri'
-require 'thread'
-require 'faraday'
+require "net/http"
+require "uri"
+require "faraday"
 
 require_relative "ruby/version"
 require_relative "ruby/configuration"
@@ -36,14 +35,14 @@ module Coolhand
 
       # Validate API Key after configuration
       unless configuration.api_key.present?
-        $stderr.puts '❌ Coolhand Error: API Key is required. Please set it in the configuration.'
-        raise Error, 'API Key is required'
+        warn "❌ Coolhand Error: API Key is required. Please set it in the configuration."
+        raise Error, "API Key is required"
       end
 
       # Validate API Endpoint after configuration
       unless configuration.api_endpoint.present?
-        $stderr.puts '❌ Coolhand Error: API Endpoint is required. Please set it in the configuration.'
-        raise Error, 'API Endpoint is required'
+        warn "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
+        raise Error, "API Endpoint is required"
       end
 
       # Apply the patch after configuration is set
@@ -54,7 +53,7 @@ module Coolhand
 
     def capture
       unless block_given?
-        $stderr.puts '❌ Coolhand Error: Method .capture requires block.'
+        warn "❌ Coolhand Error: Method .capture requires block."
         return
       end
 
@@ -67,6 +66,7 @@ module Coolhand
     # A simple logger that respects the 'silent' configuration option.
     def log(message)
       return if configuration.silent
+
       puts "COOLHAND: #{message}"
     end
   end

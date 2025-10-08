@@ -7,7 +7,7 @@ module Coolhand
     def self.patch!
       return if Faraday::Connection.private_method_defined?(ORIGINAL_METHOD_ALIAS)
 
-      Coolhand.log '📡 Monitoring outbound requests ...'
+      Coolhand.log "📡 Monitoring outbound requests ..."
 
       Faraday::Connection.class_eval do
         alias_method ORIGINAL_METHOD_ALIAS, :initialize
@@ -19,7 +19,7 @@ module Coolhand
         end
       end
 
-      Coolhand.log '🔧 Setting up Coolhand monitoring for Faraday ...'
+      Coolhand.log "🔧 Setting up Coolhand monitoring for Faraday ..."
     end
 
     def self.unpatch!
@@ -30,7 +30,7 @@ module Coolhand
         remove_method ORIGINAL_METHOD_ALIAS
       end
 
-      Coolhand.log '🔌 Faraday unpatched ...'
+      Coolhand.log "🔌 Faraday unpatched ..."
     end
 
     def call(env)
