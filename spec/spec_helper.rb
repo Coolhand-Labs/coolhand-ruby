@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-require "coolhand/ruby"
 require "simplecov"
+require "coolhand/ruby"
+require "pry"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

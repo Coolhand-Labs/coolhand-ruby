@@ -7,7 +7,10 @@ GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.2)
+    byebug (11.1.3)
+    coderay (1.1.3)
     diff-lcs (1.5.1)
+    docile (1.4.0)
     ethon (0.15.0)
       ffi (>= 1.15.0)
     faraday (2.14.0)
@@ -24,12 +27,19 @@ GEM
     json (2.7.2)
     language_server-protocol (3.17.0.3)
     logger (1.7.0)
+    method_source (1.1.0)
     net-http (0.6.0)
       uri
     parallel (1.24.0)
     parser (3.3.0.5)
       ast (~> 2.4.1)
       racc
+    pry (0.14.2)
+      coderay (~> 1.1)
+      method_source (~> 1.0)
+    pry-byebug (3.10.1)
+      byebug (~> 11.0)
+      pry (>= 0.13, < 0.15)
     racc (1.8.1)
     rainbow (3.1.1)
     rake (13.2.1)
@@ -68,6 +78,12 @@ GEM
     rubocop-rspec (3.4.0)
       rubocop (~> 1.61)
     ruby-progressbar (1.13.0)
+    simplecov (0.22.0)
+      docile (~> 1.1)
+      simplecov-html (~> 0.11)
+      simplecov_json_formatter (~> 0.1)
+    simplecov-html (0.12.3)
+    simplecov_json_formatter (0.1.4)
     strscan (3.1.0)
     test-prof (1.4.4)
     typhoeus (1.5.0)
@@ -82,11 +98,14 @@ PLATFORMS
 DEPENDENCIES
   coolhand-ruby!
   faraday-typhoeus (~> 1.1)
+  pry
+  pry-byebug
   rake (~> 13.0)
   rspec (~> 3.12)
   rubocop (~> 1.62)
   rubocop-performance (~> 1.23)
   rubocop-rspec (~> 3.4.0)
+  simplecov
   test-prof (~> 1.4.4)
 
 BUNDLED WITH

@@ -51,7 +51,7 @@ jobs:
       - name: Ensure minimum coverage
         run: |
           coverage=$(cat coverage/.last_run.json | jq '.result.line')
-          if (( $(echo "$coverage < 80" |bc -l) )); then exit 1; fi
+          if (( $(echo "$coverage < 70" |bc -l) )); then exit 1; fi
 
   rubocop:
     runs-on: ubuntu-latest

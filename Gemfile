@@ -15,4 +15,7 @@ group :development, :test do
   gem "rubocop-performance", "~> 1.23", require: false
   gem "rubocop-rspec", "~> 3.4.0", require: false
   gem "test-prof", "~> 1.4.4"
+
+  gem "pry"
+  gem "pry-byebug"
 end

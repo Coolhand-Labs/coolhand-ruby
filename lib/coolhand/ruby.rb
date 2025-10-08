@@ -34,14 +34,14 @@ module Coolhand
       yield(configuration)
 
       # Validate API Key after configuration
-      unless configuration.api_key.present?
-        warn "❌ Coolhand Error: API Key is required. Please set it in the configuration."
+      if configuration.api_key.nil?
+        log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
         raise Error, "API Key is required"
       end
 
       # Validate API Endpoint after configuration
-      unless configuration.api_endpoint.present?
-        warn "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
+      if configuration.api_endpoint.nil?
+        log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
         raise Error, "API Endpoint is required"
       end
 

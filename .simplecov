@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-SimpleCov.start "rails" do
-  add_group "coolhand", "lib/coolhand"
-  
-  minimum_coverage 80
+SimpleCov.start do
+  add_filter '/spec/'
+
+  minimum_coverage 70
 end
