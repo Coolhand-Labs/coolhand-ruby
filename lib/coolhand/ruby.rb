@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require 'net/http'
-require 'uri'
-require 'thread'
-require 'faraday'
+require "net/http"
+require "uri"
+require "faraday"
+require 'securerandom'
 
 require_relative "ruby/version"
 require_relative "ruby/configuration"
@@ -35,15 +35,15 @@ module Coolhand
       yield(configuration)
 
       # Validate API Key after configuration
-      unless configuration.api_key.present?
-        $stderr.puts '❌ Coolhand Error: API Key is required. Please set it in the configuration.'
-        raise Error, 'API Key is required'
+      if configuration.api_key.nil?
+        log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
+        raise Error, "API Key is required"
       end
 
       # Validate API Endpoint after configuration
-      unless configuration.api_endpoint.present?
-        $stderr.puts '❌ Coolhand Error: API Endpoint is required. Please set it in the configuration.'
-        raise Error, 'API Endpoint is required'
+      if configuration.api_endpoint.nil?
+        log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
+        raise Error, "API Endpoint is required"
       end
 
       # Apply the patch after configuration is set
@@ -54,7 +54,7 @@ module Coolhand
 
     def capture
       unless block_given?
-        $stderr.puts '❌ Coolhand Error: Method .capture requires block.'
+        log "❌ Coolhand Error: Method .capture requires block."
         return
       end
 
