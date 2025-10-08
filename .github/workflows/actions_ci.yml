@@ -73,13 +73,19 @@ jobs:
           fetch-depth: 0
       - name: Mark repo as safe
         run: git config --global --add safe.directory $GITHUB_WORKSPACE
-      - name: Install Rubocop gems with specific versions
+      - name: Cache Ruby gems
+        uses: actions/cache@v3
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gems-ruby-3.4.2-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: | 
+            ${{ runner.os }}-gems-ruby-3.4.2-
+      - name: Bundle config
         run: |
-          gem install rubocop:1.69.0 \
-                    rubocop-ast:1.38.1 \
-                    rubocop-performance:1.23.1 \
-                    rubocop-rails:2.29.1 \
-                    rubocop-rspec:3.1.0
-
+         bundle config path vendor/bundle
+         bundle config jobs 4
+         bundle config retry 3
+      - name: Install Ruby dependencies
+        run: bundle install
       - name: Run Rubocop
-        run: rubocop
+        run: bundle exec rubocop
