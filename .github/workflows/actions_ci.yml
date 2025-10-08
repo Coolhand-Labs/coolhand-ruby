@@ -46,6 +46,8 @@ jobs:
         run: bundle install
       - name: Run specs
         run: bundle exec rspec spec
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Ensure minimum coverage
         run: |
           coverage=$(cat coverage/.last_run.json | jq '.result.line')
