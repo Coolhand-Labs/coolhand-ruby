@@ -9,7 +9,8 @@ Gem::Specification.new do |spec|
   spec.email = ["ym@coolhand.io"]
 
   spec.summary = "Intercepts and logs OpenAI API calls from a Ruby application."
-  spec.description = "A Ruby gem to automatically monitor and log requests to the OpenAI API. It patches Net::HTTP to capture request and response data."
+  spec.description = "A Ruby gem to automatically monitor and log requests to the OpenAI API. It patches Net::HTTP " \
+                     "to capture request and response data."
   spec.homepage = "https://coolhand.io/"
   spec.required_ruby_version = ">= 3.0.0"
 
@@ -36,4 +37,5 @@ Gem::Specification.new do |spec|
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
+  spec.metadata["rubygems_mfa_required"] = "true"
 end
