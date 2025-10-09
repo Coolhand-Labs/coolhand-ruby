@@ -12,5 +12,19 @@ module Coolhand
       @silent = ENV.fetch("COOLHAND_SILENT", false)
       @openai_address = ENV.fetch("COOLHAND_OPENAI_ADDRESS", false)
     end
+
+    def validate!
+      # Validate API Key after configuration
+      if api_key.nil?
+        log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
+        raise Error, "API Key is required"
+      end
+
+      # Validate API Endpoint after configuration
+      if api_endpoint.nil?
+        log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
+        raise Error, "API Endpoint is required"
+      end
+    end
   end
 end
