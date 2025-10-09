@@ -34,7 +34,6 @@ RSpec.describe Coolhand::Interceptor do
         status_code: 200
       )
     )
-
   end
 
   describe ".patch! and .unpatch!" do

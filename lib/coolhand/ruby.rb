@@ -53,7 +53,6 @@ module Coolhand
     end
 
     def capture
-
       unless block_given?
         log "❌ Coolhand Error: Method .capture requires block."
         return
