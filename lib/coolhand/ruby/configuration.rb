@@ -10,25 +10,25 @@ module Coolhand
       @api_endpoint = ENV.fetch("COOLHAND_API_ENDPOINT", nil)
       @api_key = ENV.fetch("COOLHAND_API_KEY", nil)
       @silent = ENV.fetch("COOLHAND_SILENT", false)
-      @intercept_address = ENV.fetch("COOLHAND_INTERCEPT_ADDRESS", false)
+      @intercept_address = ENV.fetch("COOLHAND_INTERCEPT_ADDRESS", [])
     end
 
     def validate!
       # Validate API Key after configuration
       if api_key.nil?
-        log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
+        Coolhand.log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
         raise Error, "API Key is required"
       end
 
       # Validate API Endpoint after configuration
       if api_endpoint.nil?
-        log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
+        Coolhand.log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
         raise Error, "API Endpoint is required"
       end
 
       # Validate API Endpoint after configuration
       if intercept_address.nil?
-        log "❌ Coolhand Error: Intercept Address is required. Please set it in the configuration."
+        Coolhand.log "❌ Coolhand Error: Intercept Address is required. Please set it in the configuration."
         raise Error, "Intercept Address is required"
       end
     end

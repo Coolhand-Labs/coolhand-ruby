@@ -18,6 +18,13 @@ RSpec.describe Coolhand::Interceptor do
     stub_const("Coolhand::Logger", logger)
     allow(logger).to receive(:log_to_api)
     allow(Coolhand).to receive(:log)
+
+    Coolhand.configure do |c|
+      c.api_key = "test-key"
+      c.silent = true
+      c.api_endpoint = "http://localhost:3000/test"
+      c.intercept_address = ["hello"]
+    end
   end
 
   it "intercepts a Faraday request and logs the response body" do
@@ -45,6 +52,8 @@ RSpec.describe Coolhand::Interceptor do
     end
 
     it "patches Faraday::Connection to use the Interceptor" do
+      described_class.unpatch!
+
       expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be false
 
       described_class.patch!
