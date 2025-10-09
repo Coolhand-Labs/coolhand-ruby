@@ -1,10 +1,18 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
-require 'faraday'
+require "spec_helper"
+require "faraday"
 
 RSpec.describe Coolhand::Interceptor do
-  let(:logger) { class_double("Coolhand::Logger") }
+  let(:logger) { class_double(Coolhand::Logger) }
+  let(:conn) do
+    Faraday.new do |builder|
+      builder.use described_class
+      builder.adapter :test do |stub|
+        stub.get("/hello") { [200, { "Content-Type" => "application/json" }, '{"msg":"hi"}'] }
+      end
+    end
+  end
 
   before do
     stub_const("Coolhand::Logger", logger)
@@ -12,17 +20,8 @@ RSpec.describe Coolhand::Interceptor do
     allow(Coolhand).to receive(:log)
   end
 
-  let(:conn) do
-    Faraday.new do |builder|
-      builder.use described_class
-      builder.adapter :test do |stub|
-        stub.get('/hello') { [200, { 'Content-Type' => 'application/json' }, '{"msg":"hi"}'] }
-      end
-    end
-  end
-
-  it 'intercepts a Faraday request and logs the response body' do
-    conn.get('/hello')
+  it "intercepts a Faraday request and logs the response body" do
+    conn.get("/hello")
 
     # Give thread a chance to run
     sleep 0.1
@@ -30,7 +29,7 @@ RSpec.describe Coolhand::Interceptor do
     expect(logger).to have_received(:log_to_api).with('{"msg":"hi"}')
   end
 
-  describe '.patch! and .unpatch!' do
+  describe ".patch! and .unpatch!" do
     let(:original_method) { Faraday::Connection.instance_method(:initialize) }
 
     after do
@@ -38,7 +37,7 @@ RSpec.describe Coolhand::Interceptor do
       described_class.unpatch!
     end
 
-    it 'patches Faraday::Connection to use the Interceptor' do
+    it "patches Faraday::Connection to use the Interceptor" do
       expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be false
 
       described_class.patch!
@@ -55,7 +54,7 @@ RSpec.describe Coolhand::Interceptor do
       expect(stack_classes).to include(described_class)
     end
 
-    it 'unpatches Faraday::Connection correctly' do
+    it "unpatches Faraday::Connection correctly" do
       described_class.patch!
       expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be true
 

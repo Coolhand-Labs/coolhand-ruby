@@ -14,11 +14,11 @@ module Coolhand
 
       uri = URI.parse(config.api_endpoint)
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == 'https')
+      http.use_ssl = (uri.scheme == "https")
 
       request = Net::HTTP::Post.new(uri.request_uri)
-      request['Content-Type'] = 'application/json'
-      request['X-API-Key'] = config.api_key
+      request["Content-Type"] = "application/json"
+      request["X-API-Key"] = config.api_key
       request.body = payload.to_json
 
       Coolhand.log "\n🎉 LOGGING OpenAI API Call #{uri}"
@@ -37,7 +37,7 @@ module Coolhand
         Coolhand.log "❌ COOLHAND: Error logging to API: #{e.message}"
       end
     ensure
-      Coolhand.log '═' * 60 unless config.silent
+      Coolhand.log "═" * 60 unless config.silent
     end
   end
 end

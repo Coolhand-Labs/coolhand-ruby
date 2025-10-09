@@ -67,6 +67,7 @@ module Coolhand
     # A simple logger that respects the 'silent' configuration option.
     def log(message)
       return if configuration.silent
+
       puts "COOLHAND: #{message}"
     end
   end
