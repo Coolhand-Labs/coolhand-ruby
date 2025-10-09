@@ -12,7 +12,8 @@ jobs:
       COOLHAND_API_ENDPOINT: https://coolhand_api_endpoint
       COOLHAND_API_KEY: coolhand_api_key-xxx-yyy-zzz
       COOLHAND_SILENT: true
-      COOLHAND_OPENAI_ADDRESS: open-ai-host
+      COOLHAND_INTERCEPT_ADDRESS:
+        - open-ai-host
       BUNDLE_JOBS: 4
       BUNDLE_RETRY: 3
 

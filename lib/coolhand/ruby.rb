@@ -29,22 +29,12 @@ module Coolhand
     #     config.api_endpoint = 'https://api.openai.com'
     #     config.silent = false
     #     config.api_key = "xxx-yyy-zzz"
-    #     config.openai_address = "openai.com"
+    #     config.intercept_address = ["openai.com"]
     #   end
     def configure
       yield(configuration)
 
-      # Validate API Key after configuration
-      if configuration.api_key.nil?
-        log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
-        raise Error, "API Key is required"
-      end
-
-      # Validate API Endpoint after configuration
-      if configuration.api_endpoint.nil?
-        log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
-        raise Error, "API Endpoint is required"
-      end
+      configuration.validate!
 
       # Apply the patch after configuration is set
       Interceptor.patch!
@@ -59,6 +49,7 @@ module Coolhand
       end
 
       Interceptor.patch!
+
       yield
     ensure
       Interceptor.unpatch!
