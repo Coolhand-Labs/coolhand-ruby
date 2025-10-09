@@ -66,7 +66,8 @@ RSpec.describe Coolhand::Ruby do
     end
 
     it "warns if no block given" do
-      expect { Coolhand.capture }.to output(/requires block/).to_stderr
+      config.silent = false
+      expect { Coolhand.capture }.to output(/requires block/).to_stdout
     end
   end
 
