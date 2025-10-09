@@ -28,6 +28,8 @@ RSpec.describe Coolhand::Interceptor do
   end
 
   it "intercepts a Faraday request and logs the response body" do
+    described_class.unpatch!
+    
     conn.get("/hello")
 
     # Give thread a chance to run
