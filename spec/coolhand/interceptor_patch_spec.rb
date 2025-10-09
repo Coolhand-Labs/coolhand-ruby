@@ -26,7 +26,14 @@ RSpec.describe Coolhand::Interceptor do
     # Give thread a chance to run
     sleep 0.1
 
-    expect(logger).to have_received(:log_to_api).with('{"msg":"hi"}')
+    expect(logger).to have_received(:log_to_api).with(
+      a_hash_including(
+        url: "http:/hello",
+        method: :get,
+        response_body: { "msg" => "hi" },
+        status_code: 200
+      )
+    )
   end
 
   describe ".patch! and .unpatch!" do

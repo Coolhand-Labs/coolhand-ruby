@@ -36,6 +36,18 @@ module Coolhand
     def call(env)
       Coolhand.log "🎯 INTERCEPTING OpenAI call #{env.url}"
 
+      call_data = {
+        id: SecureRandom.uuid,
+        timestamp: DateTime.now,
+        method: env.method,
+        url: env.url.to_s,
+        headers: sanitize_headers(env.request_headers),
+        request_body: parse_json(env.request_body),
+        response_body: nil,
+        response_headers: nil,
+        status_code: nil
+      }
+
       buffer = +""
       original_on_data = env.request.on_data
       env.request.on_data = proc do |chunk, overall_received_bytes|
@@ -52,8 +64,34 @@ module Coolhand
           response_env.body = body
         end
 
-        Thread.new { Logger.log_to_api(body) }
+        call_data[:response_body] = parse_json(body)
+        call_data[:response_headers] = sanitize_headers(response_env.request_headers)
+        call_data[:status_code] = response_env.status
+
+        Thread.new { Logger.log_to_api(call_data) }
       end
+    end
+
+    private
+
+    def parse_json(string)
+      JSON.parse(string)
+    rescue JSON::ParserError, TypeError
+      string
+    end
+
+    def sanitize_headers(headers)
+      sanitized = headers.transform_keys(&:to_s).dup
+
+      if sanitized["Authorization"]
+        sanitized["Authorization"] = sanitized["Authorization"].gsub(/Bearer .+/, "Bearer [REDACTED]")
+      end
+
+      %w[openai-api-key api-key].each do |key|
+        sanitized[key] = "[REDACTED]" if sanitized[key]
+      end
+
+      sanitized
     end
   end
 end

@@ -3,6 +3,7 @@
 require "net/http"
 require "uri"
 require "faraday"
+require "securerandom"
 
 require_relative "ruby/version"
 require_relative "ruby/configuration"
@@ -53,7 +54,7 @@ module Coolhand
 
     def capture
       unless block_given?
-        warn "❌ Coolhand Error: Method .capture requires block."
+        log "❌ Coolhand Error: Method .capture requires block."
         return
       end
 
