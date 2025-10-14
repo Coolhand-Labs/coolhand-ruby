@@ -7,7 +7,6 @@ RSpec.describe Coolhand::Interceptor do
   let(:logger) { class_double(Coolhand::Logger) }
   let(:conn) do
     Faraday.new do |builder|
-      builder.use described_class
       builder.adapter :test do |stub|
         stub.get("/hello") { [200, { "Content-Type" => "application/json" }, '{"msg":"hi"}'] }
       end
@@ -28,8 +27,6 @@ RSpec.describe Coolhand::Interceptor do
   end
 
   it "intercepts a Faraday request and logs the response body" do
-    described_class.unpatch!
-
     conn.get("/hello")
 
     # Give thread a chance to run
@@ -55,11 +52,9 @@ RSpec.describe Coolhand::Interceptor do
 
     it "patches Faraday::Connection to use the Interceptor" do
       described_class.unpatch!
-
       expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be false
 
       described_class.patch!
-
       expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be true
 
       # Check that new initialize actually uses Interceptor
