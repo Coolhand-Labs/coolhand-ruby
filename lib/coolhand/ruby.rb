@@ -29,7 +29,7 @@ module Coolhand
     #     config.api_endpoint = 'https://api.openai.com'
     #     config.silent = false
     #     config.api_key = "xxx-yyy-zzz"
-    #     config.intercept_address = ["openai.com"]
+    #     config.intercept_addresses = ["openai.com"]
     #   end
     def configure
       yield(configuration)

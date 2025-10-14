@@ -22,7 +22,7 @@ RSpec.describe Coolhand::Interceptor do
       c.api_key = "test-key"
       c.silent = true
       c.api_endpoint = "http://localhost:3000/test"
-      c.intercept_address = ["hello"]
+      c.intercept_addresses = ["hello"]
     end
   end
 

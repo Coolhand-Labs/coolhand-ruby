@@ -3,14 +3,14 @@
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
-    attr_accessor :api_key, :api_endpoint, :environment, :silent, :intercept_address
+    attr_accessor :api_key, :api_endpoint, :environment, :silent, :intercept_addresses
 
     def initialize
       @environment = ENV.fetch("COOLHAND_ENV", "development")
       @api_endpoint = ENV.fetch("COOLHAND_API_ENDPOINT", nil)
       @api_key = ENV.fetch("COOLHAND_API_KEY", nil)
       @silent = ENV.fetch("COOLHAND_SILENT", false)
-      @intercept_address = ENV.fetch("COOLHAND_INTERCEPT_ADDRESS", [])
+      @intercept_addresses = ENV.fetch("COOLHAND_INTERCEPT_ADDRESSES", [])
     end
 
     def validate!
@@ -27,7 +27,7 @@ module Coolhand
       end
 
       # Validate API Endpoint after configuration
-      if intercept_address.nil?
+      if intercept_addresses.nil?
         Coolhand.log "❌ Coolhand Error: Intercept Address is required. Please set it in the configuration."
         raise Error, "Intercept Address is required"
       end

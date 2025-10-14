@@ -47,7 +47,7 @@ module Coolhand
     private
 
     def open_ai_request(env)
-      Coolhand.configuration.intercept_address.any? do |address|
+      Coolhand.configuration.intercept_addresses.any? do |address|
         env.url.to_s.include?(address)
       end
     end
