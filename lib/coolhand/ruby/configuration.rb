@@ -7,7 +7,7 @@ module Coolhand
 
     def initialize
       @environment = ENV.fetch("COOLHAND_ENV", "development")
-      @api_endpoint = ENV.fetch("COOLHAND_API_ENDPOINT", nil)
+      @api_endpoint = ENV.fetch("COOLHAND_API_ENDPOINT", "https://coolhand.io/api/v2/llm_request_logs")
       @api_key = ENV.fetch("COOLHAND_API_KEY", nil)
       @silent = ENV.fetch("COOLHAND_SILENT", false)
       @intercept_addresses = ENV.fetch("COOLHAND_INTERCEPT_ADDRESSES", [])
