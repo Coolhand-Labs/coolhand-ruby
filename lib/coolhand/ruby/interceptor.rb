@@ -19,7 +19,7 @@ module Coolhand
         end
       end
 
-      Coolhand.log "🔧 Setting up Coolhand monitoring for Faraday ..."
+      Coolhand.log "🔧 Setting up monitoring for Faraday ..."
     end
 
     def self.unpatch!
@@ -34,9 +34,26 @@ module Coolhand
     end
 
     def call(env)
+      return super(env) unless llm_api_request?(env)
+
       Coolhand.log "🎯 INTERCEPTING OpenAI call #{env.url}"
 
-      call_data = {
+      call_data = build_call_data(env)
+      buffer = override_on_data(env)
+
+      process_complete_callback(env, buffer, call_data)
+    end
+
+    private
+
+    def llm_api_request?(env)
+      Coolhand.configuration.intercept_addresses.any? do |address|
+        env.url.to_s.include?(address)
+      end
+    end
+
+    def build_call_data(env)
+      {
         id: SecureRandom.uuid,
         timestamp: DateTime.now,
         method: env.method,
@@ -47,7 +64,9 @@ module Coolhand
         response_headers: nil,
         status_code: nil
       }
+    end
 
+    def override_on_data(env)
       buffer = +""
       original_on_data = env.request.on_data
       env.request.on_data = proc do |chunk, overall_received_bytes|
@@ -56,6 +75,10 @@ module Coolhand
         original_on_data&.call(chunk, overall_received_bytes)
       end
 
+      buffer
+    end
+
+    def process_complete_callback(env, buffer, call_data)
       @app.call(env).on_complete do |response_env|
         if buffer.empty?
           body = response_env.body
@@ -71,8 +94,6 @@ module Coolhand
         Thread.new { Logger.log_to_api(call_data) }
       end
     end
-
-    private
 
     def parse_json(string)
       JSON.parse(string)

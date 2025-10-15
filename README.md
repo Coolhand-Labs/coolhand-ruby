@@ -1,8 +1,8 @@
 # Coolhand Ruby Gem
 
-Intercepts and logs OpenAI API calls from any Ruby application that uses the standard Net::HTTP library.
+Intercepts and logs OpenAI API calls from any Ruby application that uses the `Faraday` library.
 
-This gem provides automatic instrumentation for OpenAI calls, allowing you to monitor usage, performance, and data without changing your application code. It works by "monkey-patching" Ruby's built-in `Net::HTTP` class.
+This gem provides automatic instrumentation for OpenAI calls, allowing you to monitor usage, performance, and data without changing your application code. It works by new Faraday Middleware class.
 
 Installation
 Add this line to your application's Gemfile:
@@ -30,29 +30,29 @@ You need to provide your Coolhand API key.
 ```
 Coolhand.configure do |config|
 #### Your Coolhand API Key (Required)
-config.api_key = ENV['COOLHAND_API_KEY']
+    config.api_key = ENV['COOLHAND_API_KEY']
+    
+#### Your Coolhand API Endpoint
+    config.api_endpoint = ENV['COOLHAND_API_ENDPOINT']
 
 #### Environment can be 'local' (default) or 'production'
 #### This determines which API endpoint the logs are sent to.
-config.environment = ENV['RACK_ENV'] || 'development'
+    config.environment = ENV['RACK_ENV'] || 'development'
 
 #### Set to true to suppress all console output from the gem.
-config.silent = false
+    config.silent = false
+
+#### Specify a list of paths that should be interpreted.
+    config.intercept_addresses = ['https://chatgpt.com/']
 end
 ```
 
-Once configured, the gem will automatically start monitoring Net::HTTP requests. Any call made to api.openai.com will be intercepted and logged.
-
-Example with the 'ruby-openai' gem
-Since the ruby-openai gem uses `Net::HTTP` under the hood, Coolhand will work with it automatically.
-
-require 'openai'
-require 'coolhand'
+Once configured, the gem will automatically start monitoring HTTP/HTTPS requests. Any call made to api.openai.com will be intercepted and logged.
 
 ### Configure Coolhand first
 ```
 Coolhand.configure do |config|
-config.api_key = 'your_coolhand_api_key'
+    config.api_key = 'your_coolhand_api_key'
 end
 ```
 ### Now, use the OpenAI client as you normally would
@@ -60,10 +60,10 @@ end
 client = OpenAI::Client.new(access_token: ENV['OPENAI_API_KEY'])
 
 response = client.chat(
-parameters: {
-model: "gpt-3.5-turbo",
-messages: [{ role: "user", content: "Hello, world!"}],
-temperature: 0.7,
+    parameters: {
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content: "Hello, world!"}],
+    temperature: 0.7,
 })
 
 puts response.dig("choices", 0, "message", "content")
