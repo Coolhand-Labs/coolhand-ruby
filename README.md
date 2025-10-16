@@ -43,7 +43,7 @@ Coolhand.configure do |config|
     config.silent = false
 
 #### Specify a list of paths that should be interpreted.
-    config.intercept_addresses = ['https://chatgpt.com/']
+    config.intercept_addresses = "https://chatgpt2.com,https://chatgpt.com"
 end
 ```
 
