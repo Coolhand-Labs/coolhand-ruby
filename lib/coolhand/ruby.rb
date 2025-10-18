@@ -8,7 +8,9 @@ require "securerandom"
 require_relative "ruby/version"
 require_relative "ruby/configuration"
 require_relative "ruby/interceptor"
-require_relative "ruby/logger"
+require_relative "ruby/api_service"
+require_relative "ruby/logger_service"
+require_relative "ruby/feedback_service"
 
 # The main module for the Coolhand gem.
 # It provides the configuration interface and initializes the patching.
@@ -26,7 +28,6 @@ module Coolhand
     # Example:
     #   Coolhand.configure do |config|
     #     config.environment = 'development'
-    #     config.api_endpoint = 'https://api.openai.com'
     #     config.silent = false
     #     config.api_key = "xxx-yyy-zzz"
     #     config.intercept_addresses = ["openai.com"]
@@ -39,7 +40,7 @@ module Coolhand
       # Apply the patch after configuration is set
       Interceptor.patch!
 
-      log "✅ Coolhand ready - will log OpenAI calls to #{configuration.api_endpoint}"
+      log "✅ Coolhand ready - will log OpenAI calls"
     end
 
     def capture
@@ -60,6 +61,16 @@ module Coolhand
       return if configuration.silent
 
       puts "COOLHAND: #{message}"
+    end
+
+    # Creates a new FeedbackService instance
+    def feedback_service
+      Ruby::FeedbackService.new
+    end
+
+    # Creates a new LoggerService instance
+    def logger_service
+      Ruby::LoggerService.new
     end
   end
 end

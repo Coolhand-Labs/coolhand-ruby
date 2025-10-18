@@ -3,11 +3,10 @@
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
-    attr_accessor :api_key, :api_endpoint, :environment, :silent, :intercept_addresses
+    attr_accessor :api_key, :environment, :silent, :intercept_addresses
 
     def initialize
-      @environment = ENV.fetch("COOLHAND_ENV", "development")
-      @api_endpoint = ENV.fetch("COOLHAND_API_ENDPOINT", "https://coolhand.io/api/v2/llm_request_logs")
+      @environment = ENV.fetch("COOLHAND_ENV", "production")
       @api_key = ENV.fetch("COOLHAND_API_KEY", nil)
       @silent = ENV.fetch("COOLHAND_SILENT", false)
 
@@ -20,12 +19,6 @@ module Coolhand
       if api_key.nil?
         Coolhand.log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
         raise Error, "API Key is required"
-      end
-
-      # Validate API Endpoint after configuration
-      if api_endpoint.nil?
-        Coolhand.log "❌ Coolhand Error: API Endpoint is required. Please set it in the configuration."
-        raise Error, "API Endpoint is required"
       end
 
       # Validate API Endpoint after configuration
