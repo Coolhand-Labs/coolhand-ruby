@@ -91,7 +91,7 @@ module Coolhand
         call_data[:response_headers] = sanitize_headers(response_env.request_headers)
         call_data[:status_code] = response_env.status
 
-        Thread.new { Logger.log_to_api(call_data) }
+        Thread.new { Coolhand.logger_service.log_to_api(call_data) }
       end
     end
 

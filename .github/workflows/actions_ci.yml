@@ -1,7 +1,11 @@
 name: Coolhand-Ruby CI
-on: [push]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
 jobs:
   specs:
+    name: Run RSpec Tests
     runs-on: ubuntu-latest
 
     container:
@@ -45,7 +49,7 @@ jobs:
       - name: Install Ruby dependencies
         run: bundle install
       - name: Run specs
-        run: bundle exec rspec spec
+        run: bundle exec rspec spec --format documentation
       - name: Install jq
         run: apt-get update && apt-get install -y jq
       - name: Ensure minimum coverage
@@ -54,6 +58,7 @@ jobs:
           if (( $(echo "$coverage < 70" |bc -l) )); then exit 1; fi
 
   rubocop:
+    name: Run RuboCop Linter
     runs-on: ubuntu-latest
 
     container:
@@ -88,4 +93,4 @@ jobs:
       - name: Install Ruby dependencies
         run: bundle install
       - name: Run Rubocop
-        run: bundle exec rubocop
+        run: bundle exec rubocop --parallel --format progress

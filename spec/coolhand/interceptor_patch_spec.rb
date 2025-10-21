@@ -4,7 +4,8 @@ require "spec_helper"
 require "faraday"
 
 RSpec.describe Coolhand::Interceptor do
-  let(:logger) { class_double(Coolhand::Logger) }
+  let(:logger_instance) { instance_double(Coolhand::Ruby::LoggerService) }
+  let(:logger_class) { class_double(Coolhand::Ruby::LoggerService).as_stubbed_const }
   let(:conn) do
     Faraday.new do |builder|
       builder.adapter :test do |stub|
@@ -14,14 +15,13 @@ RSpec.describe Coolhand::Interceptor do
   end
 
   before do
-    stub_const("Coolhand::Logger", logger)
-    allow(logger).to receive(:log_to_api)
+    allow(logger_class).to receive(:new).and_return(logger_instance)
+    allow(logger_instance).to receive(:log_to_api)
     allow(Coolhand).to receive(:log)
 
     Coolhand.configure do |c|
       c.api_key = "test-key"
       c.silent = true
-      c.api_endpoint = "http://localhost:3000/test"
       c.intercept_addresses = ["hello"]
     end
   end
@@ -32,7 +32,7 @@ RSpec.describe Coolhand::Interceptor do
     # Give thread a chance to run
     sleep 0.1
 
-    expect(logger).to have_received(:log_to_api).with(
+    expect(logger_instance).to have_received(:log_to_api).with(
       a_hash_including(
         url: "http:/hello",
         method: :get,

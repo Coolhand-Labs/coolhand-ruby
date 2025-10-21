@@ -13,32 +13,19 @@ RSpec.describe Coolhand::Ruby do
     it "yields configuration" do
       Coolhand.configure do |c|
         c.api_key = "test-key"
-        c.api_endpoint = "https://example.com"
         c.silent = true
       end
 
       expect(config.api_key).to eq("test-key")
-      expect(config.api_endpoint).to eq("https://example.com")
     end
 
     it "raises error if api_key is missing" do
       expect do
         Coolhand.configure do |c|
-          c.api_endpoint = "https://example.com"
           c.silent = true
           c.api_key = nil
         end
       end.to raise_error(Coolhand::Error, /API Key is required/)
-    end
-
-    it "raises error if api_endpoint is missing" do
-      expect do
-        Coolhand.configure do |c|
-          c.api_key = "test-key"
-          c.silent = true
-          c.api_endpoint = nil
-        end
-      end.to raise_error(Coolhand::Error, /API Endpoint is required/)
     end
 
     it "raises error if intercept_addresses is missing" do
@@ -46,7 +33,6 @@ RSpec.describe Coolhand::Ruby do
         Coolhand.configure do |c|
           c.api_key = "test-key"
           c.silent = true
-          c.api_endpoint = "https://example.com"
           c.intercept_addresses = nil
         end
       end.to raise_error(Coolhand::Error, /Intercept Address is required/)
@@ -56,7 +42,6 @@ RSpec.describe Coolhand::Ruby do
       expect(Coolhand::Interceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "key"
-        c.api_endpoint = "https://api"
         c.silent = true
         c.intercept_addresses = []
       end
