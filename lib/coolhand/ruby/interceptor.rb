@@ -34,7 +34,7 @@ module Coolhand
     end
 
     def call(env)
-      return super(env) unless llm_api_request?(env)
+      return super unless llm_api_request?(env)
 
       Coolhand.log "🎯 INTERCEPTING OpenAI call #{env.url}"
 

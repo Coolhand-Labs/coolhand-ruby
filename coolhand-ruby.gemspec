@@ -3,18 +3,19 @@
 require_relative "lib/coolhand/ruby/version"
 
 Gem::Specification.new do |spec|
-  spec.name = "coolhand-ruby"
+  spec.name = "coolhand"
   spec.version = Coolhand::Ruby::VERSION
-  spec.authors = ["YaroslavMalyk"]
-  spec.email = ["ym@coolhand.io"]
+  spec.authors = ["Michael Carroll", "Yaroslav Malyk"]
+  spec.email = ["mc@coolhandlabs.com"]
 
   spec.summary = "Intercepts and logs OpenAI API calls from a Ruby application."
-  spec.description = "A Ruby gem to automatically monitor and log requests to the OpenAI API. It patches Net::HTTP " \
+  spec.description = "A Ruby gem to automatically monitor and log external LLM requests. It patches Net::HTTP " \
                      "to capture request and response data."
-  spec.homepage = "https://coolhand.io/"
+  spec.homepage = "https://coolhandlabs.com/"
+  spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 3.0.0"
 
-  spec.metadata["allowed_push_host"] = "TODO: Set to your gem server 'https://example.com'"
+  spec.metadata["allowed_push_host"] = "https://rubygems.org"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/Coolhand-Labs/coolhand-ruby"
