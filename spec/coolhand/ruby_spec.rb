@@ -28,14 +28,17 @@ RSpec.describe Coolhand::Ruby do
       end.to raise_error(Coolhand::Error, /API Key is required/)
     end
 
-    it "raises error if intercept_addresses is missing" do
+    it "preserves default intercept_addresses when set to nil" do
+      # Setting to nil should preserve the defaults
       expect do
         Coolhand.configure do |c|
           c.api_key = "test-key"
           c.silent = true
           c.intercept_addresses = nil
         end
-      end.to raise_error(Coolhand::Error, /Intercept Address is required/)
+      end.not_to raise_error
+
+      expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com", "api.anthropic.com"])
     end
 
     it "calls Interceptor.patch!" do
@@ -43,8 +46,22 @@ RSpec.describe Coolhand::Ruby do
       Coolhand.configure do |c|
         c.api_key = "key"
         c.silent = true
+        # Empty array preserves defaults
         c.intercept_addresses = []
       end
+
+      expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com", "api.anthropic.com"])
+    end
+
+    it "allows custom intercept_addresses to be set" do
+      expect(Coolhand::Interceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "key"
+        c.silent = true
+        c.intercept_addresses = ["custom.api.com"]
+      end
+
+      expect(Coolhand.configuration.intercept_addresses).to eq(["custom.api.com"])
     end
   end
 

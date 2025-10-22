@@ -23,6 +23,11 @@ module Coolhand
   class << self
     attr_reader :configuration
 
+    # Reset configuration to defaults (mainly for testing)
+    def reset_configuration!
+      @configuration = Configuration.new
+    end
+
     # Provides a block to configure the gem.
     #
     # Example:

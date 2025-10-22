@@ -13,7 +13,7 @@ gem 'coolhand'
 1. **Get API Key**: Visit [coolhand.io](https://coolhand.io/) to create a free account
 2. **Install**: `gem install coolhand`
 3. **Initialize**: Add configuration to your Ruby application
-4. **Configure**: Set `COOLHAND_API_KEY` in your environment variables
+4. **Configure**: Set your API key in the configuration block
 5. **Deploy**: Your AI calls are now automatically monitored!
 
 ## Quick Start
@@ -27,7 +27,7 @@ gem 'coolhand'
 require 'coolhand'
 
 Coolhand.configure do |config|
-  config.api_key = ENV['COOLHAND_API_KEY']
+  config.api_key = 'your_api_key_here'
   config.silent = true  # Set to false for debug output
 end
 
@@ -38,12 +38,6 @@ end
 # ✅ ANY library making AI API calls via Faraday
 
 # NO code changes needed in your existing services!
-```
-
-**Environment Variables:**
-```bash
-# .env
-COOLHAND_API_KEY=your_api_key_here
 ```
 
 **✨ Why Automatic Monitoring:**
@@ -99,14 +93,15 @@ Create an initializer file at `config/initializers/coolhand.rb`:
 # config/initializers/coolhand.rb
 Coolhand.configure do |config|
   # Your Coolhand API Key (Required)
-  config.api_key = ENV['COOLHAND_API_KEY']
+  # Best practice: Use Rails credentials or environment-specific configuration
+  config.api_key = Rails.application.credentials.coolhand_api_key
 
   # Set to true to suppress console output
   config.silent = Rails.env.production?
 
-  # Specify which LLM endpoints to intercept (comma-separated)
-  # Default includes common LLM providers (Optional)
-  config.intercept_addresses = "https://api.openai.com,https://api.anthropic.com"
+  # Specify which LLM endpoints to intercept (array of strings)
+  # Optional - defaults to ["api.openai.com", "api.anthropic.com"]
+  # config.intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.cohere.ai"]
 end
 ```
 
@@ -161,7 +156,7 @@ end
 |--------|------|---------|-------------|
 | `api_key` | String | *required* | Your Coolhand API key for authentication |
 | `silent` | Boolean | `false` | Whether to suppress console output |
-| `intercept_addresses` | String | Common LLM providers | Comma-separated list of API endpoints to monitor |
+| `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API endpoint strings to monitor |
 
 ## Usage Examples
 
@@ -173,7 +168,7 @@ require 'coolhand'
 
 # Configure Coolhand
 Coolhand.configure do |config|
-  config.api_key = ENV['COOLHAND_API_KEY']
+  config.api_key = 'your_api_key_here'
 end
 
 # Use OpenAI normally - requests are automatically logged
@@ -199,7 +194,7 @@ require 'coolhand'
 
 # Configure Coolhand
 Coolhand.configure do |config|
-  config.api_key = ENV['COOLHAND_API_KEY']
+  config.api_key = 'your_api_key_here'
 end
 
 # Use Anthropic normally - requests are automatically logged
@@ -256,7 +251,7 @@ Enable verbose logging to see what's being intercepted:
 
 ```ruby
 Coolhand.configure do |config|
-  config.api_key = ENV['COOLHAND_API_KEY']
+  config.api_key = 'your_api_key_here'
   config.silent = false  # Enable console output
 end
 ```
@@ -284,7 +279,8 @@ For standard Ruby scripts or non-Rails applications:
 require 'coolhand'
 
 Coolhand.configure do |config|
-  config.api_key = ENV['COOLHAND_API_KEY']
+  config.api_key = 'your_api_key_here'  # Store securely, don't commit to git
+  config.environment = 'production'
   config.silent = false
 end
 

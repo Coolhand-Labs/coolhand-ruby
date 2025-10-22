@@ -14,4 +14,9 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
+
+  # Reset configuration before each test to avoid state pollution
+  config.before(:each) do
+    Coolhand.reset_configuration!
+  end
 end
