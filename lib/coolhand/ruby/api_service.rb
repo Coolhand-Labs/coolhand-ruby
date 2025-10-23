@@ -3,6 +3,7 @@
 require "net/http"
 require "uri"
 require "json"
+require_relative "collector"
 
 module Coolhand
   module Ruby
@@ -28,6 +29,11 @@ module Coolhand
       end
 
       protected
+
+      # Add collector field to the data being sent
+      def add_collector_to_data(data, collection_method = nil)
+        data.merge(collector: Collector.get_collector_string(collection_method))
+      end
 
       def create_request_options(_payload)
         {
@@ -71,9 +77,11 @@ module Coolhand
         log("═" * 60) unless silent
       end
 
-      def create_feedback(feedback)
+      def create_feedback(feedback, collection_method = nil)
+        feedback_with_collector = add_collector_to_data(feedback, collection_method)
+
         payload = {
-          llm_request_log_feedback: feedback
+          llm_request_log_feedback: feedback_with_collector
         }
 
         log_feedback_info(feedback)
@@ -87,11 +95,11 @@ module Coolhand
         result
       end
 
-      def create_log(captured_data)
+      def create_log(captured_data, collection_method = nil)
+        raw_request_with_collector = add_collector_to_data({ raw_request: captured_data }, collection_method)
+
         payload = {
-          llm_request_log: {
-            raw_request: captured_data
-          }
+          llm_request_log: raw_request_with_collector
         }
 
         log_request_info(captured_data)
