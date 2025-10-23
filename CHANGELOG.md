@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2024-10-23
+
+### ✨ New Features
+- **Collector Identifier** - Added collector field to all API calls to identify SDK version (format: `coolhand-ruby-X.Y.Z`)
+- **Collection Method Tracking** - Support for optional collection method suffix (`manual`, `auto-monitor`)
+
+### 🏗️ Internal Improvements
+- **Added Collector Module** - New `Coolhand::Ruby::Collector` module for generating SDK identification strings
+- **Updated ApiService** - Base service now automatically adds collector field to all API payloads
+- **Enhanced Logging** - Both LoggerService and FeedbackService now send collector information
+
 ## [0.1.2] - 2024-10-22
 
 ### 🔧 Configuration Improvements

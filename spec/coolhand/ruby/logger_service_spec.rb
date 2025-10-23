@@ -78,6 +78,20 @@ RSpec.describe Coolhand::Ruby::LoggerService do
             expect(body["llm_request_log"]["raw_request"]["method"]).to eq("POST")
           end)
       end
+
+      it "includes collector field with auto-monitor method" do
+        service.log_to_api(captured_data)
+
+        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+          .with do |req|
+            body = JSON.parse(req.body)
+            payload = body["llm_request_log"]
+
+            # Check that collector field is present and has auto-monitor method
+            expect(payload).to have_key("collector")
+            expect(payload["collector"]).to eq("coolhand-ruby-#{Coolhand::Ruby::VERSION}-auto-monitor")
+          end)
+      end
     end
 
     context "when API call fails" do

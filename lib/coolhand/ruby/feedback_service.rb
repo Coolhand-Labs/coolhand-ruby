@@ -9,7 +9,9 @@ module Coolhand
         super("v2/llm_request_log_feedbacks")
       end
 
-      public :create_feedback
+      def create_feedback(feedback)
+        super(feedback, "manual")
+      end
     end
   end
 end

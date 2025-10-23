@@ -10,7 +10,7 @@ module Coolhand
       end
 
       def log_to_api(captured_data)
-        create_log(captured_data)
+        create_log(captured_data, "auto-monitor")
       end
     end
   end
