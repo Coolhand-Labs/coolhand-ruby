@@ -7,6 +7,7 @@ require "securerandom"
 
 require_relative "ruby/version"
 require_relative "ruby/configuration"
+require_relative "ruby/collector"
 require_relative "ruby/interceptor"
 require_relative "ruby/api_service"
 require_relative "ruby/logger_service"

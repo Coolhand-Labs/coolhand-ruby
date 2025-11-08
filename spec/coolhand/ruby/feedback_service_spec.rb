@@ -93,6 +93,20 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
             expect(feedback_data["client_unique_id"]).to eq("client-456")
           end)
       end
+
+      it "includes collector field with manual method" do
+        service.create_feedback(feedback)
+
+        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            body = JSON.parse(req.body)
+            feedback_data = body["llm_request_log_feedback"]
+
+            # Check that collector field is present and has manual method
+            expect(feedback_data).to have_key("collector")
+            expect(feedback_data["collector"]).to eq("coolhand-ruby-#{Coolhand::Ruby::VERSION}-manual")
+          end)
+      end
     end
 
     context "when API call fails" do
