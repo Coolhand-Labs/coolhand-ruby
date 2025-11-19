@@ -24,7 +24,7 @@ gem 'coolhand'
 
 ```ruby
 # Add this configuration at the start of your application
-require 'coolhand'
+require 'coolhand/ruby'
 
 Coolhand.configure do |config|
   config.api_key = 'your_api_key_here'
@@ -52,7 +52,7 @@ end
 Collect feedback on LLM responses to improve model performance:
 
 ```ruby
-require 'coolhand'
+require 'coolhand/ruby'
 
 # Create feedback for an LLM response
 feedback_service = Coolhand::Ruby::FeedbackService.new(Coolhand.configuration)
@@ -164,7 +164,7 @@ end
 
 ```ruby
 require 'openai'
-require 'coolhand'
+require 'coolhand/ruby'
 
 # Configure Coolhand
 Coolhand.configure do |config|
@@ -190,7 +190,7 @@ puts response.dig("choices", 0, "message", "content")
 
 ```ruby
 require 'anthropic'
-require 'coolhand'
+require 'coolhand/ruby'
 
 # Configure Coolhand
 Coolhand.configure do |config|
@@ -276,7 +276,7 @@ For standard Ruby scripts or non-Rails applications:
 
 ```ruby
 #!/usr/bin/env ruby
-require 'coolhand'
+require 'coolhand/ruby'
 
 Coolhand.configure do |config|
   config.api_key = 'your_api_key_here'  # Store securely, don't commit to git
