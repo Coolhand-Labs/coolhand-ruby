@@ -11,7 +11,7 @@ module Coolhand
       @environment = "production"
       @api_key = nil
       @silent = false
-      @intercept_addresses = ["api.openai.com", "api.anthropic.com"]
+      @intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.elevenlabs.io"]
     end
 
     # Custom setter that preserves defaults when nil/empty array is provided

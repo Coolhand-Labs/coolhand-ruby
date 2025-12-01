@@ -210,6 +210,50 @@ puts response["content"]
 # Automatically logged to Coolhand!
 ```
 
+## Logging Inbound Webhooks
+
+For inbound webhooks (like audio transcripts or tool calls), the automatic interceptor won't capture them since they're incoming requests TO your application. In these cases, use the simple `forward_webhook` helper method:
+
+### Webhook Forwarding Example (Recommended)
+
+```ruby
+class WebhooksController < ApplicationController
+  def elevenlabs
+    raw_body = request.body.read
+    webhook_data = JSON.parse(raw_body)
+
+    # Forward to Coolhand with automatic field generation and binary filtering
+    Thread.new do
+      Coolhand.logger_service.forward_webhook(
+        webhook_body: webhook_data,        # Required: webhook payload
+        source: "elevenlabs",              # Required: service name
+        event_type: webhook_data["type"],  # Optional: e.g., post_call_transcription
+        headers: request.headers,          # Optional & recommended
+      )
+    end
+
+    render json: { status: "success" }
+  end
+end
+```
+
+**Required Parameters:**
+- `webhook_body` - The webhook payload (Hash or parsed JSON)
+- `source` - Service name (String, e.g., "elevenlabs", "stripe", "twilio")
+
+**Optional Parameters:**
+- `event_type` - Event type to append to URL (e.g., "post_call_transcription" → `webhook://elevenlabs/post_call_transcription`)
+- `headers` - Request headers (automatically sanitized)
+- `conversation_id`, `agent_id`, `metadata` - Custom fields for your tracking needs
+
+**Error Handling:**
+- **Silent mode = false**: Raises `ArgumentError` if required parameters are missing
+- **Silent mode = true**: Logs warning and returns `false` if required parameters are missing
+
+That's it! The `forward_webhook` method automatically:
+- ✅ Generates unique ID and timestamp
+- ✅ Filters out binary data (audio, images, etc.)
+
 ## What Gets Logged
 
 The monitor captures:
@@ -220,6 +264,24 @@ The monitor captures:
 - **LLM-Specific**: Model used, token counts, temperature settings
 
 Headers containing API keys are automatically sanitized for security.
+
+## Binary Data Filtering
+
+**Coolhand does not track or store binary data.** The gem automatically filters out:
+
+- Audio files and data (`audio`, `audio_data`, `full_audio`, `raw_audio`)
+- Image data (`image_data`, `image_content`)
+- File content (`file_content`, `binary_content`)
+- Base64 encoded data (`audio_base64`, `base64_data`)
+- Voice samples and audio URLs
+
+This ensures:
+- ✅ **Smaller payloads** - Only text and metadata are sent
+- ✅ **Faster processing** - No bandwidth wasted on binary data
+- ✅ **Privacy focused** - Audio/video content never leaves your infrastructure
+- ✅ **Clean logs** - Focus on conversational data, not media files
+
+The filtering is automatic and applies to all monitored API calls and webhook logging.
 
 ## Supported Libraries
 
