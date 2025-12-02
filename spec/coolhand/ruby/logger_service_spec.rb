@@ -268,24 +268,24 @@ RSpec.describe Coolhand::Ruby::LoggerService do
             body = JSON.parse(req.body)
             sanitized_headers = body.dig("llm_request_log", "raw_request", "headers")
             expect(sanitized_headers["content-type"]).to eq("application/json")
-            expect(sanitized_headers["x-signature"]).to eq("sha256=abc123")
+            expect(sanitized_headers["x-signature"]).to eq("[REDACTED]")
             expect(sanitized_headers["authorization"]).to eq("[REDACTED]")
           end)
       end
     end
 
-    context "parameter validation" do
+    context "when validating parameters" do
       context "when webhook_body is missing" do
-        context "in silent mode" do
+        context "when in silent mode" do
           it "logs warning and returns false" do
-            expect {
+            expect do
               result = service.forward_webhook(webhook_body: nil, source: "elevenlabs")
               expect(result).to be_falsy
-            }.to output(/COOLHAND WARNING.*webhook_body/).to_stdout
+            end.to output(/COOLHAND WARNING.*webhook_body/).to_stdout
           end
         end
 
-        context "in non-silent mode" do
+        context "when in non-silent mode" do
           let(:verbose_config) do
             instance_double(Coolhand::Configuration,
               api_key: "test-api-key",
@@ -297,24 +297,24 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           end
 
           it "raises ArgumentError" do
-            expect {
+            expect do
               service.forward_webhook(webhook_body: nil, source: "elevenlabs")
-            }.to raise_error(ArgumentError, /webhook_body is required/)
+            end.to raise_error(ArgumentError, /webhook_body is required/)
           end
         end
       end
 
       context "when source is missing" do
-        context "in silent mode" do
+        context "when in silent mode" do
           it "logs warning and returns false" do
-            expect {
+            expect do
               result = service.forward_webhook(webhook_body: webhook_body, source: nil)
               expect(result).to be_falsy
-            }.to output(/COOLHAND WARNING.*source/).to_stdout
+            end.to output(/COOLHAND WARNING.*source/).to_stdout
           end
         end
 
-        context "in non-silent mode" do
+        context "when in non-silent mode" do
           let(:verbose_config) do
             instance_double(Coolhand::Configuration,
               api_key: "test-api-key",
@@ -326,9 +326,9 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           end
 
           it "raises ArgumentError" do
-            expect {
+            expect do
               service.forward_webhook(webhook_body: webhook_body, source: "")
-            }.to raise_error(ArgumentError, /source is required/)
+            end.to raise_error(ArgumentError, /source is required/)
           end
         end
       end
@@ -340,9 +340,9 @@ RSpec.describe Coolhand::Ruby::LoggerService do
             silent: false)
           allow(Coolhand).to receive(:configuration).and_return(verbose_config)
 
-          expect {
+          expect do
             service.forward_webhook(webhook_body: {}, source: "elevenlabs")
-          }.to raise_error(ArgumentError, /webhook_body is required/)
+          end.to raise_error(ArgumentError, /webhook_body is required/)
         end
       end
     end
@@ -385,6 +385,19 @@ RSpec.describe Coolhand::Ruby::LoggerService do
         expect(result).to eq({})
       end
 
+      it "handles Rails ActionDispatch headers" do
+        # Mock Rails headers object that doesn't respond to empty?
+        # rubocop:disable RSpec/VerifiedDoubleReference
+        rails_headers = instance_double("ActionDispatch::Http::Headers")
+        # rubocop:enable RSpec/VerifiedDoubleReference
+        allow(rails_headers).to receive(:respond_to?).with(:empty?).and_return(false)
+        allow(rails_headers).to receive(:respond_to?).with(:each).and_return(true)
+        allow(rails_headers).to receive(:each).and_yield("HTTP_CONTENT_TYPE", "application/json")
+
+        result = service_with_private.sanitize_headers_public(rails_headers)
+        expect(result["content-type"]).to eq("application/json")
+      end
+
       it "handles nil headers" do
         result = service_with_private.sanitize_headers_public(nil)
         expect(result).to eq({})
@@ -397,7 +410,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
         }
         result = service_with_private.sanitize_headers_public(headers)
         expect(result["content-type"]).to eq("application/json")
-        expect(result["x-signature"]).to eq("abc123")
+        expect(result["x-signature"]).to eq("[REDACTED]")
       end
 
       it "redacts sensitive headers" do
@@ -418,7 +431,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
     end
 
     describe "#clean_webhook_body" do
-      context "for elevenlabs source" do
+      context "when using elevenlabs source" do
         let(:elevenlabs_data) do
           {
             "type" => "post_call_transcription",
@@ -445,7 +458,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
         end
       end
 
-      context "for twilio source" do
+      context "when using twilio source" do
         let(:twilio_data) do
           {
             "CallSid" => "CA123",
@@ -464,7 +477,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
         end
       end
 
-      context "for unknown source" do
+      context "when using unknown source" do
         let(:generic_data) do
           {
             "text_field" => "keep_this",

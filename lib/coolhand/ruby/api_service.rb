@@ -51,7 +51,7 @@ module Coolhand
         headers = create_request_options(payload)
         headers.each do |key, value|
           # Ensure header values are UTF-8 encoded
-          encoded_value = value.is_a?(String) ? value.dup.force_encoding('UTF-8') : value
+          encoded_value = value.is_a?(String) ? value.dup.force_encoding("UTF-8") : value
           request[key] = encoded_value
         end
 
@@ -60,7 +60,7 @@ module Coolhand
         json_body = JSON.generate(cleaned_payload)
 
         # Ensure the request body is properly encoded as UTF-8
-        request.body = json_body.force_encoding('UTF-8')
+        request.body = json_body.force_encoding("UTF-8")
 
         begin
           response = http.request(request)
@@ -70,7 +70,7 @@ module Coolhand
             log success_message
             result
           else
-            body = response.body.force_encoding('UTF-8') if response.body
+            body = response.body.force_encoding("UTF-8") if response.body
             puts "❌ Request failed: #{response.code} - #{body}"
             nil
           end
@@ -126,8 +126,6 @@ module Coolhand
         result
       end
 
-      private
-
       # Filter list of known binary/problematic field names by service
       BINARY_DATA_FILTERS = {
         # ElevenLabs fields that contain binary audio data
@@ -148,6 +146,8 @@ module Coolhand
           binary_content
         ]
       }.freeze
+
+      private
 
       # Get all filtered field names as a flat array
       def filtered_field_names
@@ -171,11 +171,10 @@ module Coolhand
         else
           obj
         end
-      rescue => e
+      rescue StandardError => e
         log "⚠️ Warning: Error sanitizing payload: #{e.message}"
         obj
       end
-
 
       def log_feedback_info(feedback)
         return if silent
