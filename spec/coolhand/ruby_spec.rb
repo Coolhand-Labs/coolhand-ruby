@@ -98,4 +98,21 @@ RSpec.describe Coolhand::Ruby do
       expect { Coolhand.log("hello") }.not_to output.to_stdout
     end
   end
+
+  describe ".required_field?" do
+    it "returns true for valid values" do
+      expect(Coolhand.required_field?("valid")).to be true
+      expect(Coolhand.required_field?("  valid  ")).to be true
+      expect(Coolhand.required_field?(123)).to be true
+      expect(Coolhand.required_field?(["item"])).to be true
+    end
+
+    it "returns false for invalid values" do
+      expect(Coolhand.required_field?(nil)).to be false
+      expect(Coolhand.required_field?("")).to be false
+      expect(Coolhand.required_field?("   ")).to be false
+      expect(Coolhand.required_field?([])).to be false
+      expect(Coolhand.required_field?({})).to be false
+    end
+  end
 end
