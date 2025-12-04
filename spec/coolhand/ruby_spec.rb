@@ -39,7 +39,7 @@ RSpec.describe Coolhand::Ruby do
       end.not_to raise_error
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com", "api.anthropic.com",
-                                                                "api.elevenlabs.io"])
+                                                                "api.elevenlabs.io", ":generateContent"])
     end
 
     it "calls Interceptor.patch!" do
@@ -52,7 +52,7 @@ RSpec.describe Coolhand::Ruby do
       end
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com", "api.anthropic.com",
-                                                                "api.elevenlabs.io"])
+                                                                "api.elevenlabs.io", ":generateContent"])
     end
 
     it "allows custom intercept_addresses to be set" do
