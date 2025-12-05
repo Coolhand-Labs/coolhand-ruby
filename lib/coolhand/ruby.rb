@@ -78,5 +78,13 @@ module Coolhand
     def logger_service
       Ruby::LoggerService.new
     end
+
+    def required_field?(value)
+      return false if value.nil?
+      return false if value.respond_to?(:empty?) && value.empty?
+      return false if value.to_s.strip.empty?
+
+      true
+    end
   end
 end

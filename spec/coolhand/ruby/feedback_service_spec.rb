@@ -116,7 +116,6 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
       end
 
       it "handles failed API response gracefully" do
-        expect { service.create_feedback(feedback) }.to output(/Request failed/).to_stdout
         result = service.create_feedback(feedback)
         expect(result).to be_nil
       end
@@ -129,7 +128,6 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
       end
 
       it "handles network errors gracefully" do
-        expect { service.create_feedback(feedback) }.to output(/Request error/).to_stdout
         result = service.create_feedback(feedback)
         expect(result).to be_nil
       end

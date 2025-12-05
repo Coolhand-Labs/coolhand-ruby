@@ -49,8 +49,18 @@ module Coolhand
 
         request = Net::HTTP::Post.new(uri.request_uri)
         headers = create_request_options(payload)
-        headers.each { |key, value| request[key] = value }
-        request.body = JSON.generate(payload)
+        headers.each do |key, value|
+          # Ensure header values are UTF-8 encoded
+          encoded_value = value.is_a?(String) ? value.dup.force_encoding("UTF-8") : value
+          request[key] = encoded_value
+        end
+
+        # Clean payload and ensure UTF-8 encoding before JSON generation
+        cleaned_payload = sanitize_payload_for_json(payload)
+        json_body = JSON.generate(cleaned_payload)
+
+        # Ensure the request body is properly encoded as UTF-8
+        request.body = json_body.force_encoding("UTF-8")
 
         begin
           response = http.request(request)
@@ -60,11 +70,12 @@ module Coolhand
             log success_message
             result
           else
-            puts "❌ Request failed: #{response.code} - #{response.body}"
+            body = response.body.force_encoding("UTF-8") if response.body
+            puts "❌ Request failed: #{response.code} - #{body}"
             nil
           end
         rescue StandardError => e
-          puts "❌ Request error: #{e.message}"
+          log "❌ Request error: #{e.message}"
           nil
         end
       end
@@ -115,12 +126,68 @@ module Coolhand
         result
       end
 
+      # Filter list of known binary/problematic field names by service
+      BINARY_DATA_FILTERS = {
+        # ElevenLabs fields that contain binary audio data
+        elevenlabs: %w[
+          full_audio
+          audio
+          audio_data
+          raw_audio
+          audio_base64
+          voice_sample
+          audio_url
+        ],
+        # OpenAI fields that might contain binary data
+        openai: %w[
+          file_content
+          audio_data
+          image_data
+          binary_content
+        ]
+      }.freeze
+
       private
+
+      # Get all filtered field names as a flat array
+      def filtered_field_names
+        @filtered_field_names ||= BINARY_DATA_FILTERS.values.flatten.map(&:downcase)
+      end
+
+      # Recursively sanitize payload to remove known problematic fields
+      def sanitize_payload_for_json(obj)
+        case obj
+        when Hash
+          obj.each_with_object({}) do |(key, value), sanitized|
+            key_str = key.to_s.downcase
+
+            # Skip if key matches any filtered field name
+            next if filtered_field_names.any? { |filter| key_str.include?(filter) }
+
+            sanitized[key] = sanitize_payload_for_json(value)
+          end
+        when Array
+          obj.map { |item| sanitize_payload_for_json(item) }
+        else
+          obj
+        end
+      rescue StandardError => e
+        log "⚠️ Warning: Error sanitizing payload: #{e.message}"
+        obj
+      end
 
       def log_feedback_info(feedback)
         return if silent
 
-        puts "\n📝 CREATING FEEDBACK for LLM Request Log ID: #{feedback[:llm_request_log_id]}"
+        # Log the appropriate identifier based on what was provided
+        if feedback[:llm_request_log_id]
+          puts "\n📝 CREATING FEEDBACK for LLM Request Log ID: #{feedback[:llm_request_log_id]}"
+        elsif feedback[:llm_provider_unique_id]
+          puts "\n📝 CREATING FEEDBACK for Provider Unique ID: #{feedback[:llm_provider_unique_id]}"
+        else
+          puts "\n📝 CREATING FEEDBACK"
+        end
+
         puts "👍/👎 Like: #{feedback[:like]}"
 
         if feedback[:explanation]
