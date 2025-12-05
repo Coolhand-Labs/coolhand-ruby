@@ -179,7 +179,15 @@ module Coolhand
       def log_feedback_info(feedback)
         return if silent
 
-        puts "\n📝 CREATING FEEDBACK for LLM Request Log ID: #{feedback[:llm_request_log_id]}"
+        # Log the appropriate identifier based on what was provided
+        if feedback[:llm_request_log_id]
+          puts "\n📝 CREATING FEEDBACK for LLM Request Log ID: #{feedback[:llm_request_log_id]}"
+        elsif feedback[:llm_provider_unique_id]
+          puts "\n📝 CREATING FEEDBACK for Provider Unique ID: #{feedback[:llm_provider_unique_id]}"
+        else
+          puts "\n📝 CREATING FEEDBACK"
+        end
+
         puts "👍/👎 Like: #{feedback[:like]}"
 
         if feedback[:explanation]

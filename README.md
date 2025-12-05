@@ -367,6 +367,10 @@ The monitor handles errors gracefully:
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
 
+## Integration Guides
+
+- **[ElevenLabs Integration](docs/elevenlabs.md)** - Complete guide for integrating ElevenLabs Conversational AI with webhook capture and feedback submission
+
 ## Security
 
 - API keys in request headers are automatically redacted
