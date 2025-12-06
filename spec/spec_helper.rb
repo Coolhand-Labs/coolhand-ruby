@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "simplecov"
-require "coolhand/ruby"
+require "coolhand"
 require "pry"
 
 RSpec.configure do |config|

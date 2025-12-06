@@ -3,7 +3,7 @@
 require "spec_helper"
 require "webmock/rspec"
 
-RSpec.describe Coolhand::Ruby::FeedbackService do
+RSpec.describe Coolhand::FeedbackService do
   let(:config) do
     instance_double(Coolhand::Configuration,
       api_key: "test-api-key",
@@ -104,7 +104,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
 
             # Check that collector field is present and has manual method
             expect(feedback_data).to have_key("collector")
-            expect(feedback_data["collector"]).to eq("coolhand-ruby-#{Coolhand::Ruby::VERSION}-manual")
+            expect(feedback_data["collector"]).to eq("coolhand-ruby-#{Coolhand::VERSION}-manual")
           end)
       end
     end

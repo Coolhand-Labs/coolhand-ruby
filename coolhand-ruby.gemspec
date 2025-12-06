@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative "lib/coolhand/ruby/version"
+require_relative "lib/coolhand/version"
 
 Gem::Specification.new do |spec|
   spec.name = "coolhand"
-  spec.version = Coolhand::Ruby::VERSION
+  spec.version = Coolhand::VERSION
   spec.authors = ["Michael Carroll", "Yaroslav Malyk"]
   spec.email = ["mc@coolhandlabs.com"]
 
