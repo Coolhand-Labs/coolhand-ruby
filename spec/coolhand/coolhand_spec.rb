@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-RSpec.describe Coolhand::Ruby do
+RSpec.describe Coolhand do
   let(:config) { Coolhand.configuration }
 
   before { config.silent = true }
 
   it "has a version number" do
-    expect(Coolhand::Ruby::VERSION).not_to be_nil
+    expect(Coolhand::VERSION).not_to be_nil
   end
 
   describe ".configure" do

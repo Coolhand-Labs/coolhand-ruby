@@ -4,8 +4,8 @@ require "spec_helper"
 require "faraday"
 
 RSpec.describe Coolhand::Interceptor do
-  let(:logger_instance) { instance_double(Coolhand::Ruby::LoggerService) }
-  let(:logger_class) { class_double(Coolhand::Ruby::LoggerService).as_stubbed_const }
+  let(:logger_instance) { instance_double(Coolhand::LoggerService) }
+  let(:logger_class) { class_double(Coolhand::LoggerService).as_stubbed_const }
   let(:conn) do
     Faraday.new do |builder|
       builder.adapter :test do |stub|

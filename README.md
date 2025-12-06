@@ -24,7 +24,7 @@ gem 'coolhand'
 
 ```ruby
 # Add this configuration at the start of your application
-require 'coolhand/ruby'
+require 'coolhand'
 
 Coolhand.configure do |config|
   config.api_key = 'your_api_key_here'
@@ -52,10 +52,10 @@ end
 Collect feedback on LLM responses to improve model performance:
 
 ```ruby
-require 'coolhand/ruby'
+require 'coolhand'
 
 # Create feedback for an LLM response
-feedback_service = Coolhand::Ruby::FeedbackService.new(Coolhand.configuration)
+feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
 
 feedback = feedback_service.create_feedback(
   llm_request_log_id: 123,
@@ -110,7 +110,7 @@ end
 ```ruby
 class ChatController < ApplicationController
   def create_feedback
-    feedback_service = Coolhand::Ruby::FeedbackService.new(Coolhand.configuration)
+    feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
 
     feedback = feedback_service.create_feedback(
       llm_request_log_id: params[:log_id],
@@ -135,7 +135,7 @@ end
 ```ruby
 class FeedbackCollectionJob < ApplicationJob
   def perform(feedback_data)
-    feedback_service = Coolhand::Ruby::FeedbackService.new(Coolhand.configuration)
+    feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
 
     feedback_service.create_feedback(
       llm_provider_unique_id: feedback_data[:request_id],
@@ -164,7 +164,7 @@ end
 
 ```ruby
 require 'openai'
-require 'coolhand/ruby'
+require 'coolhand'
 
 # Configure Coolhand
 Coolhand.configure do |config|
@@ -190,7 +190,7 @@ puts response.dig("choices", 0, "message", "content")
 
 ```ruby
 require 'anthropic'
-require 'coolhand/ruby'
+require 'coolhand'
 
 # Configure Coolhand
 Coolhand.configure do |config|
@@ -338,7 +338,7 @@ For standard Ruby scripts or non-Rails applications:
 
 ```ruby
 #!/usr/bin/env ruby
-require 'coolhand/ruby'
+require 'coolhand'
 
 Coolhand.configure do |config|
   config.api_key = 'your_api_key_here'  # Store securely, don't commit to git
