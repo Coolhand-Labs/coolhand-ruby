@@ -7,19 +7,15 @@ require "faraday"
 RSpec.describe "APM Compatibility", type: :integration do
   # This spec ensures Coolhand doesn't conflict with APM tools that use prepend
   # Based on the SystemStackError discovered with Datadog 2.16.0
-
-  before do
-    # Clean up any existing patches
-    if Coolhand::Interceptor.respond_to?(:unpatch!)
-      begin
-        Coolhand::Interceptor.unpatch!
-      rescue StandardError
-        nil
-      end
-    end
-  end
+  #
+  # NOTE: These tests prepend modules to Faraday::Connection which cannot be cleanly removed.
+  # This is intentional to test real-world scenarios where APM tools permanently modify classes.
 
   describe "with prepend-based APM instrumentation" do
+    after do
+      Coolhand::Interceptor.unpatch! if Coolhand::Interceptor.respond_to?(:unpatch!)
+    end
+
     it "does not cause SystemStackError when both patches are applied" do
       # Create a test module that simulates Datadog's prepend approach
       test_apm_module = Module.new do
@@ -118,6 +114,10 @@ RSpec.describe "APM Compatibility", type: :integration do
   end
 
   describe "regression test for SystemStackError" do
+    after do
+      Coolhand::Interceptor.unpatch! if Coolhand::Interceptor.respond_to?(:unpatch!)
+    end
+
     it "prevents the specific alias_method + prepend circular reference issue" do
       # Simulate the exact scenario that caused the original bug
 
@@ -163,6 +163,7 @@ RSpec.describe "APM Compatibility", type: :integration do
       example.run
 
       ENV["RACK_ENV"] = original_env
+      Coolhand::Interceptor.unpatch! if Coolhand::Interceptor.respond_to?(:unpatch!)
     end
 
     it "works in production-like Rack context where original error occurred" do
@@ -190,6 +191,30 @@ RSpec.describe "APM Compatibility", type: :integration do
         expect(conn.instance_variable_get(:@rack_context)).to be true
         expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::Interceptor)
       end.not_to raise_error
+    end
+  end
+
+  describe "test isolation and cleanup" do
+    it "explicitly checks that tests don't leak Coolhand patches to other specs" do
+      expect(Coolhand::Interceptor.patched?).to be false
+
+      Coolhand.configure do |config|
+        config.api_key = "test-key"
+        config.silent = true
+        config.intercept_addresses = ["api.example.com"]
+      end
+
+      expect(Coolhand::Interceptor.patched?).to be true
+
+      Coolhand::Interceptor.unpatch!
+
+      expect(Coolhand::Interceptor.patched?).to be false
+    end
+
+    it "detects if previous tests leaked patch state" do
+      expect(Coolhand::Interceptor.patched?).to(
+        be(false), "Previous test leaked Coolhand patch state! Check your after blocks."
+      )
     end
   end
 end
