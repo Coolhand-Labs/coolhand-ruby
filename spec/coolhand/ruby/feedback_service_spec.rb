@@ -17,7 +17,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
 
   describe "#initialize" do
     it "configures with production endpoint" do
-      expect(service.api_endpoint).to eq("https://coolhand.io/api/v2/llm_request_log_feedbacks")
+      expect(service.api_endpoint).to eq("https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
     end
   end
 
@@ -43,7 +43,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
       end
 
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .with(
             headers: {
               "Content-Type" => "application/json",
@@ -79,7 +79,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
 
         service.create_feedback(comprehensive_feedback)
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .with do |req|
             body = JSON.parse(req.body)
             feedback_data = body["llm_request_log_feedback"]
@@ -97,7 +97,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
       it "includes collector field with manual method" do
         service.create_feedback(feedback)
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .with do |req|
             body = JSON.parse(req.body)
             feedback_data = body["llm_request_log_feedback"]
@@ -111,7 +111,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
 
     context "when API call fails" do
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .to_return(status: 400, body: "Bad Request")
       end
 
@@ -123,7 +123,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
 
     context "when network error occurs" do
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .to_raise(StandardError.new("Network error"))
       end
 
@@ -136,7 +136,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
     context "with logging behavior" do
       context "when in silent mode" do
         it "does not output logs" do
-          stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
 
           expect { service.create_feedback(feedback) }.not_to output(/CREATING FEEDBACK/).to_stdout
@@ -156,7 +156,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
         end
 
         it "outputs verbose logs" do
-          stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
 
           expect { verbose_service.create_feedback(feedback) }
@@ -170,7 +170,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
             explanation: "A" * 150
           }
 
-          stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
 
           expect { verbose_service.create_feedback(long_feedback) }
@@ -181,7 +181,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
 
     context "with usage examples" do
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .to_return(
             status: 200,
             body: JSON.generate(mock_response),
@@ -240,7 +240,7 @@ RSpec.describe Coolhand::Ruby::FeedbackService do
         result = service.create_feedback(feedback)
 
         expect(result).not_to be_nil
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_log_feedbacks")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .with do |req|
             body = JSON.parse(req.body)
             feedback_data = body["llm_request_log_feedback"]

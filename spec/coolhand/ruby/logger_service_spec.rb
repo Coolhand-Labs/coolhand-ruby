@@ -17,7 +17,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
 
   describe "#initialize" do
     it "configures with the provided endpoint" do
-      expect(service.api_endpoint).to eq("https://coolhand.io/api/v2/llm_request_logs")
+      expect(service.api_endpoint).to eq("https://coolhandlabs.com/api/v2/llm_request_logs")
     end
   end
 
@@ -45,7 +45,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
       end
 
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with(
             headers: {
               "Content-Type" => "application/json",
@@ -69,7 +69,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
       it "structures payload correctly" do
         service.log_to_api(captured_data)
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             expect(body).to have_key("llm_request_log")
@@ -82,7 +82,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
       it "includes collector field with auto-monitor method" do
         service.log_to_api(captured_data)
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             payload = body["llm_request_log"]
@@ -96,7 +96,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
 
     context "when API call fails" do
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 500, body: "Internal Server Error")
       end
 
@@ -109,7 +109,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
     context "with logging behavior" do
       context "when in silent mode" do
         it "does not output logs" do
-          stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
 
           expect { service.log_to_api(captured_data) }.not_to output(/LOGGING OpenAI/).to_stdout
@@ -129,7 +129,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
         end
 
         it "outputs verbose logs" do
-          stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
 
           expect { verbose_service.log_to_api(captured_data) }
@@ -163,7 +163,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
     end
 
     before do
-      stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
         .to_return(status: 200, body: JSON.generate({ id: 123 }))
     end
 
@@ -186,7 +186,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           event_type: "post_call_transcription"
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             url = body.dig("llm_request_log", "raw_request", "url")
@@ -200,7 +200,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           source: "elevenlabs"
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             url = body.dig("llm_request_log", "raw_request", "url")
@@ -214,7 +214,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           source: "elevenlabs"
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             source = body.dig("llm_request_log", "raw_request", "source")
@@ -231,7 +231,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           metadata: { "custom" => "data" }
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             raw_request = body.dig("llm_request_log", "raw_request")
@@ -247,7 +247,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           source: "elevenlabs"
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             request_body = body.dig("llm_request_log", "raw_request", "request_body")
@@ -263,7 +263,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
           headers: headers
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             sanitized_headers = body.dig("llm_request_log", "raw_request", "headers")

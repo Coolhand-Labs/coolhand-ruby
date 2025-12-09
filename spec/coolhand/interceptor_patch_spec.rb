@@ -43,21 +43,19 @@ RSpec.describe Coolhand::Interceptor do
   end
 
   describe ".patch! and .unpatch!" do
-    let(:original_method) { Faraday::Connection.instance_method(:initialize) }
-
     after do
-      # Ensure we leave Faraday in original state after tests
+      # Ensure we clean up the patched state after tests
       described_class.unpatch!
     end
 
-    it "patches Faraday::Connection to use the Interceptor" do
+    it "patches Faraday::Connection to use the Interceptor with prepend" do
       described_class.unpatch!
-      expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be false
+      expect(described_class.patched?).to be false
 
       described_class.patch!
-      expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be true
+      expect(described_class.patched?).to be true
 
-      # Check that new initialize actually uses Interceptor
+      # Check that new connections automatically include Interceptor
       conn = Faraday.new do |builder|
         builder.adapter :test, Faraday::Adapter::Test::Stubs.new
       end
@@ -67,15 +65,40 @@ RSpec.describe Coolhand::Interceptor do
       expect(stack_classes).to include(described_class)
     end
 
-    it "unpatches Faraday::Connection correctly" do
+    it "prevents duplicate interceptors when already patched" do
       described_class.patch!
-      expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be true
+
+      # Create multiple connections - should only have one interceptor each
+      conn1 = Faraday.new("https://api.example.com")
+      conn2 = Faraday.new("https://api.example.com")
+
+      interceptor_count1 = conn1.builder.handlers.count { |h| h.klass == described_class }
+      interceptor_count2 = conn2.builder.handlers.count { |h| h.klass == described_class }
+
+      expect(interceptor_count1).to eq(1)
+      expect(interceptor_count2).to eq(1)
+    end
+
+    it "marks as unpatched when unpatch! is called" do
+      described_class.patch!
+      expect(described_class.patched?).to be true
 
       described_class.unpatch!
-      expect(Faraday::Connection.private_method_defined?(described_class::ORIGINAL_METHOD_ALIAS)).to be false
+      expect(described_class.patched?).to be false
 
-      # Ensure initialize is back to original
-      expect(Faraday::Connection.instance_method(:initialize)).to eq(original_method)
+      # NOTE: With prepend, the module remains in the ancestor chain
+      # but the patched? flag prevents re-patching
+    end
+
+    it "allows re-patching after unpatch!" do
+      described_class.patch!
+      described_class.unpatch!
+
+      expect(described_class.patched?).to be false
+
+      # Should be able to patch again
+      expect { described_class.patch! }.not_to raise_error
+      expect(described_class.patched?).to be true
     end
   end
 end

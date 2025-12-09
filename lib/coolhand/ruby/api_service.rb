@@ -8,7 +8,7 @@ require_relative "collector"
 module Coolhand
   module Ruby
     class ApiService
-      BASE_URI = "https://coolhand.io/api"
+      BASE_URI = "https://coolhandlabs.com/api"
 
       attr_reader :api_endpoint
 
