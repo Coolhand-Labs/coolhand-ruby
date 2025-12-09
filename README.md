@@ -10,7 +10,7 @@ gem 'coolhand'
 
 ## Getting Started
 
-1. **Get API Key**: Visit [coolhand.io](https://coolhand.io/) to create a free account
+1. **Get API Key**: Visit [coolhandlabs.com](https://coolhandlabs.com/) to create a free account
 2. **Install**: `gem install coolhand`
 3. **Initialize**: Add configuration to your Ruby application
 4. **Configure**: Set your API key in the configuration block
@@ -351,7 +351,7 @@ end
 
 ## API Key
 
-🆓 **Sign up for free** at [coolhand.io](https://coolhand.io/) to get your API key and start monitoring your LLM usage.
+🆓 **Sign up for free** at [coolhandlabs.com](https://coolhandlabs.com/) to get your API key and start monitoring your LLM usage.
 
 **What you get:**
 - Complete LLM request and response logging
@@ -380,7 +380,7 @@ The monitor handles errors gracefully:
 ## Other Languages
 
 - **Node.js**: [coolhand-node package](https://github.com/coolhand-io/coolhand-node) - Coolhand monitoring for Node.js applications
-- **API Docs**: [API Documentation](https://coolhand.io/docs) - Direct API integration documentation
+- **API Docs**: [API Documentation](https://coolhandlabs.com/docs) - Direct API integration documentation
 
 ## Community
 

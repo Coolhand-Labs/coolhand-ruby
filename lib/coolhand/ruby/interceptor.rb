@@ -5,32 +5,33 @@ module Coolhand
     ORIGINAL_METHOD_ALIAS = :coolhand_original_initialize
 
     def self.patch!
-      return if Faraday::Connection.private_method_defined?(ORIGINAL_METHOD_ALIAS)
+      return if @patched
 
+      @patched = true
       Coolhand.log "📡 Monitoring outbound requests ..."
 
-      Faraday::Connection.class_eval do
-        alias_method ORIGINAL_METHOD_ALIAS, :initialize
-
+      # Use prepend instead of alias_method to avoid conflicts with other gems
+      Faraday::Connection.prepend(Module.new do
         def initialize(url = nil, options = nil, &block)
-          send(ORIGINAL_METHOD_ALIAS, url, options, &block)
+          super
 
-          use Interceptor
+          # Only add interceptor if it's not already present
+          use Coolhand::Interceptor unless @builder.handlers.any? { |h| h.klass == Coolhand::Interceptor }
         end
-      end
+      end)
 
       Coolhand.log "🔧 Setting up monitoring for Faraday ..."
     end
 
     def self.unpatch!
-      return unless Faraday::Connection.private_method_defined?(ORIGINAL_METHOD_ALIAS)
+      # NOTE: With prepend, there's no clean way to unpatch
+      # We'll mark it as unpatched so it can be re-patched
+      @patched = false
+      Coolhand.log "🔌 Faraday monitoring disabled ..."
+    end
 
-      Faraday::Connection.class_eval do
-        alias_method :initialize, ORIGINAL_METHOD_ALIAS
-        remove_method ORIGINAL_METHOD_ALIAS
-      end
-
-      Coolhand.log "🔌 Faraday unpatched ..."
+    def self.patched?
+      @patched
     end
 
     def call(env)

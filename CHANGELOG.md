@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2024-12-09
+
+### 🐛 Critical Bug Fixes
+- **Fixed SystemStackError with APM tools** - Resolved critical conflict with Datadog and other APM tools that caused applications to crash on startup with "stack level too deep" error
+- **Replaced alias_method with prepend** - Changed monkey-patching approach from `alias_method` to `prepend` for better compatibility with other instrumentation libraries
+- **Added duplicate interceptor prevention** - Ensures only one Coolhand interceptor is added to each Faraday connection
+
 ## [0.1.3] - 2024-10-23
 
 ### ✨ New Features
