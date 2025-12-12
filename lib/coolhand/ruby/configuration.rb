@@ -3,7 +3,7 @@
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
-    attr_accessor :api_key, :environment, :silent
+    attr_accessor :api_key, :environment, :silent, :patch_net_http
     attr_reader :intercept_addresses
 
     def initialize
@@ -11,6 +11,7 @@ module Coolhand
       @environment = "production"
       @api_key = nil
       @silent = false
+      @patch_net_http = true
       @intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.elevenlabs.io", ":generateContent"]
     end
 

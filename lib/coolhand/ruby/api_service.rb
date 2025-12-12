@@ -8,7 +8,7 @@ require_relative "collector"
 module Coolhand
   module Ruby
     class ApiService
-      BASE_URI = "https://coolhandlabs.com/api"
+      BASE_URI = "http://localhost:3000/api"
 
       attr_reader :api_endpoint
 
@@ -71,7 +71,13 @@ module Coolhand
             result
           else
             body = response.body.force_encoding("UTF-8") if response.body
-            puts "❌ Request failed: #{response.code} - #{body}"
+            # Only show first part of HTML error pages
+            if body && body.include?("<!DOCTYPE html>")
+              error_msg = body[0..200] + "... [HTML error page truncated]"
+            else
+              error_msg = body
+            end
+            log "❌ Request failed: #{response.code} - #{error_msg}"
             nil
           end
         rescue StandardError => e
