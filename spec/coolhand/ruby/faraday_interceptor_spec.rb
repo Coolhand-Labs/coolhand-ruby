@@ -3,9 +3,9 @@
 require "spec_helper"
 require "faraday"
 
-RSpec.describe Coolhand::Interceptor do
-  let(:logger_instance) { instance_double(Coolhand::Ruby::LoggerService) }
-  let(:logger_class) { class_double(Coolhand::Ruby::LoggerService).as_stubbed_const }
+RSpec.describe Coolhand::Ruby::FaradayInterceptor do
+  let(:api_service_instance) { instance_double(Coolhand::Ruby::ApiService) }
+  let(:api_service_class) { class_double(Coolhand::Ruby::ApiService).as_stubbed_const }
   let(:conn) do
     Faraday.new do |builder|
       builder.adapter :test do |stub|
@@ -15,8 +15,8 @@ RSpec.describe Coolhand::Interceptor do
   end
 
   before do
-    allow(logger_class).to receive(:new).and_return(logger_instance)
-    allow(logger_instance).to receive(:log_to_api)
+    allow(api_service_class).to receive(:new).and_return(api_service_instance)
+    allow(api_service_instance).to receive(:send_llm_request_log)
     allow(Coolhand).to receive(:log)
 
     Coolhand.configure do |c|
@@ -32,12 +32,14 @@ RSpec.describe Coolhand::Interceptor do
     # Give thread a chance to run
     sleep 0.1
 
-    expect(logger_instance).to have_received(:log_to_api).with(
+    expect(api_service_instance).to have_received(:send_llm_request_log).with(
       a_hash_including(
-        url: "http:/hello",
-        method: :get,
-        response_body: { "msg" => "hi" },
-        status_code: 200
+        raw_request: a_hash_including(
+          url: "http:/hello",
+          method: "get",
+          response_body: { "msg" => "hi" },
+          status_code: 200
+        )
       )
     )
   end

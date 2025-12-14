@@ -8,7 +8,7 @@ require "securerandom"
 require_relative "ruby/version"
 require_relative "ruby/configuration"
 require_relative "ruby/collector"
-require_relative "ruby/interceptor"
+require_relative "ruby/faraday_interceptor"
 require_relative "ruby/anthropic_interceptor"
 require_relative "ruby/api_service"
 require_relative "ruby/logger_service"
@@ -45,7 +45,7 @@ module Coolhand
       configuration.validate!
 
       # Apply the Faraday/Net::HTTP patch after configuration is set
-      Interceptor.patch!
+      Ruby::FaradayInterceptor.patch!
 
       # Conditionally patch the Anthropic gem if it's loaded
       if anthropic_gem_loaded?
@@ -62,12 +62,12 @@ module Coolhand
         return
       end
 
-      Interceptor.patch!
+      Ruby::FaradayInterceptor.patch!
       Ruby::AnthropicInterceptor.patch! if anthropic_gem_loaded?
 
       yield
     ensure
-      Interceptor.unpatch!
+      Ruby::FaradayInterceptor.unpatch!
       Ruby::AnthropicInterceptor.unpatch! if anthropic_gem_loaded?
     end
 
@@ -96,7 +96,6 @@ module Coolhand
       true
     end
 
-
     def current_request_id
       Thread.current[:coolhand_current_request_id]
     end
@@ -104,7 +103,7 @@ module Coolhand
     private
 
     def anthropic_gem_loaded?
-      defined?(Anthropic) && defined?(Anthropic::Client)
+      defined?(Anthropic::Client)
     end
   end
 end

@@ -43,7 +43,7 @@ RSpec.describe Coolhand::Ruby do
     end
 
     it "calls Interceptor.patch!" do
-      expect(Coolhand::Interceptor).to receive(:patch!)
+      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "key"
         c.silent = true
@@ -56,7 +56,7 @@ RSpec.describe Coolhand::Ruby do
     end
 
     it "allows custom intercept_addresses to be set" do
-      expect(Coolhand::Interceptor).to receive(:patch!)
+      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "key"
         c.silent = true
@@ -71,8 +71,8 @@ RSpec.describe Coolhand::Ruby do
     it "yields the block and calls patch/unpatch" do
       called = false
 
-      expect(Coolhand::Interceptor).to receive(:patch!).ordered
-      expect(Coolhand::Interceptor).to receive(:unpatch!).ordered
+      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!).ordered
+      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:unpatch!).ordered
 
       Coolhand.capture do
         called = true

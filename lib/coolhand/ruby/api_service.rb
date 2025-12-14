@@ -31,7 +31,6 @@ module Coolhand
         result
       end
 
-
       def configuration
         Coolhand.configuration
       end
