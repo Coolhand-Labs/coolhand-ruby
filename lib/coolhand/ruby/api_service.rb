@@ -31,14 +31,6 @@ module Coolhand
         result
       end
 
-      def send_llm_response(payload)
-        original_endpoint = @api_endpoint
-        @api_endpoint = "#{BASE_URI}/v2/llm_responses"
-
-        result = send_request(payload, "✅ Successfully sent response body")
-        @api_endpoint = original_endpoint
-        result
-      end
 
       def configuration
         Coolhand.configuration
