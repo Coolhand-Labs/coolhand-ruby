@@ -9,6 +9,7 @@ require_relative "ruby/version"
 require_relative "ruby/configuration"
 require_relative "ruby/collector"
 require_relative "ruby/interceptor"
+require_relative "ruby/anthropic_interceptor"
 require_relative "ruby/api_service"
 require_relative "ruby/logger_service"
 require_relative "ruby/feedback_service"
@@ -43,10 +44,16 @@ module Coolhand
 
       configuration.validate!
 
-      # Apply the patch after configuration is set
+      # Apply the Faraday/Net::HTTP patch after configuration is set
       Interceptor.patch!
 
-      log "✅ Coolhand ready - will log OpenAI calls"
+      # Conditionally patch the Anthropic gem if it's loaded
+      if anthropic_gem_loaded?
+        Ruby::AnthropicInterceptor.patch!
+        log "✅ Coolhand ready - will log OpenAI and Anthropic calls"
+      else
+        log "✅ Coolhand ready - will log OpenAI calls"
+      end
     end
 
     def capture
@@ -56,10 +63,12 @@ module Coolhand
       end
 
       Interceptor.patch!
+      Ruby::AnthropicInterceptor.patch! if anthropic_gem_loaded?
 
       yield
     ensure
       Interceptor.unpatch!
+      Ruby::AnthropicInterceptor.unpatch! if anthropic_gem_loaded?
     end
 
     # A simple logger that respects the 'silent' configuration option.
@@ -85,6 +94,17 @@ module Coolhand
       return false if value.to_s.strip.empty?
 
       true
+    end
+
+
+    def current_request_id
+      Thread.current[:coolhand_current_request_id]
+    end
+
+    private
+
+    def anthropic_gem_loaded?
+      defined?(Anthropic) && defined?(Anthropic::Client)
     end
   end
 end

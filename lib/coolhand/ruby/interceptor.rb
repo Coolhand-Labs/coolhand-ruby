@@ -59,7 +59,7 @@ module Coolhand
         timestamp: DateTime.now,
         method: env.method,
         url: env.url.to_s,
-        headers: sanitize_headers(env.request_headers),
+        request_headers: sanitize_headers(env.request_headers),
         request_body: parse_json(env.request_body),
         response_body: nil,
         response_headers: nil,
@@ -89,10 +89,18 @@ module Coolhand
         end
 
         call_data[:response_body] = parse_json(body)
-        call_data[:response_headers] = sanitize_headers(response_env.request_headers)
+        call_data[:response_headers] = sanitize_headers(response_env.response_headers)
         call_data[:status_code] = response_env.status
 
-        Thread.new { Coolhand.logger_service.log_to_api(call_data) }
+        # Send complete request/response data in single API call
+        Thread.new {
+          request_data = {
+            raw_request: call_data
+          }
+
+          api_service = Coolhand::Ruby::ApiService.new
+          api_service.send_llm_request_log(request_data)
+        }
       end
     end
 
