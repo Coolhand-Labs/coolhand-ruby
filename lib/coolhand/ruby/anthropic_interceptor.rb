@@ -90,6 +90,9 @@ module Coolhand
           # Store request ID in thread-local storage for application access
           Thread.current[:coolhand_current_request_id] = request_id
 
+          # Temporarily disable Faraday interception for this thread to prevent double logging
+          Thread.current[:coolhand_disable_faraday] = true
+
           # Extract request metadata
           full_url = "#{@base_url}#{path}"
 
@@ -166,6 +169,9 @@ module Coolhand
               is_streaming: is_streaming
             )
             raise
+          ensure
+            # Always re-enable Faraday interception for this thread
+            Thread.current[:coolhand_disable_faraday] = false
           end
         end
 

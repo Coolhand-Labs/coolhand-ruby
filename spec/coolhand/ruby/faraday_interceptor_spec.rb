@@ -3,6 +3,8 @@
 require "spec_helper"
 require "faraday"
 
+# rubocop:disable RSpec/VerifiedDoubles
+
 RSpec.describe Coolhand::Ruby::FaradayInterceptor do
   let(:api_service_instance) { instance_double(Coolhand::Ruby::ApiService) }
   let(:api_service_class) { class_double(Coolhand::Ruby::ApiService).as_stubbed_const }
@@ -103,4 +105,105 @@ RSpec.describe Coolhand::Ruby::FaradayInterceptor do
       expect(described_class.patched?).to be true
     end
   end
+
+  describe "#call" do
+    let(:interceptor) { described_class.new }
+    let(:app) { double("app") }
+    let(:request_double) { double("request", on_data: nil).tap { |d| allow(d).to receive(:on_data=) } }
+    let(:env) do
+      double("env",
+        url: double(to_s: "https://api.openai.com/v1/chat/completions"),
+        method: :post,
+        request_headers: { "Authorization" => "Bearer test" },
+        request_body: '{"model":"gpt-4","messages":[]}',
+        request: request_double)
+    end
+
+    # Mock Faraday response object that supports on_complete
+    let(:faraday_response) do
+      double("faraday_response").tap do |response|
+        allow(response).to receive(:on_complete).and_yield(response_env)
+      end
+    end
+
+    let(:response_env) do
+      double("response_env",
+        body: '{"choices":[{"message":{"content":"Hello"}}]}',
+        response_headers: { "content-type" => "application/json" },
+        status: 200)
+    end
+
+    before do
+      interceptor.instance_variable_set(:@app, app)
+      allow(Coolhand.configuration).to receive(:intercept_addresses).and_return(["api.openai.com"])
+    end
+
+    context "when thread-local Faraday suppression is enabled" do
+      before do
+        Thread.current[:coolhand_disable_faraday] = true
+        # When suppressed, app.call should return a proper Faraday response
+        allow(app).to receive(:call).with(env).and_return(faraday_response)
+      end
+
+      after do
+        Thread.current[:coolhand_disable_faraday] = false
+      end
+
+      it "skips interception and calls super directly" do
+        expect(app).to receive(:call).with(env).and_return(faraday_response)
+        expect(interceptor).not_to receive(:build_call_data)
+
+        # The key behavior is that it calls super without doing any interception
+        interceptor.call(env)
+      end
+
+      it "does not log the request" do
+        expect(Coolhand).not_to receive(:log).with(/INTERCEPTING/)
+
+        interceptor.call(env)
+      end
+    end
+
+    context "when thread-local Faraday suppression is disabled" do
+      before do
+        Thread.current[:coolhand_disable_faraday] = false
+        allow(app).to receive(:call).with(env).and_return(faraday_response)
+
+        # Mock interceptor methods
+        allow(interceptor).to receive_messages(parse_json: {}, sanitize_headers: {})
+        allow(interceptor).to receive(:send_complete_request_log)
+      end
+
+      it "proceeds with normal interception" do
+        expect(Coolhand).to receive(:log).with(/INTERCEPTING/)
+
+        interceptor.call(env)
+      end
+
+      it "processes the request normally" do
+        expect(interceptor).to receive(:build_call_data).with(env).and_call_original
+
+        interceptor.call(env)
+      end
+    end
+
+    context "when request is not for an LLM API" do
+      let(:non_llm_env) do
+        double("env",
+          url: double(to_s: "https://example.com/api"),
+          method: :get)
+      end
+
+      it "skips interception regardless of thread-local flag state" do
+        Thread.current[:coolhand_disable_faraday] = false
+
+        expect(app).to receive(:call).with(non_llm_env).and_return(faraday_response)
+        expect(interceptor).not_to receive(:build_call_data)
+
+        # The key behavior is that it skips interception for non-LLM requests
+        interceptor.call(non_llm_env)
+      end
+    end
+  end
 end
+# rubocop:enable RSpec/VerifiedDoubles

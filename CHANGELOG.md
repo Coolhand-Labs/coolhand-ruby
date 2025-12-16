@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-12-16
+
+### ✨ Major New Features
+- **Official Anthropic Gem Support** - Added comprehensive monitoring support for the official `anthropic` gem (v1.8+) through direct Net::HTTP interception
+- **Dual Gem Compatibility** - Support for both `anthropic` (official) and `ruby-anthropic` (community) gems with automatic detection and appropriate interceptor selection
+- **Streaming Response Support** - Enhanced SSE (Server-Sent Events) parsing for Anthropic streaming responses with proper message accumulation and reconstruction
+- **Graceful Gem Conflict Handling** - Automatic detection when both anthropic gems are installed, with graceful degradation to ruby-anthropic monitoring
+
+### 🏗️ Architecture Improvements
+- **AnthropicInterceptor Module** - New dedicated interceptor for official anthropic gem requests with streaming response support
+- **BaseInterceptor Module** - Shared functionality across interceptors with unified API logging format and DRY principles
+- **Modular Design** - Moved from single `interceptor.rb` to specialized interceptors (`faraday_interceptor.rb`, `anthropic_interceptor.rb`)
+- **Enhanced Configuration** - Automatic gem detection in `configure` block with appropriate interceptor selection
+
+### 🔧 API & Format Changes
+- **Unified Logging Format** - Standardized API request/response logging with `raw_request` wrapper and collector data integration
+- **Headers Field Update** - API logs now use `headers` instead of `request_headers` for consistency
+- **Silent Mode Override** - Critical warnings (like gem conflicts) now always display regardless of silent mode settings
+
+### 🧪 Testing & Quality
+- **Comprehensive Test Coverage** - Added 16 new specs covering all interceptor scenarios including gem conflict handling
+- **RuboCop Compliance** - Applied linting with proper line length, verified doubles, and RSpec best practices
+- **Thread Safety** - Enhanced request correlation with thread-local storage for streaming requests
+
+### 🗂️ Supported Environments
+- **Development Environment** - Uses official `anthropic` gem for Net::HTTP-based requests
+- **AR_Dev Environment** - Uses `ruby-anthropic` gem for Faraday-based requests
+- **Automatic Detection** - Coolhand detects which gem is loaded and applies appropriate interception
+
+### 💔 Breaking Changes
+- **Removed** - `lib/coolhand/ruby/interceptor.rb` replaced by specialized interceptor modules
+- **API Change** - Logging format now uses `headers` field instead of `request_headers`
+
+### 🔄 Migration Guide
+For users upgrading from v0.1.x:
+- No code changes required for basic usage
+- If depending on old `interceptor.rb` directly, update imports to use `faraday_interceptor.rb` or `anthropic_interceptor.rb`
+- API log consumers should expect `headers` field instead of `request_headers`
+
+### 📊 Compatibility Matrix
+| Gem | Version | Interceptor | Status |
+|-----|---------|-------------|--------|
+| `anthropic` | 1.8+ | AnthropicInterceptor | ✅ Full Support |
+| `ruby-anthropic` | 0.4+ | FaradayInterceptor | ✅ Full Support |
+| Both gems | Any | FaradayInterceptor | ⚠️ Graceful Degradation |
+
 ## [0.1.5] - 2024-12-09
 
 ### 🐛 Critical Bug Fixes

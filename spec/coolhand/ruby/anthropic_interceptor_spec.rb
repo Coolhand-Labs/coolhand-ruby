@@ -217,4 +217,232 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
       expect(described_class.patched?).to be true
     end
   end
+
+  describe "RequestInterceptor" do
+    let(:mock_base_class) do
+      Class.new do
+        def request(**)
+          # Mock response object
+          # rubocop:disable Style/OpenStructUse
+          OpenStruct.new(
+            status: 200,
+            body: { "choices" => [{ "message" => { "content" => "Hello" } }] },
+            headers: { "content-type" => "application/json" }
+          )
+          # rubocop:enable Style/OpenStructUse
+        end
+      end
+    end
+
+    let(:request_interceptor_instance) do
+      Class.new(mock_base_class) do
+        include Coolhand::Ruby::AnthropicInterceptor::RequestInterceptor
+
+        attr_accessor :base_url
+
+        def initialize
+          @base_url = "https://api.anthropic.com"
+        end
+      end.new
+    end
+
+    describe "#request" do
+      let(:request_params) do
+        {
+          method: :post,
+          path: "/v1/messages",
+          body: { model: "claude-3-sonnet", messages: [{ role: "user", content: "Hello" }] },
+          headers: { "Content-Type" => "application/json" }
+        }
+      end
+
+      before do
+        # Mock BaseInterceptor methods
+        allow(Coolhand::Ruby::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
+        allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+      end
+
+      it "sets and clears thread-local Faraday suppression flag" do
+        # Reset thread-local state for clean test
+        Thread.current[:coolhand_disable_faraday] = nil
+
+        expect(Thread.current[:coolhand_disable_faraday]).to be_nil
+
+        request_interceptor_instance.request(**request_params)
+
+        # Should be cleared after request
+        expect(Thread.current[:coolhand_disable_faraday]).to be false
+      end
+
+      it "temporarily disables Faraday interception during request" do
+        flag_during_request = nil
+
+        # Use a spy to capture the flag state when the base method is called
+        original_request = mock_base_class.instance_method(:request)
+        # rubocop:disable RSpec/AnyInstance
+        allow_any_instance_of(mock_base_class).to receive(:request) do |instance, **args|
+          flag_during_request = Thread.current[:coolhand_disable_faraday]
+          original_request.bind_call(instance, **args)
+        end
+        # rubocop:enable RSpec/AnyInstance
+
+        request_interceptor_instance.request(**request_params)
+
+        expect(flag_during_request).to be true
+      end
+
+      it "stores request ID in thread-local storage" do
+        request_interceptor_instance.request(**request_params)
+
+        expect(Thread.current[:coolhand_current_request_id]).to match(/\A[a-f0-9]{32}\z/)
+      end
+
+      it "logs complete request data for non-streaming requests" do
+        request_interceptor_instance.request(**request_params)
+
+        expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log)
+          .with(hash_including(
+            request_id: anything,
+            method: :post,
+            url: "https://api.anthropic.com/v1/messages",
+            start_time: anything,
+            end_time: anything,
+            duration_ms: anything,
+            is_streaming: false
+          ))
+      end
+
+      it "stores streaming request metadata for streaming requests" do
+        streaming_params = request_params.merge(body: request_params[:body].merge(stream: true))
+
+        request_interceptor_instance.request(**streaming_params)
+
+        streaming_request = Thread.current[:coolhand_streaming_request]
+        expect(streaming_request).not_to be_nil
+        expect(streaming_request[:is_streaming]).to be true
+        expect(streaming_request[:request_id]).to match(/\A[a-f0-9]{32}\z/)
+      end
+
+      context "when an error occurs" do
+        before do
+          # rubocop:disable RSpec/AnyInstance
+          allow_any_instance_of(mock_base_class).to receive(:request).and_raise(StandardError.new("API Error"))
+          # rubocop:enable RSpec/AnyInstance
+        end
+
+        it "still clears the thread-local flag" do
+          expect { request_interceptor_instance.request(**request_params) }.to raise_error(StandardError, "API Error")
+
+          expect(Thread.current[:coolhand_disable_faraday]).to be false
+        end
+
+        it "logs the error response" do
+          expect { request_interceptor_instance.request(**request_params) }.to raise_error(StandardError)
+
+          expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log)
+            .with(hash_including(
+              response_body: {
+                error: {
+                  message: "API Error",
+                  class: "StandardError"
+                }
+              }
+            ))
+        end
+      end
+    end
+
+    describe "#streaming_request?" do
+      it "detects streaming from request body stream parameter" do
+        body = { stream: true }
+        headers = {}
+
+        result = request_interceptor_instance.send(:streaming_request?, body, headers)
+        expect(result).to be true
+      end
+
+      it "detects streaming from Accept header" do
+        body = {}
+        headers = { "Accept" => "text/event-stream" }
+
+        result = request_interceptor_instance.send(:streaming_request?, body, headers)
+        expect(result).to be true
+      end
+
+      it "returns false for non-streaming requests" do
+        body = { stream: false }
+        headers = { "Accept" => "application/json" }
+
+        result = request_interceptor_instance.send(:streaming_request?, body, headers)
+        expect(result).to be false
+      end
+    end
+  end
+
+  describe "MessageStreamInterceptor" do
+    let(:mock_stream_class) do
+      Class.new do
+        def accumulated_message
+          # rubocop:disable Style/OpenStructUse
+          OpenStruct.new(
+            content: [{ text: "Generated response" }],
+            role: "assistant"
+          )
+          # rubocop:enable Style/OpenStructUse
+        end
+      end
+    end
+
+    let(:message_stream_instance) do
+      Class.new(mock_stream_class) do
+        include Coolhand::Ruby::AnthropicInterceptor::MessageStreamInterceptor
+      end.new
+    end
+
+    describe "#accumulated_message" do
+      context "when streaming request metadata exists" do
+        before do
+          Thread.current[:coolhand_streaming_request] = {
+            request_id: "test-request-id",
+            method: :post,
+            url: "https://api.anthropic.com/v1/messages",
+            request_headers: {},
+            request_body: {},
+            start_time: Time.now - 1,
+            end_time: Time.now,
+            duration_ms: 1000,
+            is_streaming: true
+          }
+
+          allow(Coolhand::Ruby::BaseInterceptor).to receive(:extract_response_data).and_return({})
+          allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+        end
+
+        it "logs streaming completion and clears thread-local data" do
+          message_stream_instance.accumulated_message
+
+          expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log)
+            .with(hash_including(
+              request_id: "test-request-id",
+              is_streaming: true
+            ))
+
+          expect(Thread.current[:coolhand_streaming_request]).to be_nil
+        end
+      end
+
+      context "when no streaming request metadata exists" do
+        before do
+          Thread.current[:coolhand_streaming_request] = nil
+          allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+        end
+
+        it "does not attempt to log completion" do
+          message_stream_instance.accumulated_message
+
+          expect(Coolhand::Ruby::BaseInterceptor).not_to have_received(:send_complete_request_log)
+        end
+      end
+    end
+  end
 end

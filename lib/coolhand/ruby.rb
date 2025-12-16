@@ -47,13 +47,14 @@ module Coolhand
       # Apply the Faraday patch (needed for ruby-anthropic and other Faraday-based gems)
       Ruby::FaradayInterceptor.patch!
 
-      # Conditionally patch the Anthropic gem if it's loaded
+      # Conditionally patch the official Anthropic gem if it's loaded
       if anthropic_gem_loaded?
-        Ruby::AnthropicInterceptor.patch!
-        # Different message depending on which Anthropic gem is loaded
         if defined?(Anthropic::Internal)
+          # Official anthropic gem - patch the AnthropicInterceptor for Net::HTTP requests
+          Ruby::AnthropicInterceptor.patch!
           log "✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls"
         else
+          # ruby-anthropic gem uses Faraday, so FaradayInterceptor is sufficient
           log "✅ Coolhand ready - will log OpenAI and Anthropic (ruby-anthropic via Faraday) calls"
         end
       else
@@ -68,12 +69,18 @@ module Coolhand
       end
 
       Ruby::FaradayInterceptor.patch!
-      Ruby::AnthropicInterceptor.patch! if anthropic_gem_loaded?
+
+      # Only patch AnthropicInterceptor for official anthropic gem
+      anthropic_patched = false
+      if anthropic_gem_loaded? && defined?(Anthropic::Internal)
+        Ruby::AnthropicInterceptor.patch!
+        anthropic_patched = true
+      end
 
       yield
     ensure
       Ruby::FaradayInterceptor.unpatch!
-      Ruby::AnthropicInterceptor.unpatch! if anthropic_gem_loaded?
+      Ruby::AnthropicInterceptor.unpatch! if anthropic_patched
     end
 
     # A simple logger that respects the 'silent' configuration option.

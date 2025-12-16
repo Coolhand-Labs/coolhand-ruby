@@ -42,6 +42,9 @@ module Coolhand
       end
 
       def call(env)
+        # Skip if Faraday interception is temporarily disabled for this thread
+        return super if Thread.current[:coolhand_disable_faraday]
+
         return super unless llm_api_request?(env)
 
         Coolhand.log "🎯 INTERCEPTING OpenAI call #{env.url}"
