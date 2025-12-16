@@ -22,7 +22,9 @@ module Coolhand
         # Check if both anthropic gems are installed
         if both_gems_installed?
           # Always show this warning, regardless of silent mode
-          warn_message = "⚠️  Warning: Both 'anthropic' and 'ruby-anthropic' gems are installed. Coolhand will only monitor ruby-anthropic (Faraday-based) requests. Official anthropic gem monitoring has been disabled."
+          warn_message = "⚠️  Warning: Both 'anthropic' and 'ruby-anthropic' gems are installed. " \
+                         "Coolhand will only monitor ruby-anthropic (Faraday-based) requests. " \
+                         "Official anthropic gem monitoring has been disabled."
           puts "COOLHAND: #{warn_message}"
 
           # Mark as patched since ruby-anthropic will be handled by FaradayInterceptor
@@ -63,8 +65,8 @@ module Coolhand
 
       def both_gems_installed?
         # Check if both gems are installed by looking at loaded specs
-        anthropic_gem = Gem.loaded_specs['anthropic']
-        ruby_anthropic_gem = Gem.loaded_specs['ruby-anthropic']
+        anthropic_gem = Gem.loaded_specs["anthropic"]
+        ruby_anthropic_gem = Gem.loaded_specs["ruby-anthropic"]
 
         anthropic_gem && ruby_anthropic_gem
       end
