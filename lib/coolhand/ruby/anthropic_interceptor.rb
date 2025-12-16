@@ -19,9 +19,29 @@ module Coolhand
         return if @patched
         return unless defined?(Anthropic)
 
-        # Patch the BaseClient request method
-        require "anthropic/internal/transport/base_client"
-        ::Anthropic::Internal::Transport::BaseClient.prepend(RequestInterceptor)
+        # Check if both anthropic gems are installed
+        if both_gems_installed?
+          # Always show this warning, regardless of silent mode
+          warn_message = "⚠️  Warning: Both 'anthropic' and 'ruby-anthropic' gems are installed. Coolhand will only monitor ruby-anthropic (Faraday-based) requests. Official anthropic gem monitoring has been disabled."
+          puts "COOLHAND: #{warn_message}"
+
+          # Mark as patched since ruby-anthropic will be handled by FaradayInterceptor
+          @patched = true
+          return
+        end
+
+        # Check if we're using the official anthropic gem
+        # The official gem has Anthropic::Internal, ruby-anthropic doesn't
+        if defined?(Anthropic::Internal)
+          # Patch the BaseClient request method for official anthropic gem
+          require "anthropic/internal/transport/base_client"
+          ::Anthropic::Internal::Transport::BaseClient.prepend(RequestInterceptor)
+        else
+          # ruby-anthropic uses Faraday, so the FaradayInterceptor already handles it
+          Coolhand.log "✅ ruby-anthropic detected, using Faraday interceptor"
+          @patched = true
+          return
+        end
 
         # Patch MessageStream to capture completion data
         patch_message_stream!
@@ -39,6 +59,14 @@ module Coolhand
 
       def patched?
         @patched ||= false
+      end
+
+      def both_gems_installed?
+        # Check if both gems are installed by looking at loaded specs
+        anthropic_gem = Gem.loaded_specs['anthropic']
+        ruby_anthropic_gem = Gem.loaded_specs['ruby-anthropic']
+
+        anthropic_gem && ruby_anthropic_gem
       end
 
       def patch_message_stream!

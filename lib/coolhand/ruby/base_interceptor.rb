@@ -119,7 +119,7 @@ module Coolhand
             timestamp: start_time.iso8601,
             method: method.to_s.downcase,
             url: url,
-            request_headers: request_headers,
+            headers: request_headers,
             request_body: request_body,
             response_headers: response_headers,
             response_body: response_body,

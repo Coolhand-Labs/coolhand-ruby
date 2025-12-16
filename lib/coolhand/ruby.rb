@@ -44,13 +44,18 @@ module Coolhand
 
       configuration.validate!
 
-      # Apply the Faraday/Net::HTTP patch after configuration is set
+      # Apply the Faraday patch (needed for ruby-anthropic and other Faraday-based gems)
       Ruby::FaradayInterceptor.patch!
 
       # Conditionally patch the Anthropic gem if it's loaded
       if anthropic_gem_loaded?
         Ruby::AnthropicInterceptor.patch!
-        log "✅ Coolhand ready - will log OpenAI and Anthropic calls"
+        # Different message depending on which Anthropic gem is loaded
+        if defined?(Anthropic::Internal)
+          log "✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls"
+        else
+          log "✅ Coolhand ready - will log OpenAI and Anthropic (ruby-anthropic via Faraday) calls"
+        end
       else
         log "✅ Coolhand ready - will log OpenAI calls"
       end
