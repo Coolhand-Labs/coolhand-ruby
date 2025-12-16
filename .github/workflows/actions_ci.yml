@@ -94,3 +94,63 @@ jobs:
         run: bundle install
       - name: Run Rubocop
         run: bundle exec rubocop --parallel --format progress
+
+  anthropic-compatibility:
+    name: Test Anthropic Compatibility
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        anthropic-version: ["1.8.0", "1.16.0"]
+
+    container:
+      image: ruby:3.4.2-bookworm
+
+    env:
+      COOLHAND_ENV: test
+      COOLHAND_API_ENDPOINT: https://coolhand_api_endpoint
+      COOLHAND_API_KEY: coolhand_api_key-xxx-yyy-zzz
+      COOLHAND_SILENT: true
+      COOLHAND_INTERCEPT_ADDRESSES: api.anthropic.com
+      ANTHROPIC_API_KEY: sk-ant-test-12345678901234567890
+      BUNDLE_JOBS: 4
+      BUNDLE_RETRY: 3
+
+    steps:
+      - name: Install Git LFS
+        run: |
+          apt-get update
+          apt-get install -y git-lfs
+          git lfs install
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Mark repo as safe
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
+
+      - name: Cache Ruby gems
+        uses: actions/cache@v3
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gems-ruby-3.4.2-anthropic-${{ matrix.anthropic-version }}-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gems-ruby-3.4.2-anthropic-${{ matrix.anthropic-version }}-
+
+      - name: Bundle config
+        run: |
+          bundle config path vendor/bundle
+          bundle config jobs 4
+          bundle config retry 3
+
+      - name: Install base dependencies
+        run: bundle install
+
+      - name: Add Anthropic gem
+        run: bundle add anthropic --version "~> ${{ matrix.anthropic-version }}"
+
+      - name: Run Anthropic integration tests
+        run: bundle exec rspec spec/coolhand/ruby/anthropic_compatibility_spec.rb --format documentation
