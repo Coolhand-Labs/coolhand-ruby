@@ -72,10 +72,16 @@ module Coolhand
       end
 
       def patch_message_stream!
-        return unless defined?(Anthropic::Streaming::MessageStream)
+        # Try to load MessageStream class if available
+        begin
+          require "anthropic/helpers/streaming/message_stream"
+        rescue LoadError
+          # MessageStream not available in this version of anthropic gem
+          return
+        end
 
-        # Load MessageStream class
-        require "anthropic/helpers/streaming/message_stream"
+        # Only proceed if the constant is now defined
+        return unless defined?(Anthropic::Streaming::MessageStream)
 
         # Prepend our patch module
         ::Anthropic::Streaming::MessageStream.prepend(MessageStreamInterceptor)
