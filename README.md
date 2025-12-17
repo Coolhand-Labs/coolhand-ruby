@@ -186,29 +186,7 @@ puts response.dig("choices", 0, "message", "content")
 # The request and response have been automatically logged to Coolhand!
 ```
 
-### With Anthropic Ruby Client
-
-```ruby
-require 'anthropic'
-require 'coolhand/ruby'
-
-# Configure Coolhand
-Coolhand.configure do |config|
-  config.api_key = 'your_api_key_here'
-end
-
-# Use Anthropic normally - requests are automatically logged
-anthropic = Anthropic::Client.new(access_token: ENV['ANTHROPIC_API_KEY'])
-
-response = anthropic.messages(
-  model: "claude-3-opus",
-  max_tokens: 1024,
-  messages: [{ role: "user", content: "Hello, Claude!" }]
-)
-
-puts response["content"]
-# Automatically logged to Coolhand!
-```
+📖 **[Complete Anthropic Integration Guide →](docs/anthropic.md)** - Supports both official and community gems with automatic detection
 
 ## Logging Inbound Webhooks
 
@@ -285,23 +263,43 @@ The filtering is automatic and applies to all monitored API calls and webhook lo
 
 ## Supported Libraries
 
-The monitor works with any Ruby library that uses Faraday for HTTP(S) requests to LLM APIs, including:
+The monitor works with multiple transport layers and Ruby libraries:
 
+**Faraday-based libraries:**
 - OpenAI Ruby SDK
-- Anthropic Ruby SDK
+- ruby-anthropic gem (community Anthropic gem)
 - ruby-openai gem
 - LangChain.rb
 - Direct Faraday requests
 - Any other Faraday-based HTTP client
 
+**Native HTTP libraries:**
+- Official Anthropic Ruby SDK (using Net::HTTP)
+- Any library using Net::HTTP directly
+
+**Auto-detection**: Coolhand automatically detects which transport layer your libraries use and applies the appropriate monitoring strategy.
+
 ## How It Works
 
-The gem patches Faraday connections to intercept HTTP requests. When a request matches the configured LLM endpoints:
+Coolhand uses a dual-interceptor strategy to monitor different HTTP transport layers:
 
-1. The original request executes normally
-2. Request and response data (body, headers, status) are captured
-3. Data is sent to the Coolhand API asynchronously in a background thread
-4. Your application continues without any performance impact
+### Faraday Interceptor
+- Patches Faraday connections using middleware injection
+- Monitors: OpenAI SDK, ruby-anthropic, LangChain.rb, and other Faraday-based libraries
+- Handles: Standard HTTP requests and Server-Sent Events (SSE) for streaming
+
+### Anthropic Interceptor
+- Patches the official Anthropic gem's internal HTTP transport (Net::HTTP)
+- Monitors: Official Anthropic Ruby SDK requests
+
+### Request Flow
+When a request matches configured LLM endpoints:
+
+1. The original request executes normally with zero performance impact
+2. Request and response data (body, headers, status) are captured by the appropriate interceptor
+3. For streaming requests, the complete accumulated response is captured (not individual chunks)
+4. Data is sent to the Coolhand API asynchronously in a background thread
+5. Your application continues without interruption
 
 For non-matching endpoints, requests pass through unchanged.
 
@@ -369,6 +367,7 @@ The monitor handles errors gracefully:
 
 ## Integration Guides
 
+- **[Anthropic Integration](docs/anthropic.md)** - Complete guide for both official and community Anthropic gems, including streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** - Complete guide for integrating ElevenLabs Conversational AI with webhook capture and feedback submission
 
 ## Security

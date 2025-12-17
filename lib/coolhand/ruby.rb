@@ -8,7 +8,8 @@ require "securerandom"
 require_relative "ruby/version"
 require_relative "ruby/configuration"
 require_relative "ruby/collector"
-require_relative "ruby/interceptor"
+require_relative "ruby/faraday_interceptor"
+require_relative "ruby/anthropic_interceptor"
 require_relative "ruby/api_service"
 require_relative "ruby/logger_service"
 require_relative "ruby/feedback_service"
@@ -43,10 +44,22 @@ module Coolhand
 
       configuration.validate!
 
-      # Apply the patch after configuration is set
-      Interceptor.patch!
+      # Apply the Faraday patch (needed for ruby-anthropic and other Faraday-based gems)
+      Ruby::FaradayInterceptor.patch!
 
-      log "✅ Coolhand ready - will log OpenAI calls"
+      # Conditionally patch the official Anthropic gem if it's loaded
+      if anthropic_gem_loaded?
+        if defined?(Anthropic::Internal)
+          # Official anthropic gem - patch the AnthropicInterceptor for Net::HTTP requests
+          Ruby::AnthropicInterceptor.patch!
+          log "✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls"
+        else
+          # ruby-anthropic gem uses Faraday, so FaradayInterceptor is sufficient
+          log "✅ Coolhand ready - will log OpenAI and Anthropic (ruby-anthropic via Faraday) calls"
+        end
+      else
+        log "✅ Coolhand ready - will log OpenAI calls"
+      end
     end
 
     def capture
@@ -55,11 +68,19 @@ module Coolhand
         return
       end
 
-      Interceptor.patch!
+      Ruby::FaradayInterceptor.patch!
+
+      # Only patch AnthropicInterceptor for official anthropic gem
+      anthropic_patched = false
+      if anthropic_gem_loaded? && defined?(Anthropic::Internal)
+        Ruby::AnthropicInterceptor.patch!
+        anthropic_patched = true
+      end
 
       yield
     ensure
-      Interceptor.unpatch!
+      Ruby::FaradayInterceptor.unpatch!
+      Ruby::AnthropicInterceptor.unpatch! if anthropic_patched
     end
 
     # A simple logger that respects the 'silent' configuration option.
@@ -85,6 +106,16 @@ module Coolhand
       return false if value.to_s.strip.empty?
 
       true
+    end
+
+    def current_request_id
+      Thread.current[:coolhand_current_request_id]
+    end
+
+    private
+
+    def anthropic_gem_loaded?
+      defined?(Anthropic::Client)
     end
   end
 end

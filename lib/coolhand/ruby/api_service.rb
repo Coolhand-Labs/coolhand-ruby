@@ -12,8 +12,23 @@ module Coolhand
 
       attr_reader :api_endpoint
 
-      def initialize(endpoint_path)
-        @api_endpoint = "#{BASE_URI}/#{endpoint_path}"
+      def initialize(endpoint_path = nil)
+        @api_endpoint = endpoint_path ? "#{BASE_URI}/#{endpoint_path}" : BASE_URI
+      end
+
+      def send_llm_request_log(request_data)
+        original_endpoint = @api_endpoint
+        @api_endpoint = "#{BASE_URI}/v2/llm_request_logs"
+
+        payload = {
+          llm_request_log: request_data.merge(
+            collector: Collector.get_collector_string
+          )
+        }
+
+        result = send_request(payload, "✅ Successfully sent request metadata")
+        @api_endpoint = original_endpoint
+        result
       end
 
       def configuration
