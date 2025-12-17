@@ -292,7 +292,8 @@ Coolhand uses a dual-interceptor strategy to monitor different HTTP transport la
 - Patches the official Anthropic gem's internal HTTP transport (Net::HTTP)
 - Monitors: Official Anthropic Ruby SDK requests
 
-1. **Request Detection**: The appropriate interceptor is selected based on the HTTP transport layer
+### Request Flow
+When a request matches configured LLM endpoints:
 
 1. The original request executes normally with zero performance impact
 2. Request and response data (body, headers, status) are captured by the appropriate interceptor
