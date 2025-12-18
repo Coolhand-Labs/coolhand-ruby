@@ -7,7 +7,7 @@ module Coolhand
   module Ruby
     # Base module with common functionality for all interceptors
     module BaseInterceptor
-      module_function
+      extend self
 
       def extract_response_data(response)
         case response
@@ -98,17 +98,60 @@ module Coolhand
       end
 
       def sanitize_headers(headers)
-        sanitized = headers.transform_keys(&:to_s).dup
+        return {} if headers.nil?
 
-        if sanitized["Authorization"]
-          sanitized["Authorization"] = sanitized["Authorization"].gsub(/Bearer .+/, "Bearer [REDACTED]")
-        end
+        # Normalize different header-like objects into a plain Hash{String => String}
+        raw = if headers.is_a?(Hash)
+                headers.transform_keys(&:to_s).transform_values { |v| normalize_header_value(v) }
+              elsif headers.respond_to?(:to_hash)
+                # Net::HTTPResponse and some request objects implement to_hash and return arrays for values
+                headers.to_hash.transform_keys(&:to_s).transform_values { |v| normalize_header_value(v) }
+              elsif headers.respond_to?(:each_header)
+                # Net::HTTPResponse also implements each_header
+                h = {}
+                headers.each_header { |k, v| h[k.to_s] = normalize_header_value(v) }
+                h
+              elsif headers.respond_to?(:each)
+                h = {}
+                headers.each { |k, v| h[k.to_s] = normalize_header_value(v) }
+                h
+              else
+                # Fallback: preserve as raw string under 'raw' key
+                { "raw" => headers.to_s }
+              end
 
-        %w[openai-api-key api-key x-api-key X-API-Key].each do |key|
-          sanitized[key] = "[REDACTED]" if sanitized[key]
+        sanitized = raw.dup
+
+        # Redact Authorization Bearer tokens
+        sanitized.each do |k, v|
+          next if v.nil?
+
+          key_down = k.to_s.downcase
+
+          if key_down == "authorization"
+            # Keep the "Bearer" prefix but redact the token; otherwise mask whole value
+            if v.to_s.match?(/\ABearer\s+/i)
+              sanitized[k] = v.to_s.gsub(/\ABearer\s+.+/i, "Bearer [REDACTED]")
+            else
+              sanitized[k] = "[REDACTED]"
+            end
+          elsif %w[openai-api-key api-key x-api-key x-api-key].include?(key_down)
+            sanitized[k] = "[REDACTED]"
+          end
         end
 
         sanitized
+      end
+
+      private
+
+      # Helper to normalize header values (arrays -> joined string)
+      def normalize_header_value(value)
+        if value.is_a?(Array)
+          value.join(", ")
+        else
+          value.to_s
+        end
       end
 
       def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,

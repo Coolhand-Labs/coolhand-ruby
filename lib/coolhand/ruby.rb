@@ -9,6 +9,7 @@ require_relative "ruby/version"
 require_relative "ruby/configuration"
 require_relative "ruby/collector"
 require_relative "ruby/faraday_interceptor"
+require_relative "ruby/net_http_interceptor"
 require_relative "ruby/anthropic_interceptor"
 require_relative "ruby/api_service"
 require_relative "ruby/logger_service"
@@ -44,22 +45,9 @@ module Coolhand
 
       configuration.validate!
 
-      # Apply the Faraday patch (needed for ruby-anthropic and other Faraday-based gems)
-      Ruby::FaradayInterceptor.patch!
+      Ruby::NetHttpInterceptor.patch!
 
-      # Conditionally patch the official Anthropic gem if it's loaded
-      if anthropic_gem_loaded?
-        if defined?(Anthropic::Internal)
-          # Official anthropic gem - patch the AnthropicInterceptor for Net::HTTP requests
-          Ruby::AnthropicInterceptor.patch!
-          log "✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls"
-        else
-          # ruby-anthropic gem uses Faraday, so FaradayInterceptor is sufficient
-          log "✅ Coolhand ready - will log OpenAI and Anthropic (ruby-anthropic via Faraday) calls"
-        end
-      else
-        log "✅ Coolhand ready - will log OpenAI calls"
-      end
+      log "✅ Coolhand ready - will log OpenAI calls"
     end
 
     def capture
@@ -68,19 +56,11 @@ module Coolhand
         return
       end
 
-      Ruby::FaradayInterceptor.patch!
-
-      # Only patch AnthropicInterceptor for official anthropic gem
-      anthropic_patched = false
-      if anthropic_gem_loaded? && defined?(Anthropic::Internal)
-        Ruby::AnthropicInterceptor.patch!
-        anthropic_patched = true
-      end
+      Ruby::NetHttpInterceptor.patch!
 
       yield
     ensure
-      Ruby::FaradayInterceptor.unpatch!
-      Ruby::AnthropicInterceptor.unpatch! if anthropic_patched
+      Ruby::NetHttpInterceptor.unpatch!
     end
 
     # A simple logger that respects the 'silent' configuration option.
@@ -110,12 +90,6 @@ module Coolhand
 
     def current_request_id
       Thread.current[:coolhand_current_request_id]
-    end
-
-    private
-
-    def anthropic_gem_loaded?
-      defined?(Anthropic::Client)
     end
   end
 end
