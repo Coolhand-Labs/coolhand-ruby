@@ -15,7 +15,7 @@ Coolhand automatically detects which Anthropic gem you're using and applies the 
 ### Basic Configuration
 
 ```ruby
-require 'coolhand/ruby'
+require 'coolhand'
 
 Coolhand.configure do |config|
   config.api_key = 'your_coolhand_api_key_here'
@@ -39,7 +39,7 @@ gem 'anthropic'
 
 ```ruby
 require 'anthropic'
-require 'coolhand/ruby'
+require 'coolhand'
 
 # Configure Coolhand
 Coolhand.configure do |config|
@@ -124,7 +124,7 @@ gem 'ruby-anthropic'
 
 ```ruby
 require 'ruby-anthropic'
-require 'coolhand/ruby'
+require 'coolhand'
 
 # Configure Coolhand
 Coolhand.configure do |config|
@@ -172,7 +172,7 @@ When both gems are installed, Coolhand automatically handles the conflict:
 ```ruby
 require 'anthropic'        # Official gem
 require 'ruby-anthropic'  # Community gem
-require 'coolhand/ruby'
+require 'coolhand'
 
 Coolhand.configure do |config|
   config.api_key = 'your_coolhand_api_key'
@@ -199,7 +199,7 @@ begin
   $LOAD_PATH.reject! { |path| path.include?('ruby-anthropic') }
 
   require 'anthropic'
-  require 'coolhand/ruby'
+  require 'coolhand'
 
   Coolhand.configure do |config|
     config.api_key = 'your_coolhand_api_key'
@@ -393,8 +393,8 @@ end
 **Solution**: Ensure you require the gem before configuring Coolhand:
 
 ```ruby
-require 'anthropic'  # Must come before coolhand/ruby
-require 'coolhand/ruby'
+require 'anthropic'  # Must come before coolhand
+require 'coolhand'
 
 Coolhand.configure do |config|
   config.api_key = 'your_api_key'

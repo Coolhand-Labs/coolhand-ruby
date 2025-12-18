@@ -12,7 +12,7 @@ Version 0.2.0 removes the `Ruby` namespace from the gem to simplify the API. Thi
 
 **Before (v0.1.x):**
 ```ruby
-require 'coolhand/ruby'
+require 'coolhand'
 ```
 
 **After (v0.2.x):**
@@ -25,16 +25,16 @@ require 'coolhand'
 **Before (v0.1.x):**
 ```ruby
 # FeedbackService
-feedback_service = Coolhand::Ruby::FeedbackService.new
+feedback_service = Coolhand::FeedbackService.new
 
 # LoggerService
-logger_service = Coolhand::Ruby::LoggerService.new
+logger_service = Coolhand::LoggerService.new
 
 # Version reference
-puts Coolhand::Ruby::VERSION
+puts Coolhand::VERSION
 
 # Collector module
-Coolhand::Ruby::Collector.get_collector_string
+Coolhand::Collector.get_collector_string
 ```
 
 **After (v0.2.x):**
@@ -87,14 +87,14 @@ end
 
 ### Why This Change?
 
-This refactoring simplifies the API by removing unnecessary nesting. Instead of `require 'coolhand/ruby'` and `Coolhand::Ruby::FeedbackService`, you now use the cleaner `require 'coolhand'` and `Coolhand::FeedbackService`.
+This refactoring simplifies the API by removing unnecessary nesting. Instead of `require 'coolhand'` and `Coolhand::FeedbackService`, you now use the cleaner `require 'coolhand'` and `Coolhand::FeedbackService`.
 
 ### Need Help?
 
 If you encounter issues migrating, please check:
 
-1. All `require 'coolhand/ruby'` statements are updated to `require 'coolhand'`
-2. All `Coolhand::Ruby::` references are updated to `Coolhand::`
+1. All `require 'coolhand'` statements are updated to `require 'coolhand'`
+2. All `Coolhand::` references are updated to `Coolhand::`
 3. Your gem dependency is updated to `~> 0.2.0`
 
 For additional support, please open an issue on our [GitHub repository](https://github.com/Coolhand-Labs/coolhand-ruby).
