@@ -13,7 +13,7 @@ RSpec.describe "APM Compatibility", type: :integration do
 
   describe "with prepend-based APM instrumentation" do
     after do
-      Coolhand::Ruby::FaradayInterceptor.unpatch! if Coolhand::Ruby::FaradayInterceptor.respond_to?(:unpatch!)
+      Coolhand::FaradayInterceptor.unpatch! if Coolhand::FaradayInterceptor.respond_to?(:unpatch!)
     end
 
     it "does not cause SystemStackError when both patches are applied" do
@@ -66,7 +66,7 @@ RSpec.describe "APM Compatibility", type: :integration do
           expect(conn.instance_variable_get(:@apm_instrumented)).to be true
           middleware_classes = conn.builder.handlers.map(&:klass)
           expect(middleware_classes.map(&:name)).to include("TestAPMMiddleware")
-          expect(middleware_classes).to include(Coolhand::Ruby::FaradayInterceptor)
+          expect(middleware_classes).to include(Coolhand::FaradayInterceptor)
 
           # Test actual request to ensure no recursion during execution
           response = conn.get("/test")
@@ -109,13 +109,13 @@ RSpec.describe "APM Compatibility", type: :integration do
       # Verify all patches were applied in correct order
       expect(conn.instance_variable_get(:@first_applied)).to be true
       expect(conn.instance_variable_get(:@second_applied)).to be true
-      expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::Ruby::FaradayInterceptor)
+      expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::FaradayInterceptor)
     end
   end
 
   describe "regression test for SystemStackError" do
     after do
-      Coolhand::Ruby::FaradayInterceptor.unpatch! if Coolhand::Ruby::FaradayInterceptor.respond_to?(:unpatch!)
+      Coolhand::FaradayInterceptor.unpatch! if Coolhand::FaradayInterceptor.respond_to?(:unpatch!)
     end
 
     it "prevents the specific alias_method + prepend circular reference issue" do
@@ -145,7 +145,7 @@ RSpec.describe "APM Compatibility", type: :integration do
 
           # Both patches should be present and working
           expect(conn.instance_variable_get(:@regression_test_applied)).to be true
-          expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::Ruby::FaradayInterceptor)
+          expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::FaradayInterceptor)
 
           # Most importantly: no SystemStackError during initialization
           # This validates that our prepend approach doesn't create circular references
@@ -163,7 +163,7 @@ RSpec.describe "APM Compatibility", type: :integration do
       example.run
 
       ENV["RACK_ENV"] = original_env
-      Coolhand::Ruby::FaradayInterceptor.unpatch! if Coolhand::Ruby::FaradayInterceptor.respond_to?(:unpatch!)
+      Coolhand::FaradayInterceptor.unpatch! if Coolhand::FaradayInterceptor.respond_to?(:unpatch!)
     end
 
     it "works in production-like Rack context where original error occurred" do
@@ -189,14 +189,14 @@ RSpec.describe "APM Compatibility", type: :integration do
         # Create connection like in background job
         conn = Faraday.new("https://api.example.com")
         expect(conn.instance_variable_get(:@rack_context)).to be true
-        expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::Ruby::FaradayInterceptor)
+        expect(conn.builder.handlers.map(&:klass)).to include(Coolhand::FaradayInterceptor)
       end.not_to raise_error
     end
   end
 
   describe "test isolation and cleanup" do
     it "explicitly checks that tests don't leak Coolhand patches to other specs" do
-      expect(Coolhand::Ruby::FaradayInterceptor.patched?).to be false
+      expect(Coolhand::FaradayInterceptor.patched?).to be false
 
       Coolhand.configure do |config|
         config.api_key = "test-key"
@@ -204,15 +204,15 @@ RSpec.describe "APM Compatibility", type: :integration do
         config.intercept_addresses = ["api.example.com"]
       end
 
-      expect(Coolhand::Ruby::FaradayInterceptor.patched?).to be true
+      expect(Coolhand::FaradayInterceptor.patched?).to be true
 
-      Coolhand::Ruby::FaradayInterceptor.unpatch!
+      Coolhand::FaradayInterceptor.unpatch!
 
-      expect(Coolhand::Ruby::FaradayInterceptor.patched?).to be false
+      expect(Coolhand::FaradayInterceptor.patched?).to be false
     end
 
     it "detects if previous tests leaked patch state" do
-      expect(Coolhand::Ruby::FaradayInterceptor.patched?).to(
+      expect(Coolhand::FaradayInterceptor.patched?).to(
         be(false), "Previous test leaked Coolhand patch state! Check your after blocks."
       )
     end

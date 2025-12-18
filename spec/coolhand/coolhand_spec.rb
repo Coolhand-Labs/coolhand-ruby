@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-RSpec.describe Coolhand::Ruby do
+RSpec.describe Coolhand do
   let(:config) { Coolhand.configuration }
 
   before { config.silent = true }
 
   it "has a version number" do
-    expect(Coolhand::Ruby::VERSION).not_to be_nil
+    expect(Coolhand::VERSION).not_to be_nil
   end
 
   describe ".configure" do
@@ -43,7 +43,7 @@ RSpec.describe Coolhand::Ruby do
     end
 
     it "calls Interceptor.patch!" do
-      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!)
+      expect(Coolhand::FaradayInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "key"
         c.silent = true
@@ -56,7 +56,7 @@ RSpec.describe Coolhand::Ruby do
     end
 
     it "allows custom intercept_addresses to be set" do
-      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!)
+      expect(Coolhand::FaradayInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "key"
         c.silent = true
@@ -68,8 +68,8 @@ RSpec.describe Coolhand::Ruby do
 
     context "with anthropic gem patching logic" do
       before do
-        allow(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!)
-        allow(Coolhand::Ruby::AnthropicInterceptor).to receive(:patch!)
+        allow(Coolhand::FaradayInterceptor).to receive(:patch!)
+        allow(Coolhand::AnthropicInterceptor).to receive(:patch!)
         allow(Coolhand).to receive(:log)
       end
 
@@ -85,8 +85,8 @@ RSpec.describe Coolhand::Ruby do
             c.silent = true
           end
 
-          expect(Coolhand::Ruby::FaradayInterceptor).to have_received(:patch!)
-          expect(Coolhand::Ruby::AnthropicInterceptor).to have_received(:patch!)
+          expect(Coolhand::FaradayInterceptor).to have_received(:patch!)
+          expect(Coolhand::AnthropicInterceptor).to have_received(:patch!)
           expect(Coolhand).to have_received(:log)
             .with("✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls")
         end
@@ -105,8 +105,8 @@ RSpec.describe Coolhand::Ruby do
             c.silent = true
           end
 
-          expect(Coolhand::Ruby::FaradayInterceptor).to have_received(:patch!)
-          expect(Coolhand::Ruby::AnthropicInterceptor).not_to have_received(:patch!)
+          expect(Coolhand::FaradayInterceptor).to have_received(:patch!)
+          expect(Coolhand::AnthropicInterceptor).not_to have_received(:patch!)
           expect(Coolhand).to have_received(:log)
             .with("✅ Coolhand ready - will log OpenAI and Anthropic (ruby-anthropic via Faraday) calls")
         end
@@ -123,8 +123,8 @@ RSpec.describe Coolhand::Ruby do
             c.silent = true
           end
 
-          expect(Coolhand::Ruby::FaradayInterceptor).to have_received(:patch!)
-          expect(Coolhand::Ruby::AnthropicInterceptor).not_to have_received(:patch!)
+          expect(Coolhand::FaradayInterceptor).to have_received(:patch!)
+          expect(Coolhand::AnthropicInterceptor).not_to have_received(:patch!)
           expect(Coolhand).to have_received(:log)
             .with("✅ Coolhand ready - will log OpenAI calls")
         end
@@ -136,8 +136,8 @@ RSpec.describe Coolhand::Ruby do
     it "yields the block and calls patch/unpatch" do
       called = false
 
-      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:patch!).ordered
-      expect(Coolhand::Ruby::FaradayInterceptor).to receive(:unpatch!).ordered
+      expect(Coolhand::FaradayInterceptor).to receive(:patch!).ordered
+      expect(Coolhand::FaradayInterceptor).to receive(:unpatch!).ordered
 
       Coolhand.capture do
         called = true

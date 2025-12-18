@@ -3,13 +3,13 @@
 require "spec_helper"
 require "webmock/rspec"
 
-RSpec.describe Coolhand::Ruby::LoggerService do
+RSpec.describe Coolhand::LoggerService do
   let(:config) do
     instance_double(Coolhand::Configuration,
       api_key: "test-api-key",
       silent: true)
   end
-  let(:service) { Coolhand::Ruby::LoggerService.new }
+  let(:service) { Coolhand::LoggerService.new }
 
   # Mock Rails ActionDispatch::Http::Headers behavior - shared across tests
   let(:mock_rails_headers_class) do
@@ -329,7 +329,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
 
   describe "regression prevention" do
     it "ensures sanitize_headers method is defensive against Rails objects" do
-      service_class = Class.new(Coolhand::Ruby::LoggerService) do
+      service_class = Class.new(Coolhand::LoggerService) do
         public :sanitize_headers
       end
       test_service = service_class.new
@@ -349,7 +349,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
     end
 
     it "verifies the respond_to? check for empty? method" do
-      service_class = Class.new(Coolhand::Ruby::LoggerService) do
+      service_class = Class.new(Coolhand::LoggerService) do
         public :sanitize_headers
       end
       test_service = service_class.new

@@ -5,9 +5,9 @@ require "faraday"
 
 # rubocop:disable RSpec/VerifiedDoubles
 
-RSpec.describe Coolhand::Ruby::FaradayInterceptor do
-  let(:api_service_instance) { instance_double(Coolhand::Ruby::ApiService) }
-  let(:api_service_class) { class_double(Coolhand::Ruby::ApiService).as_stubbed_const }
+RSpec.describe Coolhand::FaradayInterceptor do
+  let(:api_service_instance) { instance_double(Coolhand::ApiService) }
+  let(:api_service_class) { class_double(Coolhand::ApiService).as_stubbed_const }
   let(:conn) do
     Faraday.new do |builder|
       builder.adapter :test do |stub|

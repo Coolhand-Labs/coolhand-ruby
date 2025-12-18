@@ -3,7 +3,7 @@
 require "spec_helper"
 require "webmock/rspec"
 
-RSpec.describe Coolhand::Ruby::LoggerService do
+RSpec.describe Coolhand::LoggerService do
   let(:config) do
     instance_double(Coolhand::Configuration,
       api_key: "test-api-key",
@@ -89,7 +89,7 @@ RSpec.describe Coolhand::Ruby::LoggerService do
 
             # Check that collector field is present and has auto-monitor method
             expect(payload).to have_key("collector")
-            expect(payload["collector"]).to eq("coolhand-ruby-#{Coolhand::Ruby::VERSION}-auto-monitor")
+            expect(payload["collector"]).to eq("coolhand-ruby-#{Coolhand::VERSION}-auto-monitor")
           end)
       end
     end

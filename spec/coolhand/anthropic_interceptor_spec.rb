@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
+RSpec.describe Coolhand::AnthropicInterceptor do
   before do
     # Reset patched state before each test
     described_class.instance_variable_set(:@patched, false)
@@ -236,7 +236,7 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
 
     let(:request_interceptor_instance) do
       Class.new(mock_base_class) do
-        include Coolhand::Ruby::AnthropicInterceptor::RequestInterceptor
+        include Coolhand::AnthropicInterceptor::RequestInterceptor
 
         attr_accessor :base_url
 
@@ -258,8 +258,8 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
 
       before do
         # Mock BaseInterceptor methods
-        allow(Coolhand::Ruby::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
-        allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+        allow(Coolhand::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
+        allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log)
       end
 
       it "sets and clears thread-local Faraday suppression flag" do
@@ -300,7 +300,7 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
       it "logs complete request data for non-streaming requests" do
         request_interceptor_instance.request(**request_params)
 
-        expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log)
+        expect(Coolhand::BaseInterceptor).to have_received(:send_complete_request_log)
           .with(hash_including(
             request_id: anything,
             method: :post,
@@ -339,7 +339,7 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
         it "logs the error response" do
           expect { request_interceptor_instance.request(**request_params) }.to raise_error(StandardError)
 
-          expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log)
+          expect(Coolhand::BaseInterceptor).to have_received(:send_complete_request_log)
             .with(hash_including(
               response_body: {
                 error: {
@@ -395,7 +395,7 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
 
     let(:message_stream_instance) do
       Class.new(mock_stream_class) do
-        include Coolhand::Ruby::AnthropicInterceptor::MessageStreamInterceptor
+        include Coolhand::AnthropicInterceptor::MessageStreamInterceptor
       end.new
     end
 
@@ -414,14 +414,14 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
             is_streaming: true
           }
 
-          allow(Coolhand::Ruby::BaseInterceptor).to receive(:extract_response_data).and_return({})
-          allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+          allow(Coolhand::BaseInterceptor).to receive(:extract_response_data).and_return({})
+          allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log)
         end
 
         it "logs streaming completion and clears thread-local data" do
           message_stream_instance.accumulated_message
 
-          expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log)
+          expect(Coolhand::BaseInterceptor).to have_received(:send_complete_request_log)
             .with(hash_including(
               request_id: "test-request-id",
               is_streaming: true
@@ -434,13 +434,13 @@ RSpec.describe Coolhand::Ruby::AnthropicInterceptor do
       context "when no streaming request metadata exists" do
         before do
           Thread.current[:coolhand_streaming_request] = nil
-          allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+          allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log)
         end
 
         it "does not attempt to log completion" do
           message_stream_instance.accumulated_message
 
-          expect(Coolhand::Ruby::BaseInterceptor).not_to have_received(:send_complete_request_log)
+          expect(Coolhand::BaseInterceptor).not_to have_received(:send_complete_request_log)
         end
       end
     end

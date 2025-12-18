@@ -65,7 +65,7 @@ For users upgrading from v0.1.x:
 - **Collection Method Tracking** - Support for optional collection method suffix (`manual`, `auto-monitor`)
 
 ### 🏗️ Internal Improvements
-- **Added Collector Module** - New `Coolhand::Ruby::Collector` module for generating SDK identification strings
+- **Added Collector Module** - New `Coolhand::Collector` module for generating SDK identification strings
 - **Updated ApiService** - Base service now automatically adds collector field to all API payloads
 - **Enhanced Logging** - Both LoggerService and FeedbackService now send collector information
 
