@@ -5,8 +5,8 @@ require "faraday"
 
 # rubocop:disable RSpec/DescribeClass
 RSpec.describe "Duplicate Request Prevention" do
-  let(:api_service_instance) { instance_double(Coolhand::Ruby::ApiService) }
-  let(:api_service_class) { class_double(Coolhand::Ruby::ApiService).as_stubbed_const }
+  let(:api_service_instance) { instance_double(Coolhand::ApiService) }
+  let(:api_service_class) { class_double(Coolhand::ApiService).as_stubbed_const }
 
   before do
     allow(api_service_class).to receive(:new).and_return(api_service_instance)
@@ -38,7 +38,7 @@ RSpec.describe "Duplicate Request Prevention" do
 
     let(:mock_base_client) do
       Class.new(mock_base_class) do
-        include Coolhand::Ruby::AnthropicInterceptor::RequestInterceptor
+        include Coolhand::AnthropicInterceptor::RequestInterceptor
 
         attr_accessor :base_url
 
@@ -54,17 +54,17 @@ RSpec.describe "Duplicate Request Prevention" do
       stub_const("Anthropic::Internal", Module.new)
 
       # Reset interceptors
-      Coolhand::Ruby::FaradayInterceptor.unpatch!
-      Coolhand::Ruby::AnthropicInterceptor.instance_variable_set(:@patched, false)
+      Coolhand::FaradayInterceptor.unpatch!
+      Coolhand::AnthropicInterceptor.instance_variable_set(:@patched, false)
 
       # Mock BaseInterceptor methods
-      allow(Coolhand::Ruby::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
-      allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+      allow(Coolhand::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
+      allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log)
 
       # Mock the require calls to avoid loading real gem files
-      allow(Coolhand::Ruby::AnthropicInterceptor).to receive(:require)
+      allow(Coolhand::AnthropicInterceptor).to receive(:require)
         .with("anthropic/internal/transport/base_client")
-      allow(Coolhand::Ruby::AnthropicInterceptor).to receive(:require)
+      allow(Coolhand::AnthropicInterceptor).to receive(:require)
         .with("anthropic/helpers/streaming/message_stream")
 
       # Mock the prepend calls
@@ -85,13 +85,13 @@ RSpec.describe "Duplicate Request Prevention" do
       allow(mock_stream_class).to receive(:prepend)
 
       # Patch both interceptors as the configure method would
-      Coolhand::Ruby::FaradayInterceptor.patch!
-      Coolhand::Ruby::AnthropicInterceptor.patch!
+      Coolhand::FaradayInterceptor.patch!
+      Coolhand::AnthropicInterceptor.patch!
     end
 
     after do
-      Coolhand::Ruby::FaradayInterceptor.unpatch!
-      Coolhand::Ruby::AnthropicInterceptor.instance_variable_set(:@patched, false)
+      Coolhand::FaradayInterceptor.unpatch!
+      Coolhand::AnthropicInterceptor.instance_variable_set(:@patched, false)
     end
 
     it "prevents duplicate logging when AnthropicInterceptor and FaradayInterceptor both try to intercept" do
@@ -106,7 +106,7 @@ RSpec.describe "Duplicate Request Prevention" do
       mock_base_client.request(**request_params)
 
       # Should only log once via AnthropicInterceptor, not twice
-      expect(Coolhand::Ruby::BaseInterceptor).to have_received(:send_complete_request_log).once
+      expect(Coolhand::BaseInterceptor).to have_received(:send_complete_request_log).once
     end
 
     it "sets and clears thread-local suppression flag correctly" do
@@ -163,15 +163,15 @@ RSpec.describe "Duplicate Request Prevention" do
       hide_const("Anthropic::Internal") if defined?(Anthropic::Internal)
 
       # Reset interceptors
-      Coolhand::Ruby::FaradayInterceptor.unpatch!
-      Coolhand::Ruby::AnthropicInterceptor.instance_variable_set(:@patched, false)
+      Coolhand::FaradayInterceptor.unpatch!
+      Coolhand::AnthropicInterceptor.instance_variable_set(:@patched, false)
 
       # Only patch FaradayInterceptor for ruby-anthropic
-      Coolhand::Ruby::FaradayInterceptor.patch!
+      Coolhand::FaradayInterceptor.patch!
     end
 
     after do
-      Coolhand::Ruby::FaradayInterceptor.unpatch!
+      Coolhand::FaradayInterceptor.unpatch!
     end
 
     it "logs requests only once through FaradayInterceptor" do
@@ -186,7 +186,7 @@ RSpec.describe "Duplicate Request Prevention" do
     end
 
     it "does not attempt to use AnthropicInterceptor for ruby-anthropic" do
-      expect(Coolhand::Ruby::AnthropicInterceptor.patched?).to be false
+      expect(Coolhand::AnthropicInterceptor.patched?).to be false
 
       # Make a request - should only go through Faraday
       faraday_connection.post("/v1/messages", { model: "claude-3-sonnet", messages: [] }.to_json)
@@ -212,7 +212,7 @@ RSpec.describe "Duplicate Request Prevention" do
 
     let(:first_mock_client) do
       Class.new(thread_mock_base_class) do
-        include Coolhand::Ruby::AnthropicInterceptor::RequestInterceptor
+        include Coolhand::AnthropicInterceptor::RequestInterceptor
 
         attr_accessor :base_url
 
@@ -224,7 +224,7 @@ RSpec.describe "Duplicate Request Prevention" do
 
     let(:second_mock_client) do
       Class.new(thread_mock_base_class) do
-        include Coolhand::Ruby::AnthropicInterceptor::RequestInterceptor
+        include Coolhand::AnthropicInterceptor::RequestInterceptor
 
         attr_accessor :base_url
 
@@ -235,8 +235,8 @@ RSpec.describe "Duplicate Request Prevention" do
     end
 
     before do
-      allow(Coolhand::Ruby::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
-      allow(Coolhand::Ruby::BaseInterceptor).to receive(:send_complete_request_log)
+      allow(Coolhand::BaseInterceptor).to receive_messages(clean_request_headers: {}, extract_response_data: {})
+      allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log)
     end
 
     it "maintains thread-local isolation between concurrent requests" do

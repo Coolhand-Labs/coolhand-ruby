@@ -359,7 +359,7 @@ request_id = Thread.current[:coolhand_current_request_id]
 puts "Logged to Coolhand with ID: #{request_id}"
 
 # Use this ID for feedback or debugging
-feedback_service = Coolhand::Ruby::FeedbackService.new(Coolhand.configuration)
+feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
 feedback_service.create_feedback(
   llm_request_log_id: request_id,
   like: true,
