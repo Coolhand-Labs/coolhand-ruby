@@ -74,7 +74,7 @@ RSpec.describe Coolhand::LoggerService do
       end
 
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 200, body: JSON.generate({ id: 123 }))
       end
 
@@ -107,7 +107,7 @@ RSpec.describe Coolhand::LoggerService do
           headers: rails_headers
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             headers = body.dig("llm_request_log", "raw_request", "headers")
@@ -139,7 +139,7 @@ RSpec.describe Coolhand::LoggerService do
           raise NoMethodError, "undefined method `empty?' for ActionDispatch::Http::Headers"
         end
 
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 200, body: JSON.generate({ id: 456 }))
 
         expect do
@@ -153,7 +153,7 @@ RSpec.describe Coolhand::LoggerService do
       end
 
       it "handles nil headers gracefully" do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 200, body: JSON.generate({ id: 789 }))
 
         result = service.forward_webhook(
@@ -167,7 +167,7 @@ RSpec.describe Coolhand::LoggerService do
       end
 
       it "handles empty hash headers" do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 200, body: JSON.generate({ id: 101 }))
 
         result = service.forward_webhook(
@@ -189,7 +189,7 @@ RSpec.describe Coolhand::LoggerService do
           "HTTP_X_REQUEST_ID" => "req_abc123"
         })
 
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 200, body: JSON.generate({ id: 202 }))
 
         service.forward_webhook(
@@ -198,7 +198,7 @@ RSpec.describe Coolhand::LoggerService do
           headers: mixed_headers
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             headers = body.dig("llm_request_log", "raw_request", "headers")
@@ -274,7 +274,7 @@ RSpec.describe Coolhand::LoggerService do
       end
 
       before do
-        stub_request(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .to_return(status: 200, body: JSON.generate({ id: 303, created_at: Time.now.iso8601 }))
       end
 
@@ -299,7 +299,7 @@ RSpec.describe Coolhand::LoggerService do
           headers: elevenlabs_headers
         )
 
-        expect(WebMock).to(have_requested(:post, "https://coolhand.io/api/v2/llm_request_logs")
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
             body = JSON.parse(req.body)
             request_body = body.dig("llm_request_log", "raw_request", "request_body")

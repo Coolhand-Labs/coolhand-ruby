@@ -8,8 +8,10 @@ require "securerandom"
 require_relative "coolhand/version"
 require_relative "coolhand/configuration"
 require_relative "coolhand/collector"
-require_relative "coolhand/interceptor"
 require_relative "coolhand/api_service"
+require_relative "coolhand/base_interceptor"
+require_relative "coolhand/faraday_interceptor"
+require_relative "coolhand/anthropic_interceptor"
 require_relative "coolhand/logger_service"
 require_relative "coolhand/feedback_service"
 
@@ -29,6 +31,11 @@ module Coolhand
       @configuration = Configuration.new
     end
 
+    # Check if Anthropic gem is loaded
+    def anthropic_gem_loaded?
+      defined?(Anthropic)
+    end
+
     # Provides a block to configure the gem.
     #
     # Example:
@@ -36,17 +43,29 @@ module Coolhand
     #     config.environment = 'development'
     #     config.silent = false
     #     config.api_key = "xxx-yyy-zzz"
-    #     config.intercept_addresses = ["openai.com"]
+    #     config.intercept_addresses = ["openai.com", "api.anthropic.com"]
     #   end
     def configure
       yield(configuration)
 
       configuration.validate!
 
-      # Apply the patch after configuration is set
-      Interceptor.patch!
+      # Apply the Faraday patch (needed for ruby-anthropic and other Faraday-based gems)
+      FaradayInterceptor.patch!
 
-      log "✅ Coolhand ready - will log OpenAI calls"
+      # Conditionally patch the official Anthropic gem if it's loaded
+      if anthropic_gem_loaded?
+        if defined?(Anthropic::Internal)
+          # Official anthropic gem - patch the AnthropicInterceptor for Net::HTTP requests
+          AnthropicInterceptor.patch!
+          log "✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls"
+        else
+          # ruby-anthropic gem uses Faraday, so FaradayInterceptor is sufficient
+          log "✅ Coolhand ready - will log OpenAI and Anthropic (ruby-anthropic via Faraday) calls"
+        end
+      else
+        log "✅ Coolhand ready - will log OpenAI calls"
+      end
     end
 
     def capture
@@ -55,11 +74,14 @@ module Coolhand
         return
       end
 
-      Interceptor.patch!
+      # Patch both interceptors for capture mode
+      FaradayInterceptor.patch!
+      AnthropicInterceptor.patch! if anthropic_gem_loaded?
 
       yield
     ensure
-      Interceptor.unpatch!
+      FaradayInterceptor.unpatch!
+      AnthropicInterceptor.unpatch! if anthropic_gem_loaded?
     end
 
     # A simple logger that respects the 'silent' configuration option.

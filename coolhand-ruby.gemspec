@@ -8,9 +8,11 @@ Gem::Specification.new do |spec|
   spec.authors = ["Michael Carroll", "Yaroslav Malyk"]
   spec.email = ["mc@coolhandlabs.com"]
 
-  spec.summary = "Intercepts and logs OpenAI API calls from a Ruby application."
-  spec.description = "A Ruby gem to automatically monitor and log external LLM requests. It patches Net::HTTP " \
-                     "to capture request and response data."
+  spec.summary = "Monitor and log LLM API calls from OpenAI, Anthropic, and other providers to Coolhand analytics."
+  spec.description = "Automatically intercept and log LLM requests from Ruby applications. Supports OpenAI, " \
+                     "official Anthropic gem, ruby-anthropic gem, and other Faraday-based libraries. Features " \
+                     "dual interceptor architecture, streaming support, thread-safe operation, and automatic " \
+                     "duplicate request prevention."
   spec.homepage = "https://coolhandlabs.com/"
   spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 3.0.0"
