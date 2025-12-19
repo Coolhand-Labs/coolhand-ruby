@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require "securerandom"
-require "json"
-
 module Coolhand
   # Base module with common functionality for all interceptors
   module BaseInterceptor
@@ -97,17 +94,61 @@ module Coolhand
     end
 
     def sanitize_headers(headers)
-      sanitized = headers.transform_keys(&:to_s).dup
+      return {} if headers.nil?
 
-      if sanitized["Authorization"]
-        sanitized["Authorization"] = sanitized["Authorization"].gsub(/Bearer .+/, "Bearer [REDACTED]")
+      # Normalize various header-like objects into a Hash{String => String}
+      raw = if headers.is_a?(Hash)
+        headers.transform_keys(&:to_s).transform_values { |v| normalize_header_value(v) }
+      elsif headers.respond_to?(:to_hash)
+        begin
+          headers.to_hash.transform_keys(&:to_s).transform_values { |v| normalize_header_value(v) }
+        rescue StandardError
+          # fall through to other enumeration strategies
+          nil
+        end
+      elsif headers.respond_to?(:each_header)
+        h = {}
+        headers.each_header { |k, v| h[k.to_s] = normalize_header_value(v) }
+        h
+      elsif headers.respond_to?(:each)
+        h = {}
+        headers.each { |k, v| h[k.to_s] = normalize_header_value(v) }
+        h
+      else
+        { "raw" => headers.to_s }
       end
 
-      %w[openai-api-key api-key x-api-key X-API-Key].each do |key|
-        sanitized[key] = "[REDACTED]" if sanitized[key]
+      raw ||= {} # in case to_hash raised and nothing was built
+
+      sanitized = raw.dup
+
+      sanitized_keys = %w[openai-api-key api-key x-api-key]
+      sanitized.each do |k, v|
+        next if v.nil?
+
+        key_down = k.to_s.downcase
+
+        if key_down == "authorization"
+          sanitized[k] = if v.to_s.match?(/\ABearer\s+/i)
+            v.to_s.gsub(/\ABearer\s+.+/i, "Bearer [REDACTED]")
+          else
+            "[REDACTED]"
+          end
+        elsif sanitized_keys.include?(key_down)
+          sanitized[k] = "[REDACTED]"
+        end
       end
 
       sanitized
+    end
+
+    # Helper: convert arrays -> joined string, otherwise to_s
+    def normalize_header_value(value)
+      if value.is_a?(Array)
+        value.join(", ")
+      else
+        value.to_s
+      end
     end
 
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
