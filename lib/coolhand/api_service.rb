@@ -7,31 +7,28 @@ require_relative "collector"
 
 module Coolhand
   class ApiService
-    BASE_URI = "https://coolhandlabs.com/api"
-
     attr_reader :api_endpoint
 
-    def initialize(endpoint_path = nil)
-      @api_endpoint = endpoint_path ? "#{BASE_URI}/#{endpoint_path}" : BASE_URI
+    def initialize(endpoint = "v2/llm_request_logs")
+      @api_endpoint = "#{base_url}/#{endpoint}"
     end
 
     def send_llm_request_log(request_data)
-      original_endpoint = @api_endpoint
-      @api_endpoint = "#{BASE_URI}/v2/llm_request_logs"
-
       payload = {
         llm_request_log: request_data.merge(
           collector: Collector.get_collector_string
         )
       }
 
-      result = send_request(payload, "✅ Successfully sent request metadata")
-      @api_endpoint = original_endpoint
-      result
+      send_request(payload, "✅ Successfully sent request metadata")
     end
 
     def configuration
       Coolhand.configuration
+    end
+
+    def base_url
+      configuration.base_url
     end
 
     def api_key
@@ -85,7 +82,13 @@ module Coolhand
           result
         else
           body = response.body.force_encoding("UTF-8") if response.body
-          puts "❌ Request failed: #{response.code} - #{body}"
+          # Only show first part of HTML error pages
+          error_msg = if body&.include?("<!DOCTYPE html>")
+            "#{body[0..200]}... [HTML error page truncated]"
+          else
+            body
+          end
+          log "❌ Request failed: #{response.code} - #{error_msg}"
           nil
         end
       rescue StandardError => e

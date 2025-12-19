@@ -7,6 +7,7 @@ RSpec.describe Coolhand::LoggerService do
   let(:config) do
     instance_double(Coolhand::Configuration,
       api_key: "test-api-key",
+      base_url: "https://coolhandlabs.com/api",
       silent: true)
   end
   let(:service) { described_class.new }
@@ -120,6 +121,7 @@ RSpec.describe Coolhand::LoggerService do
         let(:verbose_config) do
           instance_double(Coolhand::Configuration,
             api_key: "test-api-key",
+            base_url: "https://coolhandlabs.com/api",
             silent: false)
         end
 
@@ -289,6 +291,7 @@ RSpec.describe Coolhand::LoggerService do
           let(:verbose_config) do
             instance_double(Coolhand::Configuration,
               api_key: "test-api-key",
+              base_url: "https://coolhandlabs.com/api",
               silent: false)
           end
 
@@ -318,6 +321,7 @@ RSpec.describe Coolhand::LoggerService do
           let(:verbose_config) do
             instance_double(Coolhand::Configuration,
               api_key: "test-api-key",
+              base_url: "https://coolhandlabs.com/api",
               silent: false)
           end
 
@@ -337,6 +341,7 @@ RSpec.describe Coolhand::LoggerService do
         it "raises ArgumentError in non-silent mode" do
           verbose_config = instance_double(Coolhand::Configuration,
             api_key: "test-api-key",
+            base_url: "https://coolhandlabs.com/api",
             silent: false)
           allow(Coolhand).to receive(:configuration).and_return(verbose_config)
 

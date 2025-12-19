@@ -7,6 +7,7 @@ RSpec.describe Coolhand::FeedbackService do
   let(:config) do
     instance_double(Coolhand::Configuration,
       api_key: "test-api-key",
+      base_url: "https://coolhandlabs.com/api",
       silent: true)
   end
   let(:service) { described_class.new }
@@ -147,6 +148,7 @@ RSpec.describe Coolhand::FeedbackService do
         let(:verbose_config) do
           instance_double(Coolhand::Configuration,
             api_key: "test-api-key",
+            base_url: "https://coolhandlabs.com/api",
             silent: false)
         end
 
