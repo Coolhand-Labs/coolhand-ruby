@@ -7,7 +7,7 @@ module Coolhand
         @batch_info = batch_info
       end
 
-      def call(batch_results)
+      def call(batch_results = [])
         Rails.logger.info("[Interceptor] BatchResultProcessor: #{batch_info}")
 
         case batch_info["state"]

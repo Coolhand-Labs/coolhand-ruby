@@ -416,6 +416,51 @@ end
 # ...existing code...
 ```
 
+## Batch webhook handler (Vertex)
+
+Automatically handle Vertex batch event logs.
+
+Usage:
+- call Coolhand::Vertex::BatchResultProcessor service with batch_info and download batch results
+
+Minimal example (only key lines shown):
+
+```ruby
+class Vertex::BatchCallbackProcessor < BaseService
+  option :batch_request, model: BatchApiRequest
+  option :batch_info
+
+  def call
+    case batch_info["state"]
+    when "JOB_STATE_PENDING"
+      nil
+    when "JOB_STATE_RUNNING", "JOB_STATE_QUEUED"
+      batch_request.update!(status: "processing")
+
+      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call
+    when "JOB_STATE_SUCCEEDED"
+      output_file_id = batch_info["outputInfo"]["gcsOutputDirectory"]
+      results = download_batch_results(output_file_id)
+      results.each { |batch_item| process_batch_result(batch_item) }
+
+      batch_request.update!(status: "completed", completed_at: Time.current, output_file_id:)
+
+      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call(results)
+
+      # Clean up GCS files after successful processing
+      cleanup_gcs_files(output_file_id)
+    when "JOB_STATE_FAILED"
+      handle_failed_batch(batch_info["error"]["message"])
+    end
+  end
+end
+```
+
+Notes:
+- The controller expects a BatchApiRequest record with provider: "vertex" and provider_batch_id set to the Vertex batch id.
+- Use either call style depending on whether the webhook includes batch results or you want the processor to fetch them.
+- The interceptor populates @validator.payload (so parse that instead of raw request body).
+
 ## Integration Guides
 
 - **[Anthropic Integration](docs/anthropic.md)** - Complete guide for both official and community Anthropic gems, including streaming, dual gem handling, and troubleshooting
