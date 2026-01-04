@@ -6,6 +6,7 @@ source "https://rubygems.org"
 gemspec
 
 gem "faraday-typhoeus", "~> 1.1"
+gem "ruby-openai", "~> 8.3"
 
 group :development, :test do
   gem "simplecov", require: false

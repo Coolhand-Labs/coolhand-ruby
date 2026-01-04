@@ -365,6 +365,57 @@ The monitor handles errors gracefully:
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
 
+
+## Batch webhook handler (OpenAI)
+
+Automatically handle OpenAI batch event logs (batch.completed, batch.failed, batch.expired, batch.cancelled)
+by intercepting webhook requests and enqueuing your batch result processor.
+
+Usage:
+- Include the interceptor in your controller:
+  include Coolhand::WebhookInterceptor
+- Add the before_action to validate and populate @validator payload:
+  before_action :intercept_batch_request, only: :openai
+- Ensure you skip CSRF for the webhook endpoint:
+  skip_before_action :verify_authenticity_token
+
+Minimal example (only key lines shown):
+
+```ruby
+# app/controllers/webhooks/batch_api_requests_controller.rb
+# ...existing code...
+include Coolhand::WebhookInterceptor
+
+skip_before_action :verify_authenticity_token
+before_action :intercept_batch_request, only: :openai
+
+def openai
+  event = JSON.parse(@validator.payload)
+  case event["type"]
+  when "batch.completed", "batch.failed", "batch.expired", "batch.cancelled"
+    batch_id = event.dig("data", "id")
+    batch_request = BatchApiRequest.find_by(provider: "openai", provider_batch_id: batch_id)
+
+    if batch_request
+      OpenAi::BatchResultProcessor.perform_async(batch_request.id)
+      Rails.logger.info("Queued batch result processing for BatchApiRequest #{batch_request.id}")
+    else
+      Rails.logger.warn("Could not find BatchApiRequest for OpenAI batch ID: #{batch_id}")
+    end
+  else
+    Rails.logger.info("Unhandled OpenAI webhook event type: #{event["type"]}")
+  end
+
+  head :ok
+rescue JSON::ParserError
+  head :bad_request
+rescue StandardError => e
+  Rails.logger.error("OpenAI webhook error: #{e.message}")
+  head :internal_server_error
+end
+# ...existing code...
+```
+
 ## Integration Guides
 
 - **[Anthropic Integration](docs/anthropic.md)** - Complete guide for both official and community Anthropic gems, including streaming, dual gem handling, and troubleshooting

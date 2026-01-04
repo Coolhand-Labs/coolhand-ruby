@@ -13,6 +13,10 @@ require_relative "coolhand/net_http_interceptor"
 require_relative "coolhand/api_service"
 require_relative "coolhand/logger_service"
 require_relative "coolhand/feedback_service"
+require_relative "coolhand/open_ai/webhook_validator"
+require_relative "coolhand/open_ai/batch_result_processor"
+require_relative "coolhand/vertex/batch_result_processor"
+require_relative "coolhand/webhook_interceptor"
 
 # The main module for the Coolhand gem.
 # It provides the configuration interface and initializes the patching.
