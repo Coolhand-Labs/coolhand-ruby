@@ -145,6 +145,9 @@ RSpec/HookArgument:
 RSpec/MultipleExpectations:
   Enabled: false
 
+RSpec/VerifiedDoubleReference:
+  Enabled: false
+
 RSpec/MessageChain:
   Enabled: false
 
