@@ -3,7 +3,7 @@
 require "spec_helper"
 
 RSpec.describe Coolhand::Vertex::BatchResultProcessor do
-  let(:logger) { instance_double(logger, info: nil, warn: nil, error: nil) }
+  let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }
 
   before do
     stub_const("Rails", Class.new)

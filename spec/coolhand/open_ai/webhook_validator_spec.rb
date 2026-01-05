@@ -20,7 +20,7 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
     )
   end
   let(:signature_header) { "v1,#{valid_signature}" }
-  let(:logger) { instance_double(logger, info: nil, warn: nil, error: nil) }
+  let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }
   let(:request) do
     headers_hash = {
       "webhook-signature" => signature_header,
@@ -28,10 +28,10 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       "webhook-id" => webhook_id
     }
 
-    instance_double(hash,
+    instance_double("hash",
       headers: headers_hash,
       raw_post: payload,
-      body: instance_double(IO, read: payload))
+      body: instance_double("IO", read: payload))
   end
 
   before do
@@ -65,10 +65,10 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
           "webhook-id" => webhook_id
         }
 
-        instance_double(hash,
+        instance_double("hash",
           headers: headers_hash,
           raw_post: payload,
-          body: instance_double(IO, read: payload))
+          body: instance_double("IO", read: payload))
       end
 
       before do
@@ -113,10 +113,10 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
           "webhook-id" => webhook_id
         }
 
-        instance_double(hash,
+        instance_double("hash",
           headers: headers_hash,
           raw_post: payload,
-          body: instance_double(IO, read: payload))
+          body: instance_double("IO", read: payload))
       end
 
       before do
@@ -197,10 +197,10 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
           "openai-id" => webhook_id
         }
 
-        instance_double(hash,
+        instance_double("hash",
           headers: headers_hash,
           raw_post: payload,
-          body: instance_double(IO, read: payload))
+          body: instance_double("IO", read: payload))
       end
 
       it "accepts alternative header names" do

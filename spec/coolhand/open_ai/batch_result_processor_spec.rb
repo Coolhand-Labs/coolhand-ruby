@@ -3,7 +3,7 @@
 require "spec_helper"
 
 RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
-  let(:logger) { instance_double(logger, info: nil, warn: nil, error: nil) }
+  let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }
   let(:client) { instance_double(OpenAI::Client) }
   let(:api_service) { instance_double(Coolhand::ApiService, send_llm_request_log: nil) }
 
