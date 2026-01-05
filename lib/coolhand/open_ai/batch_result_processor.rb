@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Coolhand
   module OpenAi
     class BatchResultProcessor
@@ -45,18 +47,18 @@ module Coolhand
           next unless request_item
 
           send_complete_request_log(request_id: response_item["response"]["request_id"],
-                                    method: request_item["method"],
-                                    url: request_item["url"],
-                                    request_body: request_item["body"],
-                                    response_body: response_item["response"]["body"],
-                                    status_code: response_item["response"]["status_code"],
-                                    start_time: batch_info["in_progress_at"].to_i,
-                                    end_time: batch_info["completed_at"].to_i)
+            method: request_item["method"],
+            url: request_item["url"],
+            request_body: request_item["body"],
+            response_body: response_item["response"]["body"],
+            status_code: response_item["response"]["status_code"],
+            start_time: batch_info["in_progress_at"].to_i,
+            end_time: batch_info["completed_at"].to_i)
         rescue StandardError => e
           Rails.logger.error("[Interceptor] Failed to send request log: #{e.message}")
         end
 
-        Rails.logger.info("[Interceptor] Successfully processed OpenAI batch #{batch_info["id"]}")
+        Rails.logger.info("[Interceptor] Successfully processed OpenAI batch #{batch_info['id']}")
       end
 
       def download_batch_results(file_id)
@@ -84,7 +86,7 @@ module Coolhand
       end
 
       def send_complete_request_log(request_id:, method:, url:, request_body:, response_body:, status_code:,
-                                    start_time:, end_time:)
+        start_time:, end_time:)
         timestamp = Time.at(start_time).iso8601
         completed_at = Time.at(end_time).iso8601
         duration_ms = ((end_time - start_time) * 1000).to_i
@@ -92,7 +94,7 @@ module Coolhand
         request_data = {
           raw_request: {
             id: request_id,
-            timestamp:,
+            timestamp: timestamp,
             method: method.to_s.downcase,
             url: url,
             headers: {},
@@ -100,8 +102,8 @@ module Coolhand
             response_headers: {},
             response_body: response_body,
             status_code: status_code,
-            duration_ms:,
-            completed_at:,
+            duration_ms: duration_ms,
+            completed_at: completed_at,
             is_streaming: false
           }
         }
@@ -124,7 +126,7 @@ module Coolhand
 
       # TODO: implement API to handle failed batch results and display errors on dashboard page
       def handle_failed_batch
-        Rails.logger.error("[Interceptor] OpenAI batch #{batch_info["id"]} failed: #{batch_info['errors']}")
+        Rails.logger.error("[Interceptor] OpenAI batch #{batch_info['id']} failed: #{batch_info['errors']}")
       end
     end
   end

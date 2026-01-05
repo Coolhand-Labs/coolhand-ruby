@@ -16,7 +16,6 @@ module Coolhand
       payload = JSON.parse(@validator.payload)
 
       process_event(payload)
-
     rescue StandardError => e
       Rails.logger.error("[Interceptor] Failed to intercept batch request: #{e.message}")
     end
@@ -31,7 +30,7 @@ module Coolhand
 
       case event_type
       when "batch.completed", "batch.failed", "batch.expired", "batch.cancelled"
-        Coolhand::OpenAi::BatchResultProcessor.new(event_data:).call
+        Coolhand::OpenAi::BatchResultProcessor.new(event_data: event_data).call
       else
         Rails.logger.info("[Interceptor] Unhandled OpenAI webhook event type: #{event_type}")
       end

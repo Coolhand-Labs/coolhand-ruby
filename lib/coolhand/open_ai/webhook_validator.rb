@@ -77,7 +77,7 @@ module Coolhand
       def validate_headers_in_non_production_env
         if should_enforce_strict_validation?
           @errors << "Missing OpenAI webhook signature or timestamp headers - " \
-            "rejecting webhook in production/staging"
+                     "rejecting webhook in production/staging"
           Rails.logger.error(@errors.last)
           false
         else
@@ -91,7 +91,7 @@ module Coolhand
         expected_signature = calculate_expected_signature(secret_bytes, signed_payload)
 
         signature_valid = webhook_signature.start_with?("v1,") &&
-          secure_compare(webhook_signature[3..], expected_signature)
+                          secure_compare(webhook_signature[3..], expected_signature)
         if signature_valid
           true
         else
@@ -106,7 +106,7 @@ module Coolhand
 
         result = 0
         a.bytes.zip(b.bytes) { |x, y| result |= x ^ y }
-        result == 0
+        result.zero?
       end
 
       def calculate_expected_signature(secret_bytes, signed_payload)
@@ -120,7 +120,7 @@ module Coolhand
       end
 
       def should_enforce_strict_validation?
-        Rails.env == "production" || Rails.env == "staging"
+        ["production", "staging"].include?(Rails.env)
       end
     end
   end

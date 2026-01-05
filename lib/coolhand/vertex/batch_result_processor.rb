@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Coolhand
   module Vertex
     class BatchResultProcessor
@@ -28,21 +30,21 @@ module Coolhand
 
       def process_completed_batch(batch_item)
         send_complete_request_log(request_id: SecureRandom.hex(16),
-                                  method: "POST",
-                                  url: batch_info["name"],
-                                  request_body: batch_item["request"],
-                                  response_body: batch_item["response"],
-                                  status_code: 200,
-                                  start_time: batch_info["startTime"],
-                                  end_time: batch_info["endTime"])
+          method: "POST",
+          url: batch_info["name"],
+          request_body: batch_item["request"],
+          response_body: batch_item["response"],
+          status_code: 200,
+          start_time: batch_info["startTime"],
+          end_time: batch_info["endTime"])
 
-        Rails.logger.info("[Interceptor] Successfully processed Vertex batch #{batch_info["displayName"]}")
+        Rails.logger.info("[Interceptor] Successfully processed Vertex batch #{batch_info['displayName']}")
       rescue StandardError => e
         Rails.logger.error("[Interceptor] Failed to send request log: #{e.message}")
       end
 
       def send_complete_request_log(request_id:, method:, url:, request_body:, response_body:, status_code:,
-                                    start_time:, end_time:)
+        start_time:, end_time:)
         start_time = Time.iso8601(start_time)
         end_time   = Time.iso8601(end_time)
         duration_ms = ((end_time - start_time) * 1000).to_i
@@ -58,7 +60,7 @@ module Coolhand
             response_headers: {},
             response_body: response_body,
             status_code: status_code,
-            duration_ms:,
+            duration_ms: duration_ms,
             completed_at: end_time,
             is_streaming: false
           }
@@ -74,8 +76,8 @@ module Coolhand
 
       # TODO: implement API to handle failed batch results and display errors on dashboard page
       def handle_failed_batch
-        Rails.logger.error("[Interceptor] Vertex batch for #{batch_info["displayName"]} "\
-                             "failed: #{batch_info["error"]["message"]}")
+        Rails.logger.error("[Interceptor] Vertex batch for #{batch_info['displayName']} " \
+                           "failed: #{batch_info['error']['message']}")
       end
     end
   end

@@ -461,11 +461,6 @@ class Vertex::BatchCallbackProcessor < BaseService
 end
 ```
 
-Notes:
-- The controller expects a BatchApiRequest record with provider: "vertex" and provider_batch_id set to the Vertex batch id.
-- Use either call style depending on whether the webhook includes batch results or you want the processor to fetch them.
-- The interceptor populates @validator.payload (so parse that instead of raw request body).
-
 ## Integration Guides
 
 - **[Anthropic Integration](docs/anthropic.md)** - Complete guide for both official and community Anthropic gems, including streaming, dual gem handling, and troubleshooting

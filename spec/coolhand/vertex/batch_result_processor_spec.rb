@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 RSpec.describe Coolhand::Vertex::BatchResultProcessor do
-  let(:logger) { double("logger", info: nil, warn: nil, error: nil) }
+  let(:logger) { instance_double(logger, info: nil, warn: nil, error: nil) }
 
   before do
     stub_const("Rails", Class.new)
@@ -41,7 +43,7 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
         fixed_id = "fixed_request_id"
         allow(SecureRandom).to receive(:hex).and_return(fixed_id)
 
-        api_service = double("ApiService")
+        api_service = instance_double(Coolhand::ApiService)
         expect(Coolhand::ApiService).to receive(:new).and_return(api_service)
 
         # compute expected duration in ms same way the service does
@@ -81,11 +83,11 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
       end
 
       it "logs the failure error" do
-        expect(Rails.logger).to receive(:error).with(a_string_including("failed").and(a_string_including("something went wrong")))
+        expect(Rails.logger).to receive(:error)
+          .with(a_string_including("failed").and(a_string_including("something went wrong")))
         processor = described_class.new(batch_info: batch_info)
         processor.call
       end
     end
   end
 end
-

@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
-  let(:logger) { double("logger", info: nil, warn: nil, error: nil) }
-  let(:client) { double("openai_client") }
-  let(:api_service) { double("ApiService", send_llm_request_log: nil) }
+  let(:logger) { instance_double(logger, info: nil, warn: nil, error: nil) }
+  let(:client) { instance_double(OpenAI::Client) }
+  let(:api_service) { instance_double(Coolhand::ApiService, send_llm_request_log: nil) }
 
   before do
     stub_const("Rails", Class.new)
@@ -57,7 +59,8 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
 
       let(:output_items_jsonl) do
         [
-          { "custom_id" => "c1", "response" => { "request_id" => "req-123", "body" => { "ok" => true }, "status_code" => 200 } }
+          { "custom_id" => "c1",
+            "response" => { "request_id" => "req-123", "body" => { "ok" => true }, "status_code" => 200 } }
         ].map(&:to_json).join("\n")
       end
 
@@ -91,17 +94,20 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
       it "handles when client already returns parsed arrays for files" do
         allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
 
-        parsed_input = [{ "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/1", "body" => { "foo" => "bar" } }]
-        parsed_output = [{ "custom_id" => "c1", "response" => { "request_id" => "req-456", "body" => { "ok" => true }, "status_code" => 200 } }]
+        parsed_input = [{ "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/1",
+                          "body" => { "foo" => "bar" } }]
+        parsed_output = [{ "custom_id" => "c1",
+                           "response" => { "request_id" => "req-456", "body" => { "ok" => true },
+                                           "status_code" => 200 } }]
 
         allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(parsed_input)
         allow(client).to receive_message_chain(:files, :content).with(id: "file-out-1").and_return(parsed_output)
 
-        expect(api_service).to receive(:send_llm_request_log).with(hash_including(raw_request: hash_including(id: "req-456")))
+        expect(api_service).to receive(:send_llm_request_log)
+          .with(hash_including(raw_request: hash_including(id: "req-456")))
 
         described_class.new(event_data: { "id" => "batch-3" }).call
       end
     end
   end
 end
-

@@ -125,6 +125,12 @@ Layout/EndAlignment:
 Naming/VariableNumber:
   Enabled: false
 
+Naming/PredicateMethod:
+  Enabled: false
+
+Naming/MethodParameterName:
+  Enabled: false
+
 # Lint rules
 Lint/EmptyClass:
   Enabled: false
@@ -137,6 +143,9 @@ RSpec/HookArgument:
   Enabled: false
 
 RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/MessageChain:
   Enabled: false
 
 RSpec/ExampleLength:
