@@ -3,11 +3,12 @@
 module Coolhand
   module OpenAi
     class WebhookValidator
-      attr_reader :request, :errors, :payload
+      attr_reader :request, :errors, :payload, :webhook_secret
 
-      def initialize(request)
+      def initialize(request, webhook_secret)
         @request = request
         @errors = []
+        @webhook_secret = webhook_secret
       end
 
       def valid?
@@ -15,7 +16,7 @@ module Coolhand
         @payload = request.raw_post || request.body.read
 
         return false unless payload_valid?
-        return validate_in_non_production_env unless webhook_secret_configured?
+        return validate_in_non_production_env unless webhook_secret
 
         secret_bytes = extract_secret_bytes
         webhook_signature, webhook_timestamp, webhook_id = extract_webhook_headers
@@ -32,7 +33,7 @@ module Coolhand
       private
 
       def payload_valid?
-        return true if @payload.present?
+        return true if @payload
 
         if should_enforce_strict_validation?
           @errors << "Empty webhook payload - rejecting webhook in production/staging"
@@ -44,12 +45,6 @@ module Coolhand
         end
       end
 
-      def webhook_secret_configured?
-        webhook_secret = Rails.application.credentials.dig(:ai_api_clients, :openai_webhook)
-        @webhook_secret = webhook_secret
-        webhook_secret.present?
-      end
-
       def validate_in_non_production_env
         if should_enforce_strict_validation?
           @errors << "OpenAI webhook secret not configured - rejecting webhook in production/staging"
@@ -57,8 +52,7 @@ module Coolhand
           false
         else
           Rails.logger.warn(
-            "Rails.application.credentials.ai_api_clients.openai_webhook not configured - " \
-              "skipping signature verification in #{Rails.env}"
+            "Webhook Secret is not configured - skipping signature verification in #{Rails.env}"
           )
           true
         end
@@ -97,11 +91,7 @@ module Coolhand
         expected_signature = calculate_expected_signature(secret_bytes, signed_payload)
 
         signature_valid = webhook_signature.start_with?("v1,") &&
-          ActiveSupport::SecurityUtils.secure_compare(
-            webhook_signature[3..],
-            expected_signature
-          )
-
+          secure_compare(webhook_signature[3..], expected_signature)
         if signature_valid
           true
         else
@@ -109,6 +99,14 @@ module Coolhand
           Rails.logger.error(@errors.last)
           false
         end
+      end
+
+      def secure_compare(a, b)
+        return false unless a.bytesize == b.bytesize
+
+        result = 0
+        a.bytes.zip(b.bytes) { |x, y| result |= x ^ y }
+        result == 0
       end
 
       def calculate_expected_signature(secret_bytes, signed_payload)
@@ -122,7 +120,7 @@ module Coolhand
       end
 
       def should_enforce_strict_validation?
-        Rails.env.production? || Rails.env.staging?
+        Rails.env == "production" || Rails.env == "staging"
       end
     end
   end

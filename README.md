@@ -378,6 +378,7 @@ Usage:
   before_action :intercept_batch_request, only: :openai
 - Ensure you skip CSRF for the webhook endpoint:
   skip_before_action :verify_authenticity_token
+- Override the webhook_secret method to return your OpenAI webhook secret
 
 Minimal example (only key lines shown):
 
@@ -412,6 +413,10 @@ rescue JSON::ParserError
 rescue StandardError => e
   Rails.logger.error("OpenAI webhook error: #{e.message}")
   head :internal_server_error
+end
+
+def webhook_secret
+  Rails.application.credentials.openai_webhook_secret
 end
 # ...existing code...
 ```

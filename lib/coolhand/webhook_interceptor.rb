@@ -5,7 +5,7 @@ module Coolhand
     def intercept_batch_request
       Rails.logger.info("[Interceptor] #{controller_name}##{action_name}")
 
-      @validator = Coolhand::OpenAi::WebhookValidator.new(request)
+      @validator = Coolhand::OpenAi::WebhookValidator.new(request, webhook_secret)
 
       unless @validator.valid?
         Rails.logger.info("[Interceptor] Webhook validated failed: #{@validator.error_message}")
@@ -19,6 +19,10 @@ module Coolhand
 
     rescue StandardError => e
       Rails.logger.error("[Interceptor] Failed to intercept batch request: #{e.message}")
+    end
+
+    def webhook_secret
+      raise NotImplementedError, "#{self.class} must implement #webhook_secret"
     end
 
     def process_event(payload)
