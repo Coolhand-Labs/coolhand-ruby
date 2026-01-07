@@ -392,7 +392,6 @@ RSpec.describe Coolhand::LoggerService do
 
       it "handles Rails ActionDispatch headers" do
         # Mock Rails headers object that doesn't respond to empty?
-        # rubocop:disable RSpec/VerifiedDoubleReference
         rails_headers = instance_double("ActionDispatch::Http::Headers")
         # rubocop:enable RSpec/VerifiedDoubleReference
         allow(rails_headers).to receive(:respond_to?).with(:empty?).and_return(false)
