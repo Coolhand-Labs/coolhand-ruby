@@ -49,7 +49,9 @@ end
 
 ## Feedback API
 
-Collect feedback on LLM responses to improve model performance:
+Collect feedback on LLM responses to improve model performance.
+
+> **Frontend Feedback Widget**: For browser-based feedback collection, see [coolhand-js](https://github.com/Coolhand-Labs/coolhand-js) - an accessible, lightweight JavaScript widget that leverages best UX practices to capture actionable user feedback on any AI output.
 
 ```ruby
 require 'coolhand'
@@ -472,10 +474,11 @@ end
 - No sensitive data is exposed in logs
 - All data is sent via HTTPS to Coolhand servers
 
-## Other Languages
+## Related Packages
 
-- **Node.js**: [coolhand-node package](https://github.com/coolhand-io/coolhand-node) - Coolhand monitoring for Node.js applications
-- **API Docs**: [API Documentation](https://coolhandlabs.com/docs) - Direct API integration documentation
+- **Frontend (Feedback Collection Widget)**: [coolhand-js](https://github.com/Coolhand-Labs/coolhand-js) - Frontend feedback widget for collecting user feedback on AI outputs
+- **Node.js**: [coolhand-node package](https://github.com/Coolhand-Labs/coolhand-node) - Coolhand monitoring for Node.js applications
+- **Python**: [coolhand package](https://github.com/Coolhand-Labs/coolhand-python) - Coolhand monitoring for Python applications
 
 ## Community
 
