@@ -7,6 +7,7 @@ RSpec.describe Coolhand::LoggerService do
   let(:config) do
     instance_double(Coolhand::Configuration,
       api_key: "test-api-key",
+      base_url: "https://coolhandlabs.com/api",
       silent: true)
   end
   let(:service) { Coolhand::LoggerService.new }
