@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-01-08
+
+### 🚀 Major Changes
+- **Unified Net::HTTP Interceptor** - Replaced dual interceptor architecture (Faraday + Anthropic) with a single Net::HTTP interceptor that captures all HTTP traffic
+- **Simplified Namespace** - Removed `Coolhand::Ruby` namespace; all classes now under `Coolhand` directly (e.g., `Coolhand::FeedbackService` instead of `Coolhand::Ruby::FeedbackService`)
+- **Ruby 4.0 Compatibility** - Full support for Ruby 4.0 with conditional debugger dependencies
+
+### 🏗️ Architecture Improvements
+- **Single Interceptor** - `NetHttpInterceptor` module patches `Net::HTTP#request` and `Net::HTTPResponse#read_body` using `Module#prepend`
+- **Thread-Safe Streaming** - Uses `Thread.current[:coolhand_stream_buffer]` for streaming response capture
+- **Reduced Codebase** - Removed ~1,400 lines of interceptor-specific code
+
+### 💔 Breaking Changes
+- **Namespace Change** - `Coolhand::Ruby::*` references must be updated to `Coolhand::*`
+- **Removed Files** - `faraday_interceptor.rb` and `anthropic_interceptor.rb` replaced by `net_http_interceptor.rb`
+
+### 🔄 Migration Guide
+1. Update gem dependency to `~> 0.3.0`
+2. Replace `Coolhand::Ruby::` with `Coolhand::` in all class references
+3. No changes needed to `Coolhand.configure` blocks
+
 ## [0.2.0] - 2025-12-16
 
 ### ✨ Major New Features
