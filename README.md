@@ -277,26 +277,23 @@ The monitor works with multiple transport layers and Ruby libraries:
 - Official Anthropic Ruby SDK (using Net::HTTP)
 - Any library using Net::HTTP directly
 
-**Auto-detection**: Coolhand automatically detects which transport layer your libraries use and applies the appropriate monitoring strategy.
+**Universal Coverage**: Since most Ruby HTTP libraries use Net::HTTP under the hood, Coolhand's single interceptor provides comprehensive monitoring without needing library-specific integrations.
 
 ## How It Works
 
-Coolhand uses a dual-interceptor strategy to monitor different HTTP transport layers:
+Coolhand uses a unified Net::HTTP interceptor to monitor all HTTP traffic to configured LLM endpoints:
 
-### Faraday Interceptor
-- Patches Faraday connections using middleware injection
-- Monitors: OpenAI SDK, ruby-anthropic, LangChain.rb, and other Faraday-based libraries
-- Handles: Standard HTTP requests and Server-Sent Events (SSE) for streaming
-
-### Anthropic Interceptor
-- Patches the official Anthropic gem's internal HTTP transport (Net::HTTP)
-- Monitors: Official Anthropic Ruby SDK requests
+### Net::HTTP Interceptor
+- Patches Ruby's core `Net::HTTP` library using `Module#prepend`
+- Monitors **all** HTTP libraries that use Net::HTTP under the hood (which is most of them)
+- Handles both standard requests and streaming responses via `read_body` interception
+- Thread-safe design using thread-local storage for streaming buffers
 
 ### Request Flow
 When a request matches configured LLM endpoints:
 
 1. The original request executes normally with zero performance impact
-2. Request and response data (body, headers, status) are captured by the appropriate interceptor
+2. Request and response data (body, headers, status) are captured by the interceptor
 3. For streaming requests, the complete accumulated response is captured (not individual chunks)
 4. Data is sent to the Coolhand API asynchronously in a background thread
 5. Your application continues without interruption

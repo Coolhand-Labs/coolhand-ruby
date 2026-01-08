@@ -1,43 +1,43 @@
 # Coolhand Ruby Gem Version Guide
 
-## Version 0.2.0 - Namespace Refactoring (Breaking Change)
+## Version 0.3.0 - Namespace Refactoring & Unified Interceptor
 
 ### 🚨 Breaking Changes
 
-Version 0.2.0 removes the `Ruby` namespace from the gem to simplify the API. This is a **breaking change** that requires updating your code.
+Version 0.3.0 removes the `Ruby` namespace from the gem to simplify the API and replaces the dual interceptor architecture with a unified Net::HTTP interceptor.
 
 ### Migration Guide
 
 #### 1. Update Require Statements
 
-**Before (v0.1.x):**
+**Before (v0.2.x):**
 ```ruby
 require 'coolhand'
 ```
 
-**After (v0.2.x):**
+**After (v0.3.x):**
 ```ruby
 require 'coolhand'
 ```
 
 #### 2. Update Class References
 
-**Before (v0.1.x):**
+**Before (v0.2.x):**
 ```ruby
 # FeedbackService
-feedback_service = Coolhand::FeedbackService.new
+feedback_service = Coolhand::Ruby::FeedbackService.new
 
 # LoggerService
-logger_service = Coolhand::LoggerService.new
+logger_service = Coolhand::Ruby::LoggerService.new
 
 # Version reference
-puts Coolhand::VERSION
+puts Coolhand::Ruby::VERSION
 
 # Collector module
-Coolhand::Collector.get_collector_string
+Coolhand::Ruby::Collector.get_collector_string
 ```
 
-**After (v0.2.x):**
+**After (v0.3.x):**
 ```ruby
 # FeedbackService
 feedback_service = Coolhand::FeedbackService.new
@@ -87,14 +87,15 @@ end
 
 ### Why This Change?
 
-This refactoring simplifies the API by removing unnecessary nesting. Instead of `require 'coolhand'` and `Coolhand::FeedbackService`, you now use the cleaner `require 'coolhand'` and `Coolhand::FeedbackService`.
+This refactoring simplifies the API by removing unnecessary nesting. Instead of `Coolhand::Ruby::FeedbackService`, you now use the cleaner `Coolhand::FeedbackService`.
+
+The unified Net::HTTP interceptor also simplifies the architecture - instead of maintaining separate interceptors for Faraday and Anthropic, a single interceptor now handles all HTTP traffic at the Net::HTTP level.
 
 ### Need Help?
 
 If you encounter issues migrating, please check:
 
-1. All `require 'coolhand'` statements are updated to `require 'coolhand'`
-2. All `Coolhand::` references are updated to `Coolhand::`
-3. Your gem dependency is updated to `~> 0.2.0`
+1. All `Coolhand::Ruby::` references are updated to `Coolhand::`
+2. Your gem dependency is updated to `~> 0.3.0`
 
 For additional support, please open an issue on our [GitHub repository](https://github.com/Coolhand-Labs/coolhand-ruby).
