@@ -20,7 +20,14 @@ module Coolhand
         )
       }
 
-      send_request(payload, "✅ Successfully sent request metadata")
+      if environment_prodaction?
+        send_request(payload, "✅ Successfully sent request metadata")
+      else
+        log_separator
+        log "🛠️ Development Mode - Request payload prepared but not sent to API:"
+        log JSON.pretty_generate(sanitize_payload_for_json(payload))
+        nil
+      end
     end
 
     def configuration
@@ -37,6 +44,10 @@ module Coolhand
 
     def silent
       configuration.silent
+    end
+
+    def environment_prodaction?
+      configuration.environment == "production"
     end
 
     protected
@@ -114,13 +125,21 @@ module Coolhand
 
       log_feedback_info(feedback)
 
-      result = send_request(
-        payload,
-        "✅ Successfully created feedback with ID: #{feedback[:llm_request_log_id] || 'N/A'}"
-      )
+      if environment_prodaction?
+        result = send_request(
+          payload,
+          "✅ Successfully created feedback with ID: #{feedback[:llm_request_log_id] || 'N/A'}"
+        )
 
-      log_separator
-      result
+        log_separator
+
+        result
+      else
+        log_separator
+        log "🛠️ Development Mode - Request payload prepared but not sent to API:"
+        log JSON.pretty_generate(payload)
+        nil
+      end
     end
 
     def create_log(captured_data, collection_method = nil)
@@ -132,15 +151,22 @@ module Coolhand
 
       log_request_info(captured_data)
 
-      result = send_request(
-        payload,
-        "✅ Successfully logged to API"
-      )
+      if environment_prodaction?
+        result = send_request(
+          payload,
+          "✅ Successfully logged to API"
+        )
 
-      puts "✅ Successfully logged to API with ID: #{result[:id]}" if result && !silent
+        puts "✅ Successfully logged to API with ID: #{result[:id]}" if result && !silent
 
-      log_separator
-      result
+        log_separator
+        result
+      else
+        log_separator
+        log "🛠️ Development Mode - Request payload prepared but not sent to API:"
+        log JSON.pretty_generate(payload)
+        nil
+      end
     end
 
     # Filter list of known binary/problematic field names by service
