@@ -19,5 +19,11 @@ group :development, :test do
   gem "webmock", "~> 3.19"
 
   gem "pry"
-  gem "pry-byebug"
+
+  # byebug doesn't support Ruby 4 yet - use built-in debug gem instead
+  if RUBY_VERSION < "4.0"
+    gem "pry-byebug"
+  else
+    gem "debug"
+  end
 end
