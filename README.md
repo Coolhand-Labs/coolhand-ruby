@@ -49,7 +49,9 @@ end
 
 ## Feedback API
 
-Collect feedback on LLM responses to improve model performance:
+Collect feedback on LLM responses to improve model performance.
+
+> **Frontend Feedback Widget**: For browser-based feedback collection, see [coolhand-js](https://github.com/Coolhand-Labs/coolhand-js) - an accessible, lightweight JavaScript widget that leverages best UX practices to capture actionable user feedback on any AI output.
 
 ```ruby
 require 'coolhand'
@@ -362,6 +364,102 @@ The monitor handles errors gracefully:
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
 
+
+## Batch webhook handler (OpenAI)
+
+Automatically handle OpenAI batch event logs (batch.completed, batch.failed, batch.expired, batch.cancelled)
+by intercepting webhook requests and enqueuing your batch result processor.
+
+Usage:
+- Include the interceptor in your controller:
+  include Coolhand::WebhookInterceptor
+- Add the before_action to validate and populate @validator payload:
+  before_action :intercept_batch_request, only: :openai
+- Ensure you skip CSRF for the webhook endpoint:
+  skip_before_action :verify_authenticity_token
+- Override the webhook_secret method to return your OpenAI webhook secret
+
+Minimal example (only key lines shown):
+
+```ruby
+# app/controllers/webhooks/batch_api_requests_controller.rb
+# ...existing code...
+include Coolhand::WebhookInterceptor
+
+skip_before_action :verify_authenticity_token
+before_action :intercept_batch_request, only: :openai
+
+def openai
+  event = JSON.parse(@validator.payload)
+  case event["type"]
+  when "batch.completed", "batch.failed", "batch.expired", "batch.cancelled"
+    batch_id = event.dig("data", "id")
+    batch_request = BatchApiRequest.find_by(provider: "openai", provider_batch_id: batch_id)
+
+    if batch_request
+      OpenAi::BatchResultProcessor.perform_async(batch_request.id)
+      Rails.logger.info("Queued batch result processing for BatchApiRequest #{batch_request.id}")
+    else
+      Rails.logger.warn("Could not find BatchApiRequest for OpenAI batch ID: #{batch_id}")
+    end
+  else
+    Rails.logger.info("Unhandled OpenAI webhook event type: #{event["type"]}")
+  end
+
+  head :ok
+rescue JSON::ParserError
+  head :bad_request
+rescue StandardError => e
+  Rails.logger.error("OpenAI webhook error: #{e.message}")
+  head :internal_server_error
+end
+
+def webhook_secret
+  Rails.application.credentials.openai_webhook_secret
+end
+# ...existing code...
+```
+
+## Batch webhook handler (Vertex)
+
+Automatically handle Vertex batch event logs.
+
+Usage:
+- call Coolhand::Vertex::BatchResultProcessor service with batch_info and download batch results
+
+Minimal example (only key lines shown):
+
+```ruby
+class Vertex::BatchCallbackProcessor < BaseService
+  option :batch_request, model: BatchApiRequest
+  option :batch_info
+
+  def call
+    case batch_info["state"]
+    when "JOB_STATE_PENDING"
+      nil
+    when "JOB_STATE_RUNNING", "JOB_STATE_QUEUED"
+      batch_request.update!(status: "processing")
+
+      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call
+    when "JOB_STATE_SUCCEEDED"
+      output_file_id = batch_info["outputInfo"]["gcsOutputDirectory"]
+      results = download_batch_results(output_file_id)
+      results.each { |batch_item| process_batch_result(batch_item) }
+
+      batch_request.update!(status: "completed", completed_at: Time.current, output_file_id:)
+
+      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call(results)
+
+      # Clean up GCS files after successful processing
+      cleanup_gcs_files(output_file_id)
+    when "JOB_STATE_FAILED"
+      handle_failed_batch(batch_info["error"]["message"])
+    end
+  end
+end
+```
+
 ## Integration Guides
 
 - **[Anthropic Integration](docs/anthropic.md)** - Complete guide for both official and community Anthropic gems, including streaming, dual gem handling, and troubleshooting
@@ -373,10 +471,11 @@ The monitor handles errors gracefully:
 - No sensitive data is exposed in logs
 - All data is sent via HTTPS to Coolhand servers
 
-## Other Languages
+## Related Packages
 
-- **Node.js**: [coolhand-node package](https://github.com/coolhand-io/coolhand-node) - Coolhand monitoring for Node.js applications
-- **API Docs**: [API Documentation](https://coolhandlabs.com/docs) - Direct API integration documentation
+- **Frontend (Feedback Collection Widget)**: [coolhand-js](https://github.com/Coolhand-Labs/coolhand-js) - Frontend feedback widget for collecting user feedback on AI outputs
+- **Node.js**: [coolhand-node package](https://github.com/Coolhand-Labs/coolhand-node) - Coolhand monitoring for Node.js applications
+- **Python**: [coolhand package](https://github.com/Coolhand-Labs/coolhand-python) - Coolhand monitoring for Python applications
 
 ## Community
 
