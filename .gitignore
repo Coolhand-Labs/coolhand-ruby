@@ -61,3 +61,4 @@ coverage
 .idea
 .irb_history
 .rspec_status
+.claude/settings.local.json
