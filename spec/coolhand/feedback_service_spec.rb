@@ -153,7 +153,7 @@ RSpec.describe Coolhand::FeedbackService do
             base_url: "https://coolhandlabs.com/api",
             silent: false,
             environment: "production",
-      debug_mode: false)
+            debug_mode: false)
         end
 
         let(:verbose_service) do

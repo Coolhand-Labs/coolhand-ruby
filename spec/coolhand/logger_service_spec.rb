@@ -126,7 +126,7 @@ RSpec.describe Coolhand::LoggerService do
             base_url: "https://coolhandlabs.com/api",
             silent: false,
             environment: "production",
-      debug_mode: false)
+            debug_mode: false)
         end
 
         let(:verbose_service) do
@@ -298,7 +298,7 @@ RSpec.describe Coolhand::LoggerService do
               base_url: "https://coolhandlabs.com/api",
               silent: false,
               environment: "production",
-      debug_mode: false)
+              debug_mode: false)
           end
 
           before do
@@ -330,7 +330,7 @@ RSpec.describe Coolhand::LoggerService do
               base_url: "https://coolhandlabs.com/api",
               silent: false,
               environment: "production",
-      debug_mode: false)
+              debug_mode: false)
           end
 
           before do
@@ -352,7 +352,7 @@ RSpec.describe Coolhand::LoggerService do
             base_url: "https://coolhandlabs.com/api",
             silent: false,
             environment: "production",
-      debug_mode: false)
+            debug_mode: false)
           allow(Coolhand).to receive(:configuration).and_return(verbose_config)
 
           expect do
