@@ -3,7 +3,7 @@
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
-    attr_accessor :api_key, :environment, :silent, :base_url
+    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture
     attr_reader :intercept_addresses
 
     def initialize
@@ -13,6 +13,8 @@ module Coolhand
       @silent = false
       @intercept_addresses = ["api.openai.com", "api.elevenlabs.io", ":generateContent"]
       @base_url = "https://coolhandlabs.com/api"
+      @debug_mode = false
+      @capture = true
     end
 
     # Custom setter that preserves defaults when nil/empty array is provided

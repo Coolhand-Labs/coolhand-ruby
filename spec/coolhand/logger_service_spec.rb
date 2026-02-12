@@ -9,7 +9,8 @@ RSpec.describe Coolhand::LoggerService do
       api_key: "test-api-key",
       base_url: "https://coolhandlabs.com/api",
       silent: true,
-      environment: "production")
+      environment: "production",
+      debug_mode: false)
   end
   let(:service) { described_class.new }
 
@@ -124,7 +125,8 @@ RSpec.describe Coolhand::LoggerService do
             api_key: "test-api-key",
             base_url: "https://coolhandlabs.com/api",
             silent: false,
-            environment: "production")
+            environment: "production",
+            debug_mode: false)
         end
 
         let(:verbose_service) do
@@ -295,7 +297,8 @@ RSpec.describe Coolhand::LoggerService do
               api_key: "test-api-key",
               base_url: "https://coolhandlabs.com/api",
               silent: false,
-              environment: "production")
+              environment: "production",
+              debug_mode: false)
           end
 
           before do
@@ -326,7 +329,8 @@ RSpec.describe Coolhand::LoggerService do
               api_key: "test-api-key",
               base_url: "https://coolhandlabs.com/api",
               silent: false,
-              environment: "production")
+              environment: "production",
+              debug_mode: false)
           end
 
           before do
@@ -347,7 +351,8 @@ RSpec.describe Coolhand::LoggerService do
             api_key: "test-api-key",
             base_url: "https://coolhandlabs.com/api",
             silent: false,
-            environment: "production")
+            environment: "production",
+            debug_mode: false)
           allow(Coolhand).to receive(:configuration).and_return(verbose_config)
 
           expect do
