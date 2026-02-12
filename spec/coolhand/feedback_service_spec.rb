@@ -9,7 +9,8 @@ RSpec.describe Coolhand::FeedbackService do
       api_key: "test-api-key",
       base_url: "https://coolhandlabs.com/api",
       silent: true,
-      environment: "production")
+      environment: "production",
+      debug_mode: false)
   end
   let(:service) { described_class.new }
 
@@ -151,7 +152,8 @@ RSpec.describe Coolhand::FeedbackService do
             api_key: "test-api-key",
             base_url: "https://coolhandlabs.com/api",
             silent: false,
-            environment: "production")
+            environment: "production",
+      debug_mode: false)
         end
 
         let(:verbose_service) do
