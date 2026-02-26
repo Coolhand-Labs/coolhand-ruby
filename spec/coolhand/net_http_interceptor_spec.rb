@@ -85,10 +85,14 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(Net::HTTP.ancestors).to include(described_class)
     end
   end
+
   it "still logs when the HTTP call raises an exception (e.g. SDK error on 4xx)" do
     stub_request(:post, "https://api.test.com/v1/messages")
-      .to_return(status: 404, body: '{"type":"error","error":{"type":"not_found_error","message":"model: claude-3-7-sonnet-latest"}}',
-                 headers: { "Content-Type" => "application/json" })
+      .to_return(
+        status: 404,
+        body: '{"type":"error","error":{"type":"not_found_error","message":"model: claude-3-7-sonnet-latest"}}',
+        headers: { "Content-Type" => "application/json" }
+      )
 
     uri = URI("https://api.test.com/v1/messages")
     http = Net::HTTP.new(uri.host, uri.port)
