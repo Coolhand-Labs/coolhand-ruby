@@ -46,34 +46,54 @@ module Coolhand
 
       start_time = Time.now
       request_id = SecureRandom.uuid
+      response = nil
+      status_code = nil
+      response_body = nil
 
       Thread.current[:coolhand_stream_buffer] = nil
-      response = super
-      body_content = Thread.current[:coolhand_stream_buffer] || response&.body
-      Thread.current[:coolhand_stream_buffer] = nil
 
-      end_time = Time.now
-      duration_ms = ((end_time - start_time) * 1000).round(2)
+      begin
+        response = super
+        body_content = Thread.current[:coolhand_stream_buffer] || response&.body
+        status_code = response.respond_to?(:code) ? response.code.to_i : nil
+        response_body = parse_json(body_content)
+      rescue StandardError => e
+        status_code = extract_status_from_exception(e)
+        response_body = { "error" => { "class" => e.class.name, "message" => e.message } }
+        raise
+      ensure
+        Thread.current[:coolhand_stream_buffer] = nil
+        end_time = Time.now
+        duration_ms = ((end_time - start_time) * 1000).round(2)
 
-      send_complete_request_log(
-        request_id: request_id,
-        method: req.method,
-        url: url,
-        request_headers: sanitize_headers(req),
-        request_body: parse_json(body || req.body),
-        response_headers: sanitize_headers(response),
-        response_body: parse_json(body_content),
-        status_code: response.respond_to?(:code) ? response.code.to_i : nil,
-        start_time: start_time,
-        end_time: end_time,
-        duration_ms: duration_ms,
-        is_streaming: !!block
-      )
+        send_complete_request_log(
+          request_id: request_id,
+          method: req.method,
+          url: url,
+          request_headers: sanitize_headers(req),
+          request_body: parse_json(body || req.body),
+          response_headers: sanitize_headers(response),
+          response_body: response_body,
+          status_code: status_code,
+          start_time: start_time,
+          end_time: end_time,
+          duration_ms: duration_ms,
+          is_streaming: !!block
+        )
+      end
 
       response
     end
 
     private
+
+    def extract_status_from_exception(e)
+      return e.status if e.respond_to?(:status) && e.status.is_a?(Integer)
+      return e.response.status if e.respond_to?(:response) && e.response.respond_to?(:status)
+
+      match = e.message.to_s.match(/status[=:\s]+(\d{3})/)
+      match ? match[1].to_i : nil
+    end
 
     def intercept?(url)
       return false unless url && Coolhand.configuration.respond_to?(:intercept_addresses)

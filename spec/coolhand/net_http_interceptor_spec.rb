@@ -85,4 +85,51 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(Net::HTTP.ancestors).to include(described_class)
     end
   end
+
+  it "still logs when the HTTP call raises an exception (e.g. SDK error on 4xx)" do
+    stub_request(:post, "https://api.test.com/v1/messages")
+      .to_return(
+        status: 404,
+        body: '{"type":"error","error":{"type":"not_found_error","message":"model: claude-3-7-sonnet-latest"}}',
+        headers: { "Content-Type" => "application/json" }
+      )
+
+    uri = URI("https://api.test.com/v1/messages")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.body = '{"model":"claude-3-7-sonnet-latest"}'
+
+    response = http.request(req)
+    expect(response.code.to_i).to eq(404)
+
+    sleep 0.05
+
+    expect(@captured_log).to be_a(Hash)
+    raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+    expect(raw[:status_code] || raw["status_code"]).to eq(404)
+  end
+
+  it "logs with extracted status and SDK exception format when super itself raises" do
+    stub_request(:post, "https://api.test.com/v1/messages")
+      .to_raise(RuntimeError.new("status: 404, body: not_found_error"))
+
+    uri = URI("https://api.test.com/v1/messages")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.body = '{"model":"claude-3-7-sonnet-latest"}'
+
+    expect { http.request(req) }.to raise_error(RuntimeError)
+
+    sleep 0.05
+
+    expect(@captured_log).to be_a(Hash)
+    raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+    expect(raw[:status_code] || raw["status_code"]).to eq(404)
+    resp_body = raw[:response_body] || raw["response_body"]
+    expect(resp_body).to be_a(Hash)
+    error_info = resp_body["error"] || resp_body[:error]
+    expect(error_info["class"]).to include("RuntimeError")
+  end
 end
