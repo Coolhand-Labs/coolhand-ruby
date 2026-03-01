@@ -199,6 +199,80 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw[:status_code] || raw["status_code"]).to eq(404)
   end
 
+  describe "exclude_api_patterns" do
+    before(:each) do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.intercept_addresses = ["aiplatform.googleapis.com"]
+      end
+    end
+
+    def make_request(path)
+      stub_request(:get, "https://aiplatform.googleapis.com#{path}")
+        .to_return(status: 200, body: '{"status":"ok"}', headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://aiplatform.googleapis.com#{path}")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Get.new(uri)
+      http.request(req)
+      sleep 0.05
+    end
+
+    it "does not capture URLs matching the default /batchPredictionJobs/ pattern" do
+      make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
+      expect(@captured_log).to be_nil
+    end
+
+    it "captures URLs that do not match any exclude pattern" do
+      make_request("/v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-pro:generateContent")
+      expect(@captured_log).to be_a(Hash)
+    end
+
+    it "captures all URLs when exclude_api_patterns is set to empty" do
+      Coolhand.configuration.exclude_api_patterns = []
+      make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
+      expect(@captured_log).to be_a(Hash)
+    end
+
+    it "excludes URLs matching a custom pattern appended with <<" do
+      Coolhand.configuration.exclude_api_patterns << ":generateContent"
+      make_request("/v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-pro:generateContent")
+      expect(@captured_log).to be_nil
+    end
+
+    it "excludes only patterns in the overridden list when using =" do
+      Coolhand.configuration.exclude_api_patterns = ["/generateContent"]
+      # batchPredictionJobs is no longer excluded
+      make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
+      expect(@captured_log).to be_a(Hash)
+    end
+
+    it "logs a debug message when a URL is excluded and debug_mode is enabled" do
+      Coolhand.configuration.debug_mode = true
+      expect(Coolhand).to receive(:log).with(/Skipping capture.*batchPredictionJobs/)
+      make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
+    end
+
+    it "does not log a debug message for excluded URLs when debug_mode is disabled" do
+      expect(Coolhand).not_to receive(:log).with(/Skipping capture/)
+      make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
+    end
+
+    it "exposes DEFAULT_EXCLUDE_API_PATTERNS as a frozen constant" do
+      defaults = Coolhand::Configuration::DEFAULT_EXCLUDE_API_PATTERNS
+      expect(defaults).to include("/batchPredictionJobs/")
+      expect(defaults).to be_frozen
+    end
+
+    it "initializes exclude_api_patterns as a mutable copy of the defaults" do
+      patterns = Coolhand.configuration.exclude_api_patterns
+      expect(patterns).to include("/batchPredictionJobs/")
+      expect(patterns).not_to be_frozen
+    end
+  end
+
   it "logs with extracted status and SDK exception format when super itself raises" do
     stub_request(:post, "https://api.test.com/v1/messages")
       .to_raise(RuntimeError.new("status: 404, body: not_found_error"))

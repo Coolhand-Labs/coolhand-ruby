@@ -1,9 +1,15 @@
 # frozen_string_literal: true
 
+require "yaml"
+
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
-    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture
+    DEFAULT_EXCLUDE_API_PATTERNS = YAML.load_file(
+      File.join(__dir__, "default_exclude_api_patterns.yml")
+    ).freeze
+
+    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture, :exclude_api_patterns
     attr_reader :intercept_addresses
 
     def initialize
@@ -15,6 +21,7 @@ module Coolhand
       @base_url = "https://coolhandlabs.com/api"
       @debug_mode = false
       @capture = true
+      @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
     end
 
     # Custom setter that preserves defaults when nil/empty array is provided
