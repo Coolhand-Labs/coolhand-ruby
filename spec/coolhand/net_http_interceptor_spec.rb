@@ -85,4 +85,100 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(Net::HTTP.ancestors).to include(described_class)
     end
   end
+
+  describe "Gemini API interception" do
+    before do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.intercept_addresses = ["generativelanguage.googleapis.com", ":generateContent", ":streamGenerateContent"]
+      end
+    end
+
+    it "intercepts Gemini generateContent requests by domain" do
+      stub_request(:post, "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")
+        .to_return(status: 200, body: '{"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}',
+          headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req.body = '{"contents":[{"parts":[{"text":"Hi"}]}]}'
+      req["Content-Type"] = "application/json"
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      expect(raw[:url] || raw["url"]).to include("generativelanguage.googleapis.com")
+      expect(raw[:url] || raw["url"]).to include(":generateContent")
+    end
+
+    it "intercepts Gemini streamGenerateContent requests" do
+      stub_request(:post, "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:streamGenerateContent?alt=sse")
+        .to_return(status: 200, body: '{"candidates":[]}',
+          headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:streamGenerateContent?alt=sse")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req.body = '{"contents":[{"parts":[{"text":"Hi"}]}]}'
+      req["Content-Type"] = "application/json"
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      expect(raw[:url] || raw["url"]).to include(":streamGenerateContent")
+    end
+
+    it "sanitizes x-goog-api-key header" do
+      stub_request(:post, "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")
+        .to_return(status: 200, body: '{"candidates":[]}',
+          headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req["x-goog-api-key"] = "AIzaSyDEADBEEF1234567890"
+      req["Content-Type"] = "application/json"
+      req.body = '{"contents":[]}'
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      headers = raw[:headers] || raw["headers"]
+      goog_key = headers["x-goog-api-key"] || headers["X-Goog-Api-Key"]
+      expect(goog_key).to eq("[REDACTED]")
+    end
+
+    it "sanitizes key query parameter from URL" do
+      stub_request(:post, "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDEADBEEF1234567890")
+        .to_return(status: 200, body: '{"candidates":[]}',
+          headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDEADBEEF1234567890")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req["Content-Type"] = "application/json"
+      req.body = '{"contents":[]}'
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      url = raw[:url] || raw["url"]
+      expect(url).not_to include("AIzaSyDEADBEEF1234567890")
+      expect(url).to include("REDACTED")
+    end
+  end
 end
