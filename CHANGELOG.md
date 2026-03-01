@@ -5,26 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2026-01-08
+## [0.3.0] - 2026-03-01
 
 ### 🚀 Major Changes
-- **Unified Net::HTTP Interceptor** - Replaced dual interceptor architecture (Faraday + Anthropic) with a single Net::HTTP interceptor that captures all HTTP traffic
+- **Unified Net::HTTP Interceptor** - Replaced dual interceptor architecture (Faraday + Anthropic) with a single `NetHttpInterceptor` that captures all HTTP traffic via `Module#prepend`
 - **Simplified Namespace** - Removed `Coolhand::Ruby` namespace; all classes now under `Coolhand` directly (e.g., `Coolhand::FeedbackService` instead of `Coolhand::Ruby::FeedbackService`)
 - **Ruby 4.0 Compatibility** - Full support for Ruby 4.0 with conditional debugger dependencies
 
+### ✨ New Features
+- **Batch Processing Support** - New `Coolhand::OpenAi::BatchResultProcessor` and `Coolhand::Vertex::BatchResultProcessor` for logging completed async batch jobs as individual `llm_request_log` entries
+- **OpenAI Webhook Validation** - New `Coolhand::OpenAi::WebhookValidator` verifies webhook signatures using HMAC-SHA256 with timing-safe comparison; lenient in development, strict in production/staging
+- **WebhookInterceptor Rails Module** - `Coolhand::WebhookInterceptor` mixin for Rails controllers to validate and dispatch OpenAI batch completion webhooks automatically
+- **Capture Control** - New `config.capture` global toggle (default: `true`) and `config.debug_mode` (captures locally, skips API forwarding) for fine-grained interception control
+- **Thread-Safe Block Control** - `Coolhand.with_capture { }` and `Coolhand.without_capture { }` for scoped override of capture behavior within a block; uses thread-local storage
+- **Exclude API Patterns** - New `config.exclude_api_patterns` deny-list checked after the `intercept_addresses` allow-list; default excludes `["/batchPredictionJobs/"]` to suppress Vertex AI batch job management noise
+
 ### 🏗️ Architecture Improvements
-- **Single Interceptor** - `NetHttpInterceptor` module patches `Net::HTTP#request` and `Net::HTTPResponse#read_body` using `Module#prepend`
+- **Single Interceptor** - `NetHttpInterceptor` patches `Net::HTTP#request` and `Net::HTTPResponse#read_body`; removed ~1,400 lines of interceptor-specific code
 - **Thread-Safe Streaming** - Uses `Thread.current[:coolhand_stream_buffer]` for streaming response capture
-- **Reduced Codebase** - Removed ~1,400 lines of interceptor-specific code
+- **Capture Priority Hierarchy** - `debug_mode` (always capture) > thread-local override > global `capture` config
+
+### 🐛 Bug Fixes
+- **Interceptor No Longer Silently Drops Logs on HTTP Errors** - Wrapped `Net::HTTP#request` in `begin/rescue/ensure` so `send_complete_request_log` is always called even when the SDK raises an exception (e.g., `Anthropic::Errors::NotFoundError` on a 404). Status is extracted from the exception via `.status`, `.response.status`, or message parsing.
+
+### 📦 Dependencies
+- Bumped `faraday` from 2.14.0 to 2.14.1
 
 ### 💔 Breaking Changes
 - **Namespace Change** - `Coolhand::Ruby::*` references must be updated to `Coolhand::*`
 - **Removed Files** - `faraday_interceptor.rb` and `anthropic_interceptor.rb` replaced by `net_http_interceptor.rb`
+- **`environment` Config Behavior** - The `environment` attribute no longer controls whether requests are forwarded to the API. Use `config.debug_mode = true` instead if you previously relied on `environment: "development"` to suppress API calls.
 
 ### 🔄 Migration Guide
 1. Update gem dependency to `~> 0.3.0`
 2. Replace `Coolhand::Ruby::` with `Coolhand::` in all class references
-3. No changes needed to `Coolhand.configure` blocks
+3. If using `environment: "development"` to prevent API calls, switch to `config.debug_mode = true`
+4. No other changes needed to `Coolhand.configure` blocks for basic usage
 
 ## [0.2.0] - 2025-12-16
 
