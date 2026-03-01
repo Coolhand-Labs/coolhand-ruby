@@ -107,8 +107,20 @@ module Coolhand
 
     def intercept?(url)
       return false unless url && Coolhand.configuration.respond_to?(:intercept_addresses)
+      return false if excluded_by_pattern?(url)
 
       Coolhand.configuration.intercept_addresses.any? { |a| url.include?(a) }
+    end
+
+    def excluded_by_pattern?(url)
+      patterns = Coolhand.configuration.exclude_api_patterns
+      return false if patterns.nil? || patterns.empty?
+
+      matched = patterns.find { |pattern| url.include?(pattern) }
+      if matched && Coolhand.configuration.debug_mode
+        Coolhand.log "🚫 Skipping capture for #{url} (matched exclude_api_pattern: \"#{matched}\")"
+      end
+      !!matched
     end
 
     def build_url_for_request(http, req)
