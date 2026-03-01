@@ -20,13 +20,13 @@ module Coolhand
         )
       }
 
-      if environment_prodaction?
-        send_request(payload, "✅ Successfully sent request metadata")
-      else
+      if debug_mode?
         log_separator
-        log "🛠️ Development Mode - Request payload prepared but not sent to API:"
+        log "🛠️ Debug Mode - Request payload prepared but not sent to API:"
         log JSON.pretty_generate(sanitize_payload_for_json(payload))
         nil
+      else
+        send_request(payload, "✅ Successfully sent request metadata")
       end
     end
 
@@ -46,8 +46,8 @@ module Coolhand
       configuration.silent
     end
 
-    def environment_prodaction?
-      configuration.environment == "production"
+    def debug_mode?
+      configuration.debug_mode
     end
 
     protected
@@ -125,7 +125,12 @@ module Coolhand
 
       log_feedback_info(feedback)
 
-      if environment_prodaction?
+      if debug_mode?
+        log_separator
+        log "🛠️ Debug Mode - Request payload prepared but not sent to API:"
+        log JSON.pretty_generate(payload)
+        nil
+      else
         result = send_request(
           payload,
           "✅ Successfully created feedback with ID: #{feedback[:llm_request_log_id] || 'N/A'}"
@@ -134,11 +139,6 @@ module Coolhand
         log_separator
 
         result
-      else
-        log_separator
-        log "🛠️ Development Mode - Request payload prepared but not sent to API:"
-        log JSON.pretty_generate(payload)
-        nil
       end
     end
 
@@ -151,7 +151,12 @@ module Coolhand
 
       log_request_info(captured_data)
 
-      if environment_prodaction?
+      if debug_mode?
+        log_separator
+        log "🛠️ Debug Mode - Request payload prepared but not sent to API:"
+        log JSON.pretty_generate(payload)
+        nil
+      else
         result = send_request(
           payload,
           "✅ Successfully logged to API"
@@ -161,11 +166,6 @@ module Coolhand
 
         log_separator
         result
-      else
-        log_separator
-        log "🛠️ Development Mode - Request payload prepared but not sent to API:"
-        log JSON.pretty_generate(payload)
-        nil
       end
     end
 

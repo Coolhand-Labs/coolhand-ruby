@@ -76,6 +76,95 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(resp_body).not_to be_nil
   end
 
+  describe "capture control" do
+    before(:each) do
+      stub_request(:get, "https://api.test.com/hello")
+        .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
+    end
+
+    def make_request
+      uri = URI("https://api.test.com/hello")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Get.new(uri)
+      http.request(req)
+      sleep 0.05
+    end
+
+    context "with default config (capture: true)" do
+      it "captures requests by default" do
+        make_request
+        expect(@captured_log).to be_a(Hash)
+      end
+
+      it "does not capture inside without_capture block" do
+        Coolhand.without_capture do
+          make_request
+        end
+        expect(@captured_log).to be_nil
+      end
+
+      it "still captures inside with_capture block" do
+        Coolhand.with_capture do
+          make_request
+        end
+        expect(@captured_log).to be_a(Hash)
+      end
+    end
+
+    context "with capture: false" do
+      before do
+        Coolhand.configuration.capture = false
+      end
+
+      it "does not capture requests by default" do
+        make_request
+        expect(@captured_log).to be_nil
+      end
+
+      it "captures inside with_capture block" do
+        Coolhand.with_capture do
+          make_request
+        end
+        expect(@captured_log).to be_a(Hash)
+      end
+
+      it "does not capture inside without_capture block" do
+        Coolhand.without_capture do
+          make_request
+        end
+        expect(@captured_log).to be_nil
+      end
+    end
+
+    context "with debug_mode: true" do
+      before do
+        Coolhand.configuration.debug_mode = true
+      end
+
+      it "captures even inside without_capture block" do
+        Coolhand.without_capture do
+          make_request
+        end
+        expect(@captured_log).to be_a(Hash)
+      end
+
+      it "captures when capture config is false" do
+        Coolhand.configuration.capture = false
+        make_request
+        expect(@captured_log).to be_a(Hash)
+      end
+
+      it "captures when capture config is false AND inside without_capture" do
+        Coolhand.configuration.capture = false
+        Coolhand.without_capture do
+          make_request
+        end
+        expect(@captured_log).to be_a(Hash)
+      end
+    end
+  end
+
   describe ".patch!" do
     it "is idempotent and prepends module to Net::HTTP ancestors" do
       # Call patch! multiple times to ensure no errors and presence in ancestor chain

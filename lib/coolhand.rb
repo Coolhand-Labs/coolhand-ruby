@@ -34,6 +34,7 @@ module Coolhand
     # Reset configuration to defaults (mainly for testing)
     def reset_configuration!
       @configuration = Configuration.new
+      Thread.current[:coolhand_capture_override] = nil
     end
 
     # Provides a block to configure the gem.
@@ -68,6 +69,22 @@ module Coolhand
       yield
     ensure
       NetHttpInterceptor.unpatch! unless patched
+    end
+
+    def without_capture
+      previous = Thread.current[:coolhand_capture_override]
+      Thread.current[:coolhand_capture_override] = false
+      yield
+    ensure
+      Thread.current[:coolhand_capture_override] = previous
+    end
+
+    def with_capture
+      previous = Thread.current[:coolhand_capture_override]
+      Thread.current[:coolhand_capture_override] = true
+      yield
+    ensure
+      Thread.current[:coolhand_capture_override] = previous
     end
 
     # A simple logger that respects the 'silent' configuration option.

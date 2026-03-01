@@ -43,6 +43,7 @@ module Coolhand
 
       url = build_url_for_request(self, req)
       return super unless intercept?(url)
+      return super unless should_capture?
 
       start_time = Time.now
       request_id = SecureRandom.uuid
@@ -86,6 +87,15 @@ module Coolhand
     end
 
     private
+
+    def should_capture?
+      return true if Coolhand.configuration.debug_mode
+
+      override = Thread.current[:coolhand_capture_override]
+      return override unless override.nil?
+
+      Coolhand.configuration.capture
+    end
 
     def extract_status_from_exception(e)
       return e.status if e.respond_to?(:status) && e.status.is_a?(Integer)

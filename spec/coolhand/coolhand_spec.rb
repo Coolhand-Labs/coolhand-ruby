@@ -69,6 +69,96 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe "debug_mode config" do
+    it "defaults to false" do
+      expect(config.debug_mode).to be false
+    end
+
+    it "can be set to true via configure" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.debug_mode = true
+      end
+
+      expect(config.debug_mode).to be true
+    end
+  end
+
+  describe "capture config" do
+    it "defaults to true" do
+      expect(config.capture).to be true
+    end
+
+    it "can be set to false" do
+      config.capture = false
+      expect(config.capture).to be false
+    end
+  end
+
+  describe ".without_capture" do
+    it "sets thread-local override to false within the block" do
+      Coolhand.without_capture do
+        expect(Thread.current[:coolhand_capture_override]).to be false
+      end
+    end
+
+    it "restores previous thread-local state after the block" do
+      Coolhand.without_capture do
+        # inside block
+      end
+      expect(Thread.current[:coolhand_capture_override]).to be_nil
+    end
+
+    it "restores state even if block raises" do
+      begin
+        Coolhand.without_capture do
+          raise "boom"
+        end
+      rescue RuntimeError
+        # expected
+      end
+      expect(Thread.current[:coolhand_capture_override]).to be_nil
+    end
+
+    it "handles nested calls correctly" do
+      Coolhand.without_capture do
+        expect(Thread.current[:coolhand_capture_override]).to be false
+        Coolhand.with_capture do
+          expect(Thread.current[:coolhand_capture_override]).to be true
+        end
+        expect(Thread.current[:coolhand_capture_override]).to be false
+      end
+    end
+  end
+
+  describe ".with_capture" do
+    it "sets thread-local override to true within the block" do
+      Coolhand.with_capture do
+        expect(Thread.current[:coolhand_capture_override]).to be true
+      end
+    end
+
+    it "restores previous thread-local state after the block" do
+      Coolhand.with_capture do
+        # inside block
+      end
+      expect(Thread.current[:coolhand_capture_override]).to be_nil
+    end
+
+    it "restores state even if block raises" do
+      begin
+        Coolhand.with_capture do
+          raise "boom"
+        end
+      rescue RuntimeError
+        # expected
+      end
+      expect(Thread.current[:coolhand_capture_override]).to be_nil
+    end
+  end
+
   describe ".capture" do
     it "yields the block and calls patch/unpatch" do
       called = false

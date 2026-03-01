@@ -9,7 +9,8 @@ RSpec.describe Coolhand::LoggerService do
       api_key: "test-api-key",
       base_url: "https://coolhandlabs.com/api",
       silent: true,
-      environment: "production")
+      environment: "production",
+      debug_mode: false)
   end
   let(:service) { Coolhand::LoggerService.new }
 
