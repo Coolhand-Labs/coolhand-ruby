@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "coolhand/vertex/batch_result_processor"
 
 RSpec.describe Coolhand::Vertex::BatchResultProcessor do
   let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }
