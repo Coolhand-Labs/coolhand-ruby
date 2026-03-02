@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "openai"
+
 module Coolhand
   module OpenAi
     class BatchResultProcessor
