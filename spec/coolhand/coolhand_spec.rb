@@ -39,6 +39,7 @@ RSpec.describe Coolhand do
       end.not_to raise_error
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com",
+                                                                "api.anthropic.com",
                                                                 "api.elevenlabs.io",
                                                                 "generativelanguage.googleapis.com",
                                                                 ":generateContent",
@@ -55,6 +56,7 @@ RSpec.describe Coolhand do
       end
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com",
+                                                                "api.anthropic.com",
                                                                 "api.elevenlabs.io",
                                                                 "generativelanguage.googleapis.com",
                                                                 ":generateContent",
