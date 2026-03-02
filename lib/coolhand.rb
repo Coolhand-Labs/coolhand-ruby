@@ -4,7 +4,6 @@ require "uri"
 require "faraday"
 require "securerandom"
 require "json"
-require "openai"
 require "base64"
 
 require_relative "coolhand/version"
