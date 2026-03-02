@@ -8,10 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### ✨ New Features
-- **Google Gemini API Support** - `generativelanguage.googleapis.com` and `:streamGenerateContent` added to default `intercept_addresses`; both `generateContent` and `streamGenerateContent` endpoints are intercepted out of the box
-- **Anthropic API Support Restored** - `api.anthropic.com` added to default `intercept_addresses`; accidentally dropped during the v0.3.0 refactor that replaced `AnthropicInterceptor` with the unified `NetHttpInterceptor`
-- **URL Query Parameter Sanitization** - New `sanitize_url` helper redacts sensitive query parameters (`key`, `api_key`, `apikey`, `token`, `access_token`, `secret`) before logging; protects API keys passed as URL params (common with Gemini's `?key=` pattern)
-- **Gemini Header Sanitization** - `x-goog-api-key` added to the sanitized headers list alongside existing OpenAI/generic keys
 
 ## [0.3.0] - 2026-03-01
 
@@ -19,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unified Net::HTTP Interceptor** - Replaced dual interceptor architecture (Faraday + Anthropic) with a single `NetHttpInterceptor` that captures all HTTP traffic via `Module#prepend`
 - **Simplified Namespace** - Removed `Coolhand::Ruby` namespace; all classes now under `Coolhand` directly (e.g., `Coolhand::FeedbackService` instead of `Coolhand::Ruby::FeedbackService`)
 - **Ruby 4.0 Compatibility** - Full support for Ruby 4.0 with conditional debugger dependencies
+- **Google Gemini API Support** - `generativelanguage.googleapis.com` and `:streamGenerateContent` added to default `intercept_addresses`; both `generateContent` and `streamGenerateContent` endpoints are intercepted out of the box
+- **Anthropic API Support Restored** - `api.anthropic.com` added to default `intercept_addresses`; accidentally dropped during the v0.3.0 refactor that replaced `AnthropicInterceptor` with the unified `NetHttpInterceptor`
+- **URL Query Parameter Sanitization** - New `sanitize_url` helper redacts sensitive query parameters (`key`, `api_key`, `apikey`, `token`, `access_token`, `secret`) before logging; protects API keys passed as URL params (common with Gemini's `?key=` pattern)
 
 ### ✨ New Features
 - **Batch Processing Support** - New `Coolhand::OpenAi::BatchResultProcessor` and `Coolhand::Vertex::BatchResultProcessor` for logging completed async batch jobs as individual `llm_request_log` entries
