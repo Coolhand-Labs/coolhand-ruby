@@ -122,7 +122,7 @@ module Coolhand
 
       sanitized = raw.dup
 
-      sanitized_keys = %w[openai-api-key api-key x-api-key]
+      sanitized_keys = %w[openai-api-key api-key x-api-key x-goog-api-key]
       sanitized.each do |k, v|
         next if v.nil?
 
@@ -151,6 +151,32 @@ module Coolhand
       end
     end
 
+    def sanitize_url(url)
+      uri = URI.parse(url)
+      return url unless uri.query
+
+      sensitive = %w[key api_key apikey token access_token secret]
+      params = URI.decode_www_form(uri.query)
+      redacted = false
+      params.map! do |n, v|
+        if sensitive.include?(n.downcase)
+          redacted = true
+          [n, "[REDACTED]"]
+        else
+          [n, v]
+        end
+      end
+
+      if redacted
+        uri.query = URI.encode_www_form(params)
+        uri.to_s
+      else
+        url
+      end
+    rescue URI::InvalidURIError
+      url
+    end
+
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
       response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:)
       request_data = {
@@ -158,7 +184,7 @@ module Coolhand
           id: request_id,
           timestamp: start_time.iso8601,
           method: method.to_s.downcase,
-          url: url,
+          url: sanitize_url(url),
           headers: request_headers,
           request_body: request_body,
           response_headers: response_headers,

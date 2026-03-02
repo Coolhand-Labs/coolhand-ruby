@@ -39,8 +39,11 @@ RSpec.describe Coolhand do
       end.not_to raise_error
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com",
+                                                                "api.anthropic.com",
                                                                 "api.elevenlabs.io",
-                                                                ":generateContent"])
+                                                                "generativelanguage.googleapis.com",
+                                                                ":generateContent",
+                                                                ":streamGenerateContent"])
     end
 
     it "calls Interceptor.patch!" do
@@ -53,8 +56,11 @@ RSpec.describe Coolhand do
       end
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com",
+                                                                "api.anthropic.com",
                                                                 "api.elevenlabs.io",
-                                                                ":generateContent"])
+                                                                "generativelanguage.googleapis.com",
+                                                                ":generateContent",
+                                                                ":streamGenerateContent"])
     end
 
     it "allows custom intercept_addresses to be set" do
@@ -188,6 +194,18 @@ RSpec.describe Coolhand do
     it "does not print if silent" do
       config.silent = true
       expect { Coolhand.log("hello") }.not_to output.to_stdout
+    end
+  end
+
+  describe "Gemini default configuration" do
+    it "includes generativelanguage.googleapis.com in default intercept_addresses" do
+      fresh_config = Coolhand::Configuration.new
+      expect(fresh_config.intercept_addresses).to include("generativelanguage.googleapis.com")
+    end
+
+    it "includes :streamGenerateContent in default intercept_addresses" do
+      fresh_config = Coolhand::Configuration.new
+      expect(fresh_config.intercept_addresses).to include(":streamGenerateContent")
     end
   end
 

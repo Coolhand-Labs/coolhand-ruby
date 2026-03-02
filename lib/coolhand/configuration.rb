@@ -17,7 +17,9 @@ module Coolhand
       @environment = "production"
       @api_key = nil
       @silent = false
-      @intercept_addresses = ["api.openai.com", "api.elevenlabs.io", ":generateContent"]
+      @intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.elevenlabs.io",
+                              "generativelanguage.googleapis.com",
+                              ":generateContent", ":streamGenerateContent"]
       @base_url = "https://coolhandlabs.com/api"
       @debug_mode = false
       @capture = true
