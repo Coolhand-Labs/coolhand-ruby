@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "openai"
+require "coolhand/open_ai/batch_result_processor"
 
 RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
   let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }

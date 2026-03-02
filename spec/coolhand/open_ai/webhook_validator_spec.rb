@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "spec_helper"
+require "coolhand/open_ai/webhook_validator"
+
 RSpec.describe Coolhand::OpenAi::WebhookValidator do
   subject(:validator) { described_class.new(request, webhook_secret) }
 
