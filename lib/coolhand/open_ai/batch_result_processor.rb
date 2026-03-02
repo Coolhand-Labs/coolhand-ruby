@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "openai"
-
 module Coolhand
   module OpenAi
     class BatchResultProcessor
@@ -123,7 +121,13 @@ module Coolhand
       end
 
       def client
-        @client ||= OpenAI::Client.new
+        @client ||= begin
+          require "openai"
+          OpenAI::Client.new
+        rescue LoadError => e
+          raise LoadError, "The 'openai' gem is required to process OpenAI batches. " \
+                           "Install it with: gem 'openai'\n\nOriginal error: #{e.message}"
+        end
       end
 
       # TODO: implement API to handle failed batch results and display errors on dashboard page
