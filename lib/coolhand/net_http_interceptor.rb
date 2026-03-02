@@ -51,6 +51,9 @@ module Coolhand
       status_code = nil
       response_body = nil
 
+      # Capture body before super — body_stream is consumed during send
+      captured_body = capture_request_body(req, body)
+
       Thread.current[:coolhand_stream_buffer] = nil
 
       begin
@@ -72,7 +75,7 @@ module Coolhand
           method: req.method,
           url: url,
           request_headers: sanitize_headers(req),
-          request_body: parse_json(body || req.body),
+          request_body: captured_body,
           response_headers: sanitize_headers(response),
           response_body: response_body,
           status_code: status_code,
@@ -95,6 +98,19 @@ module Coolhand
       return override unless override.nil?
 
       Coolhand.configuration.capture
+    end
+
+    def capture_request_body(req, body)
+      return parse_json(body) if body
+      return parse_json(req.body) if req.body
+
+      if req.respond_to?(:body_stream) && req.body_stream
+        content = req.body_stream.read
+        req.body_stream = StringIO.new(content)
+        return parse_json(content)
+      end
+
+      nil
     end
 
     def extract_status_from_exception(e)
