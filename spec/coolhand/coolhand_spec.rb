@@ -209,6 +209,46 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe "base_url config" do
+    it "defaults to https://coolhandlabs.com/api" do
+      expect(Coolhand::Configuration.new.base_url).to eq("https://coolhandlabs.com/api")
+    end
+
+    it "accepts a custom https URL" do
+      config.base_url = "https://my-server.example.com/api"
+      expect(config.base_url).to eq("https://my-server.example.com/api")
+    end
+
+    it "strips trailing slash on assignment" do
+      config.base_url = "https://my-server.example.com/api/"
+      expect(config.base_url).to eq("https://my-server.example.com/api")
+    end
+
+    it "raises on http:// non-localhost URL" do
+      config.api_key = "key"
+      config.base_url = "http://remote.example.com/api"
+      expect { config.validate! }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "allows http://localhost" do
+      config.api_key = "key"
+      config.base_url = "http://localhost:3000/api"
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "allows http://127.0.0.1" do
+      config.api_key = "key"
+      config.base_url = "http://127.0.0.1:3000/api"
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "rejects http://0.0.0.0" do
+      config.api_key = "key"
+      config.base_url = "http://0.0.0.0:3000/api"
+      expect { config.validate! }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+  end
+
   describe ".required_field?" do
     it "returns true for valid values" do
       expect(Coolhand.required_field?("valid")).to be true

@@ -56,6 +56,21 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "custom base_url routing" do
+    before do
+      Coolhand.configuration.base_url = "https://my-server.example.com/api"
+      stub_request(:post, "https://my-server.example.com/api/v2/llm_request_logs")
+        .to_return(status: 200, body: JSON.generate({ id: 99 }),
+          headers: { "Content-Type" => "application/json" })
+    end
+
+    it "sends the request to the custom base_url" do
+      service = described_class.new
+      service.send_llm_request_log({ raw_request: { url: "https://api.openai.com" } })
+      expect(WebMock).to have_requested(:post, "https://my-server.example.com/api/v2/llm_request_logs")
+    end
+  end
+
   describe "debug_mode with create_feedback" do
     let(:service) { Coolhand::FeedbackService.new }
     let(:feedback) do

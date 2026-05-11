@@ -9,8 +9,8 @@ module Coolhand
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
-    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture, :exclude_api_patterns
-    attr_reader :intercept_addresses
+    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns
+    attr_reader :intercept_addresses, :base_url
 
     def initialize
       # Set defaults
@@ -24,6 +24,10 @@ module Coolhand
       @debug_mode = false
       @capture = true
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
+    end
+
+    def base_url=(value)
+      @base_url = value&.chomp("/")
     end
 
     # Custom setter that preserves defaults when nil/empty array is provided
@@ -45,6 +49,21 @@ module Coolhand
         Coolhand.log "❌ Coolhand Error: Intercept addresses cannot be empty. Please set it in the configuration."
         raise Error, "Intercept addresses cannot be empty"
       end
+
+      validate_base_url!
+    end
+
+    private
+
+    # Allows https:// for any host, and http:// only for loopback (localhost / 127.0.0.1).
+    # Other plain-http targets (0.0.0.0, host.docker.internal, remote hosts) are intentionally
+    # excluded — use a self-signed cert + https:// for those environments.
+    def validate_base_url!
+      return if base_url.nil?
+      return if base_url.start_with?("https://")
+      return if base_url.match?(%r{\Ahttp://(localhost|127\.0\.0\.1)(:\d+)?(/|\z)})
+
+      raise Error, "base_url must use https:// (http:// is only allowed for localhost / 127.0.0.1)"
     end
   end
 end
