@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### ✨ New Features
+- **`config.base_url`** - Configurable API destination for self-hosted deployments. Defaults to `https://coolhandlabs.com/api`; set to any `https://` URL to redirect logs and feedback POSTs to your own backend. `http://localhost` and `http://127.0.0.1` are also accepted for local development. Trailing slashes are normalized automatically.
+
+### 💔 Breaking Changes
+- **`config.base_url` validation** - `Coolhand.configure` now raises `Coolhand::Error` if `base_url` is set to a plain `http://` URL (non-localhost). Previously any string was accepted silently. If you were pointing at an internal `http://` host (e.g. `http://logs.internal/api`), you will need to either enable TLS on that host or use an `https://` proxy in front of it.
 
 ## [0.3.0] - 2026-03-01
 

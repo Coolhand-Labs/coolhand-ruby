@@ -12,6 +12,20 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "custom base_url" do
+    it "uses the configured base_url to build api_endpoint" do
+      Coolhand.configuration.base_url = "https://self-hosted.example.com/api"
+      service = described_class.new
+      expect(service.api_endpoint).to eq("https://self-hosted.example.com/api/v2/llm_request_logs")
+    end
+
+    it "strips trailing slash when building api_endpoint" do
+      Coolhand.configuration.base_url = "https://self-hosted.example.com/api/"
+      service = described_class.new
+      expect(service.api_endpoint).to eq("https://self-hosted.example.com/api/v2/llm_request_logs")
+    end
+  end
+
   describe "debug_mode with send_llm_request_log" do
     let(:service) { described_class.new }
     let(:request_data) do
