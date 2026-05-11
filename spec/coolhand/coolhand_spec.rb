@@ -104,12 +104,13 @@ RSpec.describe Coolhand do
   end
 
   describe "base_url config" do
+    before { allow(Coolhand::NetHttpInterceptor).to receive(:patch!) }
+
     it "defaults to https://coolhandlabs.com/api" do
       expect(config.base_url).to eq("https://coolhandlabs.com/api")
     end
 
     it "accepts a custom https:// URL" do
-      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "test-key"
         c.silent = true
@@ -119,7 +120,6 @@ RSpec.describe Coolhand do
     end
 
     it "accepts http://localhost for local dev" do
-      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "test-key"
         c.silent = true
@@ -129,7 +129,6 @@ RSpec.describe Coolhand do
     end
 
     it "accepts http://127.0.0.1 for local dev" do
-      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
       Coolhand.configure do |c|
         c.api_key = "test-key"
         c.silent = true

@@ -24,6 +24,23 @@ RSpec.describe Coolhand::ApiService do
       service = described_class.new
       expect(service.api_endpoint).to eq("https://self-hosted.example.com/api/v2/llm_request_logs")
     end
+
+    it "sends the HTTP request to the custom host, not the default" do
+      Coolhand.configuration.base_url = "https://self-hosted.example.com/api"
+      stub_request(:post, "https://self-hosted.example.com/api/v2/llm_request_logs")
+        .to_return(status: 200, body: JSON.generate({ id: 99 }), headers: { "Content-Type" => "application/json" })
+
+      described_class.new.send_llm_request_log(
+        method: "POST",
+        url: "https://api.openai.com/v1/chat/completions",
+        request_body: {},
+        response_body: {},
+        status_code: 200
+      )
+
+      expect(WebMock).to have_requested(:post, "https://self-hosted.example.com/api/v2/llm_request_logs")
+      expect(WebMock).not_to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+    end
   end
 
   describe "debug_mode with send_llm_request_log" do
