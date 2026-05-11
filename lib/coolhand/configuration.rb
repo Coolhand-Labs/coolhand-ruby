@@ -35,7 +35,7 @@ module Coolhand
     end
 
     def base_url=(value)
-      @base_url = value&.sub(/\/+\z/, "")
+      @base_url = value&.sub(%r{/+\z}, "")
     end
 
     def validate!
@@ -52,8 +52,9 @@ module Coolhand
       end
 
       unless valid_base_url?(base_url)
-        Coolhand.log "❌ Coolhand Error: base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)."
-        raise Error, "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
+        msg = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
+        Coolhand.log "❌ Coolhand Error: #{msg}"
+        raise Error, msg
       end
     end
 
@@ -65,7 +66,7 @@ module Coolhand
       parsed = URI.parse(url)
       return true if parsed.scheme == "https"
 
-      parsed.scheme == "http" && (parsed.host == "localhost" || parsed.host == "127.0.0.1")
+      parsed.scheme == "http" && %w[localhost 127.0.0.1].include?(parsed.host)
     rescue URI::InvalidURIError
       false
     end
