@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "yaml"
+require "uri"
 
 module Coolhand
   # Handles all configuration settings for the gem.
@@ -9,8 +10,11 @@ module Coolhand
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
-    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture, :exclude_api_patterns
-    attr_reader :intercept_addresses
+    BASE_URL_ERROR_MSG = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
+    LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
+
+    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns
+    attr_reader :intercept_addresses, :base_url
 
     def initialize
       # Set defaults
@@ -20,7 +24,7 @@ module Coolhand
       @intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.elevenlabs.io",
                               "generativelanguage.googleapis.com",
                               ":generateContent", ":streamGenerateContent"]
-      @base_url = "https://coolhandlabs.com/api"
+      self.base_url = "https://coolhandlabs.com/api"
       @debug_mode = false
       @capture = true
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
@@ -31,6 +35,13 @@ module Coolhand
       return if value.nil? || (value.is_a?(Array) && value.empty?)
 
       @intercept_addresses = value.is_a?(Array) ? value : [value]
+    end
+
+    def base_url=(value)
+      stripped = value&.sub(%r{/+\z}, "")
+      raise Error, BASE_URL_ERROR_MSG unless stripped.nil? || valid_base_url?(stripped)
+
+      @base_url = stripped
     end
 
     def validate!
@@ -45,6 +56,27 @@ module Coolhand
         Coolhand.log "❌ Coolhand Error: Intercept addresses cannot be empty. Please set it in the configuration."
         raise Error, "Intercept addresses cannot be empty"
       end
+
+      unless valid_base_url?(base_url)
+        Coolhand.log "❌ Coolhand Error: #{BASE_URL_ERROR_MSG}"
+        raise Error, BASE_URL_ERROR_MSG
+      end
+    end
+
+    private
+
+    def valid_base_url?(url)
+      return false if url.nil? || url.empty?
+
+      parsed = URI.parse(url)
+      host = parsed.hostname&.downcase
+
+      return false if host.nil? || host.empty?
+      return true if parsed.scheme == "https"
+
+      parsed.scheme == "http" && LOOPBACK_HOSTS.include?(host)
+    rescue URI::InvalidURIError
+      false
     end
   end
 end

@@ -103,6 +103,134 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe "base_url config" do
+    before { allow(Coolhand::NetHttpInterceptor).to receive(:patch!) }
+
+    it "defaults to https://coolhandlabs.com/api" do
+      expect(config.base_url).to eq("https://coolhandlabs.com/api")
+    end
+
+    it "accepts a custom https:// URL" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "https://self-hosted.example.com/api"
+      end
+      expect(config.base_url).to eq("https://self-hosted.example.com/api")
+    end
+
+    it "accepts http://localhost for local dev" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://localhost:3000/api"
+      end
+      expect(config.base_url).to eq("http://localhost:3000/api")
+    end
+
+    it "accepts http://127.0.0.1 for local dev" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://127.0.0.1:3000/api"
+      end
+      expect(config.base_url).to eq("http://127.0.0.1:3000/api")
+    end
+
+    it "raises an error for non-https, non-localhost URLs" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.base_url = "http://example.com/api"
+        end
+      end.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises an error for http://localhost-prefixed hostnames (security: exact host match)" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.base_url = "http://localhost.attacker.com/api"
+        end
+      end.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises an error for http://127.0.0.1-prefixed hostnames (security: exact host match)" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.base_url = "http://127.0.0.1.evil.com/api"
+        end
+      end.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises an error when base_url is set to nil" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.base_url = nil
+        end
+      end.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "strips trailing slashes" do
+      config.base_url = "https://self-hosted.example.com/api/"
+      expect(config.base_url).to eq("https://self-hosted.example.com/api")
+    end
+
+    it "strips multiple trailing slashes" do
+      config.base_url = "https://self-hosted.example.com/api///"
+      expect(config.base_url).to eq("https://self-hosted.example.com/api")
+    end
+
+    it "accepts mixed-case localhost (case-insensitive host match)" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://LOCALHOST:3000/api"
+      end
+      expect(config.base_url).to eq("http://LOCALHOST:3000/api")
+    end
+
+    it "accepts http://[::1] IPv6 loopback for local dev" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://[::1]:3000/api"
+      end
+      expect(config.base_url).to eq("http://[::1]:3000/api")
+    end
+
+    it "raises for https:// with no host" do
+      expect { config.base_url = "https://" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for https: with nil host" do
+      expect { config.base_url = "https:" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for an empty string" do
+      expect { config.base_url = "" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for a malformed URL (locks in URI::InvalidURIError rescue)" do
+      expect { config.base_url = "http://[bad" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for http://0.0.0.0 (loopback-looking but not a valid local-dev host)" do
+      expect { config.base_url = "http://0.0.0.0/api" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises immediately on direct setter assignment without configure (eager validation)" do
+      expect { Coolhand.configuration.base_url = "http://evil.com/api" }
+        .to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+  end
+
   describe ".without_capture" do
     it "sets thread-local override to false within the block" do
       Coolhand.without_capture do

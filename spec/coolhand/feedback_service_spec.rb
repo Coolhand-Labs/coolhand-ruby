@@ -22,6 +22,19 @@ RSpec.describe Coolhand::FeedbackService do
     it "configures with production endpoint" do
       expect(service.api_endpoint).to eq("https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
     end
+
+    it "uses configuration.base_url for its endpoint" do
+      custom_config = instance_double(Coolhand::Configuration,
+        api_key: "test-api-key",
+        base_url: "https://self-hosted.example.com/api",
+        silent: true,
+        environment: "production",
+        debug_mode: false)
+      allow(Coolhand).to receive(:configuration).and_return(custom_config)
+      expect(described_class.new.api_endpoint).to eq(
+        "https://self-hosted.example.com/api/v2/llm_request_log_feedbacks"
+      )
+    end
   end
 
   describe "#create_feedback" do
