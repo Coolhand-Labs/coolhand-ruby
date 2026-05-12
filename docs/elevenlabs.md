@@ -214,7 +214,7 @@ class TranscriptsController < ApplicationController
       if feedback_data
         # Submit feedback to Coolhand using llm_provider_unique_id for matching
         coolhand_feedback = {
-          like: feedback_data[:feedback_rating],
+          sentiment: feedback_data[:feedback_rating],
           explanation: feedback_data[:feedback_text],
           llm_provider_unique_id: conversation_id # Important: use this field for matching
         }
@@ -393,7 +393,7 @@ feedback = service.extract_feedback(response)
 
 # Test Coolhand submission
 coolhand_feedback = {
-  like: feedback[:feedback_rating],
+  sentiment: feedback[:feedback_rating],
   explanation: feedback[:feedback_text],
   llm_provider_unique_id: conversation_id
 }

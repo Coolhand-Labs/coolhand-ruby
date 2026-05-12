@@ -110,6 +110,26 @@ RSpec.describe Coolhand::FeedbackService do
           end)
       end
 
+      it "sends sentiment field in payload" do
+        service.create_feedback({ llm_request_log_id: 456, sentiment: "dislike" })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data["sentiment"]).to eq("dislike")
+          end)
+      end
+
+      it "sends workload_hashid field in payload" do
+        service.create_feedback({ llm_request_log_id: 456, workload_hashid: "abc123" })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data["workload_hashid"]).to eq("abc123")
+          end)
+      end
+
       it "includes collector field with manual method" do
         service.create_feedback(feedback)
 
@@ -180,6 +200,30 @@ RSpec.describe Coolhand::FeedbackService do
 
           expect { verbose_service.create_feedback(feedback) }
             .to output(/📝 CREATING FEEDBACK/).to_stdout
+        end
+
+        it "logs sentiment when present" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.create_feedback({ llm_request_log_id: 456, sentiment: "like" }) }
+            .to output(/Sentiment: like/).to_stdout
+        end
+
+        it "logs like with deprecation notice when sentiment is absent" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.create_feedback({ llm_request_log_id: 456, like: true }) }
+            .to output(/deprecated: use sentiment instead/).to_stdout
+        end
+
+        it "logs workload_hashid when present" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.create_feedback({ llm_request_log_id: 456, workload_hashid: "abc123" }) }
+            .to output(/Workload: abc123/).to_stdout
         end
 
         it "truncates long explanations in logs" do

@@ -231,7 +231,14 @@ module Coolhand
         puts "\n📝 CREATING FEEDBACK"
       end
 
-      puts "👍/👎 Like: #{feedback[:like]}"
+      if feedback[:sentiment]
+        puts "💬 Sentiment: #{feedback[:sentiment]}"
+      elsif !feedback[:like].nil?
+        # like is deprecated — use sentiment instead
+        puts "👍/👎 Like: #{feedback[:like]} (deprecated: use sentiment instead)"
+      end
+
+      puts "🔗 Workload: #{feedback[:workload_hashid]}" if feedback[:workload_hashid]
 
       if feedback[:explanation]
         explanation = feedback[:explanation]
