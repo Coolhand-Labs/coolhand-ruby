@@ -1,0 +1,15 @@
+# Coolhand default intercept addresses
+# These substrings are matched against request URLs to decide whether a request
+# should be captured and forwarded as an llm_request_log.
+#
+# Users can extend defaults:   c.intercept_addresses << "my.custom.api.com"
+# Users can override entirely: c.intercept_addresses = ["only.this.com"]
+
+- "api.openai.com"
+- "api.anthropic.com"
+- "api.elevenlabs.io"
+- "generativelanguage.googleapis.com"
+- "models.github.ai"
+- "models.inference.ai.azure.com"
+- ":generateContent"
+- ":streamGenerateContent"

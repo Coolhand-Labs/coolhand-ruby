@@ -10,6 +10,10 @@ module Coolhand
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
+    DEFAULT_INTERCEPT_ADDRESSES = YAML.load_file(
+      File.join(__dir__, "default_intercept_addresses.yml")
+    ).freeze
+
     BASE_URL_ERROR_MSG = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
     LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
 
@@ -21,9 +25,7 @@ module Coolhand
       @environment = "production"
       @api_key = nil
       @silent = false
-      @intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.elevenlabs.io",
-                              "generativelanguage.googleapis.com",
-                              ":generateContent", ":streamGenerateContent"]
+      @intercept_addresses = DEFAULT_INTERCEPT_ADDRESSES.dup
       self.base_url = "https://coolhandlabs.com/api"
       @debug_mode = false
       @capture = true
