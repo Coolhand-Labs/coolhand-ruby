@@ -35,7 +35,7 @@ module Coolhand
     end
 
     def base_url=(value)
-      @base_url = value.to_s.gsub(/\/+\z/, "")
+      @base_url = value.to_s.gsub(%r{/+\z}, "")
     end
 
     def validate!
@@ -54,9 +54,9 @@ module Coolhand
       validate_base_url!
     end
 
-    private
-
     LOCAL_HOSTS = %w[localhost 127.0.0.1 [::1]].freeze
+
+    private
 
     def validate_base_url!
       url = base_url.to_s

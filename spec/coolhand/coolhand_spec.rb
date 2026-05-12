@@ -146,7 +146,7 @@ RSpec.describe Coolhand do
           c.silent = true
           c.base_url = "http://my-self-hosted.example.com/api"
         end
-      end.to raise_error(Coolhand::Error, /base_url must use https:\/\//)
+      end.to raise_error(Coolhand::Error, %r{base_url must use https://})
     end
 
     it "allows http://localhost for local development" do
