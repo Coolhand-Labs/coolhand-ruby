@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ New Features
 
+- **`config.base_url` validation for self-hosted deployments** — `base_url` now enforces `https://` by default; `http://localhost` and `http://127.0.0.1` are explicitly allowed for local development. Non-compliant schemes (e.g. plain `http://` to an external host) raise `Coolhand::Error` immediately at assignment. Trailing slashes are stripped automatically so appending the v2 path never produces double-slash URLs.
+
 ## [0.3.0] - 2026-03-01
 
 ### 🚀 Major Changes

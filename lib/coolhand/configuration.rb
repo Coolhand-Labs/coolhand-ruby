@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "uri"
 require "yaml"
 
 module Coolhand
@@ -9,8 +10,8 @@ module Coolhand
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
-    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture, :exclude_api_patterns
-    attr_reader :intercept_addresses
+    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns
+    attr_reader :intercept_addresses, :base_url
 
     def initialize
       # Set defaults
@@ -31,6 +32,22 @@ module Coolhand
       return if value.nil? || (value.is_a?(Array) && value.empty?)
 
       @intercept_addresses = value.is_a?(Array) ? value : [value]
+    end
+
+    def base_url=(value)
+      return if value.nil?
+
+      normalized = value.to_s.sub(%r{/+\z}, "")
+      uri = URI.parse(normalized)
+
+      allowed = uri.scheme == "https" ||
+                (uri.scheme == "http" && ["localhost", "127.0.0.1"].include?(uri.host))
+
+      raise Error, "base_url must use https:// (use http://localhost or http://127.0.0.1 for local dev)" unless allowed
+
+      @base_url = normalized
+    rescue URI::InvalidURIError
+      raise Error, "base_url is not a valid URL: #{value.inspect}"
     end
 
     def validate!

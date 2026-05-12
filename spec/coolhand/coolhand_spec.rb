@@ -92,6 +92,52 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe "base_url config" do
+    it "defaults to https://coolhandlabs.com/api" do
+      expect(config.base_url).to eq("https://coolhandlabs.com/api")
+    end
+
+    it "accepts a valid https URL" do
+      config.base_url = "https://self-hosted.example.com/api"
+      expect(config.base_url).to eq("https://self-hosted.example.com/api")
+    end
+
+    it "strips a trailing slash" do
+      config.base_url = "https://self-hosted.example.com/api/"
+      expect(config.base_url).to eq("https://self-hosted.example.com/api")
+    end
+
+    it "strips multiple trailing slashes" do
+      config.base_url = "https://self-hosted.example.com/api///"
+      expect(config.base_url).to eq("https://self-hosted.example.com/api")
+    end
+
+    it "allows http://localhost for local development" do
+      config.base_url = "http://localhost:3000/api"
+      expect(config.base_url).to eq("http://localhost:3000/api")
+    end
+
+    it "allows http://127.0.0.1 for local development" do
+      config.base_url = "http://127.0.0.1:3000/api"
+      expect(config.base_url).to eq("http://127.0.0.1:3000/api")
+    end
+
+    it "rejects a plain http:// external URL" do
+      expect { config.base_url = "http://self-hosted.example.com/api" }
+        .to raise_error(Coolhand::Error, /https/)
+    end
+
+    it "rejects an invalid URL string" do
+      expect { config.base_url = "not a url" }
+        .to raise_error(Coolhand::Error)
+    end
+
+    it "preserves the default when set to nil" do
+      config.base_url = nil
+      expect(config.base_url).to eq("https://coolhandlabs.com/api")
+    end
+  end
+
   describe "capture config" do
     it "defaults to true" do
       expect(config.capture).to be true

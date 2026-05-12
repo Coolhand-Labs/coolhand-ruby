@@ -12,6 +12,21 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "custom base_url" do
+    let(:service) { described_class.new }
+
+    before do
+      Coolhand.configuration.base_url = "https://self-hosted.example.com/api"
+      stub_request(:post, "https://self-hosted.example.com/api/v2/llm_request_logs")
+        .to_return(status: 200, body: JSON.generate({ id: 1 }), headers: { "Content-Type" => "application/json" })
+    end
+
+    it "posts to the configured base_url" do
+      service.send_llm_request_log({ raw_request: {} })
+      expect(WebMock).to have_requested(:post, "https://self-hosted.example.com/api/v2/llm_request_logs")
+    end
+  end
+
   describe "debug_mode with send_llm_request_log" do
     let(:service) { described_class.new }
     let(:request_data) do
