@@ -103,6 +103,103 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe "base_url config" do
+    it "defaults to https://coolhandlabs.com/api" do
+      fresh_config = Coolhand::Configuration.new
+      expect(fresh_config.base_url).to eq("https://coolhandlabs.com/api")
+    end
+
+    it "accepts a custom https URL" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "https://my-self-hosted.example.com/api"
+      end
+      expect(Coolhand.configuration.base_url).to eq("https://my-self-hosted.example.com/api")
+    end
+
+    it "strips a single trailing slash from base_url" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "https://my-self-hosted.example.com/api/"
+      end
+      expect(Coolhand.configuration.base_url).to eq("https://my-self-hosted.example.com/api")
+    end
+
+    it "strips multiple trailing slashes from base_url" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "https://my-self-hosted.example.com/api//"
+      end
+      expect(Coolhand.configuration.base_url).to eq("https://my-self-hosted.example.com/api")
+    end
+
+    it "rejects a non-local http:// URL" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.base_url = "http://my-self-hosted.example.com/api"
+        end
+      end.to raise_error(Coolhand::Error, /base_url must use https:\/\//)
+    end
+
+    it "allows http://localhost for local development" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://localhost:3000/api"
+      end
+      expect(Coolhand.configuration.base_url).to eq("http://localhost:3000/api")
+    end
+
+    it "allows http://127.0.0.1 for local development" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://127.0.0.1:3000/api"
+      end
+      expect(Coolhand.configuration.base_url).to eq("http://127.0.0.1:3000/api")
+    end
+
+    it "allows http://::1 (IPv6 loopback) for local development" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://[::1]:3000/api"
+      end
+      expect(Coolhand.configuration.base_url).to eq("http://[::1]:3000/api")
+    end
+
+    it "allows http://LOCALHOST with mixed case" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://LOCALHOST:3000/api"
+      end
+      expect(Coolhand.configuration.base_url).to eq("http://LOCALHOST:3000/api")
+    end
+
+    it "rejects a malformed http:// URL" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.base_url = "http://[bad"
+        end
+      end.to raise_error(Coolhand::Error, /base_url is not a valid URL/)
+    end
+  end
+
   describe ".without_capture" do
     it "sets thread-local override to false within the block" do
       Coolhand.without_capture do

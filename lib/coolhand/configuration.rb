@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "uri"
 require "yaml"
 
 module Coolhand
@@ -9,8 +10,8 @@ module Coolhand
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
-    attr_accessor :api_key, :environment, :silent, :base_url, :debug_mode, :capture, :exclude_api_patterns
-    attr_reader :intercept_addresses
+    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns
+    attr_reader :intercept_addresses, :base_url
 
     def initialize
       # Set defaults
@@ -33,6 +34,10 @@ module Coolhand
       @intercept_addresses = value.is_a?(Array) ? value : [value]
     end
 
+    def base_url=(value)
+      @base_url = value.to_s.gsub(/\/+\z/, "")
+    end
+
     def validate!
       # Validate API Key after configuration
       if api_key.nil?
@@ -45,6 +50,33 @@ module Coolhand
         Coolhand.log "❌ Coolhand Error: Intercept addresses cannot be empty. Please set it in the configuration."
         raise Error, "Intercept addresses cannot be empty"
       end
+
+      validate_base_url!
+    end
+
+    private
+
+    LOCAL_HOSTS = %w[localhost 127.0.0.1 [::1]].freeze
+
+    def validate_base_url!
+      url = base_url.to_s
+      return if url.start_with?("https://")
+
+      if url.start_with?("http://")
+        host = begin
+          URI.parse(url).host.to_s.downcase
+        rescue URI::InvalidURIError
+          Coolhand.log "❌ Coolhand Error: base_url is not a valid URL. Got: #{url}"
+          raise Error, "base_url is not a valid URL"
+        end
+        return if LOCAL_HOSTS.include?(host)
+
+        Coolhand.log "❌ Coolhand Error: base_url must use https:// for non-local hosts. Got: #{url}"
+        raise Error, "base_url must use https:// for non-local hosts"
+      end
+
+      Coolhand.log "❌ Coolhand Error: base_url has an invalid scheme. Got: #{url}"
+      raise Error, "base_url has an invalid scheme"
     end
   end
 end

@@ -127,4 +127,35 @@ RSpec.describe Coolhand::ApiService do
       end
     end
   end
+
+  describe "custom base_url routing" do
+    let(:custom_base) { "https://my-self-hosted.example.com/api" }
+    let(:request_data) do
+      {
+        method: "POST",
+        url: "https://api.openai.com/v1/chat/completions",
+        request_body: { model: "gpt-4" },
+        response_body: { choices: [] },
+        status_code: 200
+      }
+    end
+
+    before do
+      Coolhand.configuration.base_url = custom_base
+      stub_request(:post, "#{custom_base}/v2/llm_request_logs")
+        .to_return(status: 200, body: JSON.generate({ id: 99 }), headers: { "Content-Type" => "application/json" })
+    end
+
+    it "sends requests to the custom base_url" do
+      service = described_class.new
+      service.send_llm_request_log(request_data)
+      expect(WebMock).to have_requested(:post, "#{custom_base}/v2/llm_request_logs")
+    end
+
+    it "does not send requests to the default base_url" do
+      service = described_class.new
+      service.send_llm_request_log(request_data)
+      expect(WebMock).not_to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+    end
+  end
 end

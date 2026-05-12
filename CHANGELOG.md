@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### ✨ New Features
+- **Configurable `base_url`** - `config.base_url` now accepts any `https://` URL to redirect log and feedback POSTs to a self-hosted endpoint. Defaults to `https://coolhandlabs.com/api` (behavior unchanged when unset). Trailing slashes are stripped automatically.
+
+### 💔 Breaking Changes
+- **`base_url` scheme validation** - `Coolhand.configure` now raises `Coolhand::Error` if `base_url` is set to a non-`https://` URL that is not a recognized loopback address (`localhost`, `127.0.0.1`, `::1`). Previously any URL was accepted silently. **Upgraders on internal `http://` endpoints** must either switch to `https://` or use a loopback address for local development.
 
 ## [0.3.0] - 2026-03-01
 
