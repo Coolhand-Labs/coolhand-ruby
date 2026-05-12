@@ -102,6 +102,7 @@ RSpec.describe Coolhand::FeedbackService do
 
             expect(feedback_data["llm_request_log_id"]).to eq(456)
             expect(feedback_data["like"]).to be(false)
+            expect(feedback_data["sentiment"]).to eq("dislike")
             expect(feedback_data["explanation"]).to eq("Poor response")
             expect(feedback_data["revised_output"]).to eq("Better response")
             expect(feedback_data["llm_provider_unique_id"]).to eq("provider-123")
@@ -127,6 +128,46 @@ RSpec.describe Coolhand::FeedbackService do
           .with do |req|
             feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
             expect(feedback_data["workload_hashid"]).to eq("abc123")
+          end)
+      end
+
+      it "converts like: true to sentiment: 'like'" do
+        service.create_feedback({ llm_request_log_id: 456, like: true })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data["sentiment"]).to eq("like")
+          end)
+      end
+
+      it "converts like: false to sentiment: 'dislike'" do
+        service.create_feedback({ llm_request_log_id: 456, like: false })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data["sentiment"]).to eq("dislike")
+          end)
+      end
+
+      it "does not convert like when sentiment is already set" do
+        service.create_feedback({ llm_request_log_id: 456, like: true, sentiment: "neutral" })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data["sentiment"]).to eq("neutral")
+          end)
+      end
+
+      it "does not add sentiment when like is omitted" do
+        service.create_feedback({ llm_request_log_id: 456, explanation: "Good" })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data).not_to have_key("sentiment")
           end)
       end
 
@@ -210,12 +251,12 @@ RSpec.describe Coolhand::FeedbackService do
             .to output(/Sentiment: like/).to_stdout
         end
 
-        it "logs like with deprecation notice when sentiment is absent" do
+        it "logs like: true as Sentiment: like after auto-conversion" do
           stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
 
           expect { verbose_service.create_feedback({ llm_request_log_id: 456, like: true }) }
-            .to output(/deprecated: use sentiment instead/).to_stdout
+            .to output(/Sentiment: like/).to_stdout
         end
 
         it "logs workload_hashid when present" do

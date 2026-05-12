@@ -103,8 +103,8 @@ feedback = feedback_service.create_feedback(
 ### Quality Data
 - **`revised_output`** ⭐ *Best Signal* - End user revision of the LLM response. The highest value data for improving quality scores.
 - **`explanation`** 💬 *Medium Signal* - End user explanation of why the response was good or bad. Valuable qualitative data.
-- **`sentiment`** 👍 *Low Signal* - String sentiment: `'like'`, `'dislike'`, or `'neutral'`. Preferred over `like`.
-- **`like`** 👍 *Low Signal* *(deprecated — use `sentiment` instead)* - Boolean like/dislike.
+- **`sentiment`** 🎭 *Preferred* - String sentiment: `'like'`, `'dislike'`, or `'neutral'`. Takes precedence over `like` if both are provided. The gem automatically converts `like` to `sentiment` before sending.
+- **`like`** 👍 *Low Signal (Deprecated)* - Boolean: `true` = like, `false` = dislike. Use `sentiment` instead. Conversion: `true` → `"like"`, `false` → `"dislike"`.
 - **`workload_hashid`** 🔗 *Workload Association* - Hashid of a workload to associate this feedback with.
 - **`creator_unique_id`** 👤 *User Tracking* - Unique ID to match feedback to the end user who created it
 
