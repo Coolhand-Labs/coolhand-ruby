@@ -101,7 +101,7 @@ RSpec.describe Coolhand::FeedbackService do
             feedback_data = body["llm_request_log_feedback"]
 
             expect(feedback_data["llm_request_log_id"]).to eq(456)
-            expect(feedback_data["like"]).to be(false)
+            expect(feedback_data).not_to have_key("like")
             expect(feedback_data["sentiment"]).to eq("dislike")
             expect(feedback_data["explanation"]).to eq("Poor response")
             expect(feedback_data["revised_output"]).to eq("Better response")
@@ -148,6 +148,16 @@ RSpec.describe Coolhand::FeedbackService do
           .with do |req|
             feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
             expect(feedback_data["sentiment"]).to eq("dislike")
+          end)
+      end
+
+      it "strips like from the payload after conversion" do
+        service.create_feedback({ llm_request_log_id: 456, like: true })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data).not_to have_key("like")
           end)
       end
 

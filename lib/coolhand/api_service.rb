@@ -224,7 +224,7 @@ module Coolhand
       return feedback if feedback[:sentiment] || feedback[:like].nil?
 
       sentiment = feedback[:like] ? "like" : "dislike"
-      feedback.merge(sentiment: sentiment)
+      feedback.except(:like).merge(sentiment: sentiment)
     end
 
     def log_feedback_info(feedback)
