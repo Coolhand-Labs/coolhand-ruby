@@ -213,11 +213,12 @@ class TranscriptsController < ApplicationController
 
       if feedback_data
         # Submit feedback to Coolhand using llm_provider_unique_id for matching
+        rating = feedback_data[:feedback_rating]
         coolhand_feedback = {
-          sentiment: feedback_data[:feedback_rating] ? "like" : "dislike",
+          sentiment: rating.nil? ? nil : (rating ? "like" : "dislike"),
           explanation: feedback_data[:feedback_text],
           llm_provider_unique_id: conversation_id # Important: use this field for matching
-        }
+        }.compact
 
         result = Coolhand.feedback_service.create_feedback(coolhand_feedback)
 
@@ -392,11 +393,12 @@ response = service.fetch_conversation(conversation_id)
 feedback = service.extract_feedback(response)
 
 # Test Coolhand submission
+rating = feedback[:feedback_rating]
 coolhand_feedback = {
-  sentiment: feedback[:feedback_rating] ? "like" : "dislike",
+  sentiment: rating.nil? ? nil : (rating ? "like" : "dislike"),
   explanation: feedback[:feedback_text],
   llm_provider_unique_id: conversation_id
-}
+}.compact
 result = Coolhand.feedback_service.create_feedback(coolhand_feedback)
 ```
 

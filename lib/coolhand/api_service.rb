@@ -221,7 +221,8 @@ module Coolhand
     end
 
     def normalize_feedback_sentiment(feedback)
-      return feedback if feedback[:sentiment] || feedback[:like].nil?
+      return feedback.except(:like) if feedback[:sentiment]
+      return feedback if feedback[:like].nil?
 
       sentiment = feedback[:like] ? "like" : "dislike"
       feedback.except(:like).merge(sentiment: sentiment)

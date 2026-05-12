@@ -161,13 +161,14 @@ RSpec.describe Coolhand::FeedbackService do
           end)
       end
 
-      it "does not convert like when sentiment is already set" do
+      it "does not convert like when sentiment is already set, and strips like from payload" do
         service.create_feedback({ llm_request_log_id: 456, like: true, sentiment: "neutral" })
 
         expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
           .with do |req|
             feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
             expect(feedback_data["sentiment"]).to eq("neutral")
+            expect(feedback_data).not_to have_key("like")
           end)
       end
 
