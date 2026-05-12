@@ -10,6 +10,9 @@ module Coolhand
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
+    BASE_URL_ERROR_MSG = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
+    LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
+
     attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns
     attr_reader :intercept_addresses, :base_url
 
@@ -35,7 +38,10 @@ module Coolhand
     end
 
     def base_url=(value)
-      @base_url = value&.sub(%r{/+\z}, "")
+      stripped = value&.sub(%r{/+\z}, "")
+      raise Error, BASE_URL_ERROR_MSG unless stripped.nil? || valid_base_url?(stripped)
+
+      @base_url = stripped
     end
 
     def validate!
@@ -52,9 +58,8 @@ module Coolhand
       end
 
       unless valid_base_url?(base_url)
-        msg = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
-        Coolhand.log "❌ Coolhand Error: #{msg}"
-        raise Error, msg
+        Coolhand.log "❌ Coolhand Error: #{BASE_URL_ERROR_MSG}"
+        raise Error, BASE_URL_ERROR_MSG
       end
     end
 
@@ -64,9 +69,12 @@ module Coolhand
       return false if url.nil? || url.empty?
 
       parsed = URI.parse(url)
+      host = parsed.hostname&.downcase
+
+      return false if host.nil? || host.empty?
       return true if parsed.scheme == "https"
 
-      parsed.scheme == "http" && %w[localhost 127.0.0.1].include?(parsed.host)
+      parsed.scheme == "http" && LOOPBACK_HOSTS.include?(host)
     rescue URI::InvalidURIError
       false
     end

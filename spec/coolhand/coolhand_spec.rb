@@ -186,6 +186,49 @@ RSpec.describe Coolhand do
       config.base_url = "https://self-hosted.example.com/api///"
       expect(config.base_url).to eq("https://self-hosted.example.com/api")
     end
+
+    it "accepts mixed-case localhost (case-insensitive host match)" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://LOCALHOST:3000/api"
+      end
+      expect(config.base_url).to eq("http://LOCALHOST:3000/api")
+    end
+
+    it "accepts http://[::1] IPv6 loopback for local dev" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.base_url = "http://[::1]:3000/api"
+      end
+      expect(config.base_url).to eq("http://[::1]:3000/api")
+    end
+
+    it "raises for https:// with no host" do
+      expect { config.base_url = "https://" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for https: with nil host" do
+      expect { config.base_url = "https:" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for an empty string" do
+      expect { config.base_url = "" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for a malformed URL (locks in URI::InvalidURIError rescue)" do
+      expect { config.base_url = "http://[bad" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises for http://0.0.0.0 (loopback-looking but not a valid local-dev host)" do
+      expect { config.base_url = "http://0.0.0.0/api" }.to raise_error(Coolhand::Error, /base_url must use https/)
+    end
+
+    it "raises immediately on direct setter assignment without configure (eager validation)" do
+      expect { Coolhand.configuration.base_url = "http://evil.com/api" }
+        .to raise_error(Coolhand::Error, /base_url must use https/)
+    end
   end
 
   describe ".without_capture" do
