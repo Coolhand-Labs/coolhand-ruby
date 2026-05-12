@@ -38,12 +38,7 @@ RSpec.describe Coolhand do
         end
       end.not_to raise_error
 
-      expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com",
-                                                                "api.anthropic.com",
-                                                                "api.elevenlabs.io",
-                                                                "generativelanguage.googleapis.com",
-                                                                ":generateContent",
-                                                                ":streamGenerateContent"])
+      expect(Coolhand.configuration.intercept_addresses).to eq(Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES)
     end
 
     it "calls Interceptor.patch!" do
@@ -55,12 +50,7 @@ RSpec.describe Coolhand do
         c.intercept_addresses = []
       end
 
-      expect(Coolhand.configuration.intercept_addresses).to eq(["api.openai.com",
-                                                                "api.anthropic.com",
-                                                                "api.elevenlabs.io",
-                                                                "generativelanguage.googleapis.com",
-                                                                ":generateContent",
-                                                                ":streamGenerateContent"])
+      expect(Coolhand.configuration.intercept_addresses).to eq(Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES)
     end
 
     it "allows custom intercept_addresses to be set" do

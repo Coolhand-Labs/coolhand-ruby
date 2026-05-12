@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### ✨ New Features
+- **GitHub Models API** - `models.github.ai` (current endpoint) and `models.inference.ai.azure.com` (deprecated endpoint) added to default `intercept_addresses`; calls routed through GitHub Copilot credentials are now captured automatically without manual configuration. Default intercept addresses are also now loaded from `default_intercept_addresses.yml` to make future additions a single-line YAML change.
 - **`config.base_url`** - Configurable API destination for self-hosted deployments. Defaults to `https://coolhandlabs.com/api`; set to any `https://` URL to redirect logs and feedback POSTs to your own backend. `http://localhost` and `http://127.0.0.1` are also accepted for local development. Trailing slashes are normalized automatically.
 
 ### 💔 Breaking Changes
