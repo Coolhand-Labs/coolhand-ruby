@@ -88,7 +88,7 @@ feedback = feedback_service.create_feedback(
   original_output: 'Here is the original LLM response!',
   revised_output: 'Here is the human edit of the original LLM response.',
   explanation: 'Tone of the original response read like AI-generated open source README docs',
-  like: true
+  sentiment: 'dislike'
 )
 ```
 
@@ -103,7 +103,9 @@ feedback = feedback_service.create_feedback(
 ### Quality Data
 - **`revised_output`** ⭐ *Best Signal* - End user revision of the LLM response. The highest value data for improving quality scores.
 - **`explanation`** 💬 *Medium Signal* - End user explanation of why the response was good or bad. Valuable qualitative data.
-- **`like`** 👍 *Low Signal* - Boolean like/dislike. Lower quality signal but easy for users to provide.
+- **`sentiment`** 🎭 *Preferred* - String sentiment: `'like'`, `'dislike'`, or `'neutral'`. Takes precedence over `like` if both are provided. The gem automatically converts `like` to `sentiment` before sending.
+- **`like`** 👍 *Low Signal (Deprecated)* - Boolean: `true` = like, `false` = dislike. Use `sentiment` instead. Conversion: `true` → `"like"`, `false` → `"dislike"`.
+- **`workload_hashid`** 🔗 *Workload Association* - Hashid of a workload to associate this feedback with.
 - **`creator_unique_id`** 👤 *User Tracking* - Unique ID to match feedback to the end user who created it
 
 ## Rails Integration
@@ -141,7 +143,7 @@ class ChatController < ApplicationController
       original_output: params[:original_response],
       revised_output: params[:edited_response],
       explanation: params[:feedback_text],
-      like: params[:thumbs_up]
+      sentiment: params[:sentiment]
     )
 
     if feedback
@@ -165,7 +167,7 @@ class FeedbackCollectionJob < ApplicationJob
       creator_unique_id: feedback_data[:user_id],
       original_output: feedback_data[:original],
       explanation: feedback_data[:reason],
-      like: feedback_data[:positive]
+      sentiment: feedback_data[:sentiment]
     )
   end
 end

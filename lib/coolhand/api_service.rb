@@ -117,13 +117,14 @@ module Coolhand
     end
 
     def create_feedback(feedback, collection_method = nil)
-      feedback_with_collector = add_collector_to_data(feedback, collection_method)
+      normalized = normalize_feedback_sentiment(feedback)
+      feedback_with_collector = add_collector_to_data(normalized, collection_method)
 
       payload = {
         llm_request_log_feedback: feedback_with_collector
       }
 
-      log_feedback_info(feedback)
+      log_feedback_info(normalized)
 
       if debug_mode?
         log_separator
@@ -219,6 +220,14 @@ module Coolhand
       obj
     end
 
+    def normalize_feedback_sentiment(feedback)
+      return feedback.except(:like) if feedback[:sentiment]
+      return feedback if feedback[:like].nil?
+
+      sentiment = feedback[:like] ? "like" : "dislike"
+      feedback.except(:like).merge(sentiment: sentiment)
+    end
+
     def log_feedback_info(feedback)
       return if silent
 
@@ -231,7 +240,9 @@ module Coolhand
         puts "\n📝 CREATING FEEDBACK"
       end
 
-      puts "👍/👎 Like: #{feedback[:like]}"
+      puts "💬 Sentiment: #{feedback[:sentiment]}" if feedback[:sentiment]
+
+      puts "🔗 Workload: #{feedback[:workload_hashid]}" if feedback[:workload_hashid]
 
       if feedback[:explanation]
         explanation = feedback[:explanation]

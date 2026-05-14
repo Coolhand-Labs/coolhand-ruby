@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ✨ New Features
 - **GitHub Models API** - `models.github.ai` (current endpoint) and `models.inference.ai.azure.com` (deprecated endpoint) added to default `intercept_addresses`; calls routed through GitHub Copilot credentials are now captured automatically without manual configuration. Default intercept addresses are also now loaded from `default_intercept_addresses.yml` to make future additions a single-line YAML change.
 - **`config.base_url`** - Configurable API destination for self-hosted deployments. Defaults to `https://coolhandlabs.com/api`; set to any `https://` URL to redirect logs and feedback POSTs to your own backend. `http://localhost` and `http://127.0.0.1` are also accepted for local development. Trailing slashes are normalized automatically.
+- **Feedback `sentiment` field** - New string field for feedback: `'like'`, `'dislike'`, or `'neutral'`. Preferred over the boolean `like` field for richer signal.
+- **Feedback `workload_hashid` field** - New string field to associate feedback with a specific workload.
+
+### 🚫 Deprecated
+- **Feedback `like` field** - The boolean `like` field is deprecated. Use `sentiment: 'like'` or `sentiment: 'dislike'` instead.
 
 ### 💔 Breaking Changes
 - **`config.base_url` validation** - `Coolhand.configure` now raises `Coolhand::Error` if `base_url` is set to a plain `http://` URL (non-localhost). Previously any string was accepted silently. If you were pointing at an internal `http://` host (e.g. `http://logs.internal/api`), you will need to either enable TLS on that host or use an `https://` proxy in front of it.

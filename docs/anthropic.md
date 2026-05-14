@@ -362,7 +362,7 @@ puts "Logged to Coolhand with ID: #{request_id}"
 feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
 feedback_service.create_feedback(
   llm_request_log_id: request_id,
-  like: true,
+  sentiment: "like",
   explanation: "Great response quality"
 )
 ```
