@@ -380,7 +380,7 @@ Coolhand.configure do |config|
 end
 
 # Now you'll see console output like:
-# "✅ Coolhand ready - will log OpenAI and Anthropic (official gem) calls"
+# "✅ Coolhand ready - will log inference calls on monitored URIs"
 # "COOLHAND: ⚠️ Warning: Both 'anthropic' and 'ruby-anthropic' gems are installed..."
 ```
 
