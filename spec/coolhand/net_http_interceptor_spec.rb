@@ -76,6 +76,26 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(resp_body).not_to be_nil
   end
 
+  it "does not emit a JSON BINARY encoding warning when streaming multi-byte UTF-8 content" do
+    multibyte_body = "{\"text\":\"こんにちは世界\"}".b
+    stub_request(:post, "https://api.test.com/stream")
+      .to_return(status: 200, body: multibyte_body, headers: { "Content-Type" => "application/json" })
+
+    uri = URI("https://api.test.com/stream")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.body = "{\"messages\":[]}"
+
+    chunks = []
+    expect do
+      http.request(req) do |res|
+        res.read_body { |chunk| chunks << chunk }
+      end
+      sleep 0.05
+    end.not_to output(/BINARY/).to_stderr
+  end
+
   describe "capture control" do
     before(:each) do
       stub_request(:get, "https://api.test.com/hello")

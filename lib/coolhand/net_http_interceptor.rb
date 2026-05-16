@@ -59,6 +59,7 @@ module Coolhand
       begin
         response = super
         body_content = Thread.current[:coolhand_stream_buffer] || response&.body
+        body_content = body_content.dup.force_encoding("UTF-8") if body_content.is_a?(String)
         status_code = response.respond_to?(:code) ? response.code.to_i : nil
         response_body = parse_json(body_content)
       rescue StandardError => e
