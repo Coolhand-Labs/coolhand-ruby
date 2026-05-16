@@ -41,18 +41,23 @@ module Coolhand
     def request(req, body = nil, &block)
       return super unless NetHttpInterceptor.patched?
 
+      active = (Thread.current[:coolhand_active_requests] ||= {}.compare_by_identity)
+      return super if active.key?(self)
+
       url = build_url_for_request(self, req)
       return super unless intercept?(url)
       return super unless should_capture?
 
+      # Capture body before setting the guard — if this raises we skip logging cleanly
+      # and the guard is never set, so there is no leak.
+      captured_body = capture_request_body(req, body)
+
+      active[self] = true
       start_time = Time.now
       request_id = SecureRandom.uuid
       response = nil
       status_code = nil
       response_body = nil
-
-      # Capture body before super — body_stream is consumed during send
-      captured_body = capture_request_body(req, body)
 
       Thread.current[:coolhand_stream_buffer] = nil
 
@@ -66,6 +71,7 @@ module Coolhand
         response_body = { "error" => { "class" => e.class.name, "message" => e.message } }
         raise
       ensure
+        active.delete(self)
         Thread.current[:coolhand_stream_buffer] = nil
         end_time = Time.now
         duration_ms = ((end_time - start_time) * 1000).round(2)
