@@ -125,7 +125,7 @@ Coolhand.configure do |config|
   config.silent = Rails.env.production?
 
   # Specify which LLM endpoints to intercept (array of strings)
-  # Optional - defaults to ["api.openai.com", "api.anthropic.com"]
+  # Optional - defaults to OpenAI, Anthropic, ElevenLabs, Google Gemini, and GitHub Models
   # config.intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.cohere.ai"]
 end
 ```
@@ -300,6 +300,7 @@ The monitor works with multiple transport layers and Ruby libraries:
 
 **Native HTTP libraries:**
 - Official Anthropic Ruby SDK (using Net::HTTP)
+- GitHub Models SDK / any client using `models.github.ai`
 - Any library using Net::HTTP directly
 
 **Universal Coverage**: Since most Ruby HTTP libraries use Net::HTTP under the hood, Coolhand's single interceptor provides comprehensive monitoring without needing library-specific integrations.
