@@ -5,21 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### ✨ New Features
-- **GitHub Models API** - `models.github.ai` (current endpoint) and `models.inference.ai.azure.com` (deprecated endpoint) added to default `intercept_addresses`; calls routed through GitHub Copilot credentials are now captured automatically without manual configuration. Default intercept addresses are also now loaded from `default_intercept_addresses.yml` to make future additions a single-line YAML change.
-- **`config.base_url`** - Configurable API destination for self-hosted deployments. Defaults to `https://coolhandlabs.com/api`; set to any `https://` URL to redirect logs and feedback POSTs to your own backend. `http://localhost` and `http://127.0.0.1` are also accepted for local development. Trailing slashes are normalized automatically.
-- **Feedback `sentiment` field** - New string field for feedback: `'like'`, `'dislike'`, or `'neutral'`. Preferred over the boolean `like` field for richer signal.
-- **Feedback `workload_hashid` field** - New string field to associate feedback with a specific workload.
-
-### 🚫 Deprecated
-- **Feedback `like` field** - The boolean `like` field is deprecated. Use `sentiment: 'like'` or `sentiment: 'dislike'` instead.
-
-### 💔 Breaking Changes
-- **`config.base_url` validation** - `Coolhand.configure` now raises `Coolhand::Error` if `base_url` is set to a plain `http://` URL (non-localhost). Previously any string was accepted silently. If you were pointing at an internal `http://` host (e.g. `http://logs.internal/api`), you will need to either enable TLS on that host or use an `https://` proxy in front of it.
-
-## [0.3.0] - 2026-03-01
+## [0.3.0] - 2026-05-14
 
 ### 🚀 Major Changes
 - **Unified Net::HTTP Interceptor** - Replaced dual interceptor architecture (Faraday + Anthropic) with a single `NetHttpInterceptor` that captures all HTTP traffic via `Module#prepend`
@@ -30,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **URL Query Parameter Sanitization** - New `sanitize_url` helper redacts sensitive query parameters (`key`, `api_key`, `apikey`, `token`, `access_token`, `secret`) before logging; protects API keys passed as URL params (common with Gemini's `?key=` pattern)
 
 ### ✨ New Features
+- **GitHub Models API** - `models.github.ai` (current endpoint) and `models.inference.ai.azure.com` (deprecated endpoint) added to default `intercept_addresses`; calls routed through GitHub Copilot credentials are now captured automatically without manual configuration. Default intercept addresses are loaded from `default_intercept_addresses.yml` to make future additions a single-line YAML change.
+- **`config.base_url`** - Configurable API destination for self-hosted deployments. Defaults to `https://coolhandlabs.com/api`; set to any `https://` URL to redirect logs and feedback POSTs to your own backend. `http://localhost` and `http://127.0.0.1` are also accepted for local development. Trailing slashes are normalized automatically.
+- **Feedback `sentiment` field** - New string field for feedback: `'like'`, `'dislike'`, or `'neutral'`. Preferred over the boolean `like` field for richer signal.
+- **Feedback `workload_hashid` field** - New string field to associate feedback with a specific workload.
 - **Batch Processing Support** - New `Coolhand::OpenAi::BatchResultProcessor` and `Coolhand::Vertex::BatchResultProcessor` for logging completed async batch jobs as individual `llm_request_log` entries
 - **OpenAI Webhook Validation** - New `Coolhand::OpenAi::WebhookValidator` verifies webhook signatures using HMAC-SHA256 with timing-safe comparison; lenient in development, strict in production/staging
 - **WebhookInterceptor Rails Module** - `Coolhand::WebhookInterceptor` mixin for Rails controllers to validate and dispatch OpenAI batch completion webhooks automatically
@@ -37,18 +27,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Thread-Safe Block Control** - `Coolhand.with_capture { }` and `Coolhand.without_capture { }` for scoped override of capture behavior within a block; uses thread-local storage
 - **Exclude API Patterns** - New `config.exclude_api_patterns` deny-list checked after the `intercept_addresses` allow-list; default excludes `["/batchPredictionJobs/"]` to suppress Vertex AI batch job management noise
 
+### 🚫 Deprecated
+- **Feedback `like` field** - The boolean `like` field is deprecated. Use `sentiment: 'like'` or `sentiment: 'dislike'` instead.
+
 ### 🏗️ Architecture Improvements
 - **Single Interceptor** - `NetHttpInterceptor` patches `Net::HTTP#request` and `Net::HTTPResponse#read_body`; removed ~1,400 lines of interceptor-specific code
 - **Thread-Safe Streaming** - Uses `Thread.current[:coolhand_stream_buffer]` for streaming response capture
 - **Capture Priority Hierarchy** - `debug_mode` (always capture) > thread-local override > global `capture` config
 
 ### 🐛 Bug Fixes
+- **Streaming Response Encoding** - Streamed response content is now force-encoded to UTF-8 before JSON parsing, eliminating noisy `BINARY` encoding warnings for multi-byte responses.
+- **Double-Capture with `Net::HTTP.new` Pattern** - Fixed double-logging when callers use `Net::HTTP.new(host, port).request(req)` without an explicit `start` block. The re-entry guard is now per-connection-object (using a `compare_by_identity` Hash) rather than a boolean thread-local, so independent requests on a different `Net::HTTP` instance inside a callback are still captured.
+- **Provider-Neutral Readiness Log** - Startup console message no longer names a single provider; it now reflects all monitored inference URIs.
 - **Interceptor No Longer Silently Drops Logs on HTTP Errors** - Wrapped `Net::HTTP#request` in `begin/rescue/ensure` so `send_complete_request_log` is always called even when the SDK raises an exception (e.g., `Anthropic::Errors::NotFoundError` on a 404). Status is extracted from the exception via `.status`, `.response.status`, or message parsing.
 
 ### 📦 Dependencies
 - Bumped `faraday` from 2.14.0 to 2.14.1
 
 ### 💔 Breaking Changes
+- **`config.base_url` validation** - `Coolhand.configure` now raises `Coolhand::Error` if `base_url` is set to a plain `http://` URL (non-localhost). Previously any string was accepted silently. If you were pointing at an internal `http://` host (e.g. `http://logs.internal/api`), you will need to either enable TLS on that host or use an `https://` proxy in front of it.
 - **Namespace Change** - `Coolhand::Ruby::*` references must be updated to `Coolhand::*`
 - **Removed Files** - `faraday_interceptor.rb` and `anthropic_interceptor.rb` replaced by `net_http_interceptor.rb`
 - **`environment` Config Behavior** - The `environment` attribute no longer controls whether requests are forwarded to the API. Use `config.debug_mode = true` instead if you previously relied on `environment: "development"` to suppress API calls.
@@ -57,7 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 1. Update gem dependency to `~> 0.3.0`
 2. Replace `Coolhand::Ruby::` with `Coolhand::` in all class references
 3. If using `environment: "development"` to prevent API calls, switch to `config.debug_mode = true`
-4. No other changes needed to `Coolhand.configure` blocks for basic usage
+4. If `config.base_url` was set to a plain `http://` (non-localhost) URL, switch to `https://` or use an `https://` proxy
+5. No other changes needed to `Coolhand.configure` blocks for basic usage
 
 ## [0.2.0] - 2025-12-16
 
