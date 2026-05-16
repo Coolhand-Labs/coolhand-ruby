@@ -48,6 +48,55 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw[:status_code] || raw["status_code"]).to eq(200)
   end
 
+  describe "re-entry guard" do
+    before(:each) do
+      stub_request(:get, "https://api.test.com/hello")
+        .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
+    end
+
+    it "logs exactly once with Net::HTTP.new(...).request(req) (bare new pattern)" do
+      uri = URI("https://api.test.com/hello")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Get.new(uri)
+      http.request(req)
+      sleep 0.05
+
+      expect(api_service_instance).to have_received(:send_llm_request_log).once
+    end
+
+    it "logs exactly once with Net::HTTP.start(...) { |h| h.request(req) } pattern" do
+      uri = URI("https://api.test.com/hello")
+      req = Net::HTTP::Get.new(uri)
+      Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.request(req) }
+      sleep 0.05
+
+      expect(api_service_instance).to have_received(:send_llm_request_log).once
+    end
+
+    it "logs independent requests made on a different connection inside a response callback" do
+      stub_request(:get, "https://api.test.com/second")
+        .to_return(status: 200, body: '{"msg":"second"}', headers: { "Content-Type" => "application/json" })
+
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      uri1 = URI("https://api.test.com/hello")
+      req1 = Net::HTTP::Get.new(uri1)
+      Net::HTTP.start(uri1.host, uri1.port, use_ssl: true) do |http|
+        http.request(req1) do |_res|
+          uri2 = URI("https://api.test.com/second")
+          http2 = Net::HTTP.new(uri2.host, uri2.port)
+          http2.use_ssl = true
+          http2.request(Net::HTTP::Get.new(uri2))
+        end
+      end
+      sleep 0.05
+
+      expect(logs.size).to eq(2)
+    end
+  end
+
   it "captures streaming responses via read_body and marks is_streaming" do
     stub_request(:get, "https://api.test.com/stream")
       .to_return(status: 200, body: "chunk1chunk2", headers: { "Content-Type" => "application/octet-stream" })
