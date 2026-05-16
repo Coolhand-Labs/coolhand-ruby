@@ -1,5 +1,7 @@
 # Coolhand Ruby Monitor
 
+[![Gem Version](https://badge.fury.io/rb/coolhand.svg)](https://badge.fury.io/rb/coolhand)
+
 Monitor and log LLM API calls from multiple providers (OpenAI, Anthropic, Google AI, Cohere, and more) to the Coolhand analytics platform.
 
 ## Installation
