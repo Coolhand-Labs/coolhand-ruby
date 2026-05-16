@@ -49,7 +49,7 @@ module Coolhand
 
       NetHttpInterceptor.patch!
 
-      log "✅ Coolhand ready - will log OpenAI calls"
+      log "✅ Coolhand ready - will log inference calls on monitored URIs"
     end
 
     def capture
