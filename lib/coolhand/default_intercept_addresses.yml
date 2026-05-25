@@ -15,3 +15,5 @@
 - ":streamGenerateContent"
 - "aiplatform.googleapis.com"
 - "gateway.ai.cloudflare.com"
+- "bedrock-runtime"
+- "openrouter.ai"
