@@ -131,6 +131,16 @@ RSpec.describe Coolhand::FeedbackService do
           end)
       end
 
+      it "sends creator_type field in payload" do
+        service.create_feedback({ llm_request_log_id: 456, creator_type: "agent" })
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .with do |req|
+            feedback_data = JSON.parse(req.body)["llm_request_log_feedback"]
+            expect(feedback_data["creator_type"]).to eq("agent")
+          end)
+      end
+
       it "converts like: true to sentiment: 'like'" do
         service.create_feedback({ llm_request_log_id: 456, like: true })
 
