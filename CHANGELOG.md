@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `Configuration#enabled` flag (default `true`). Set to `false` to skip all patching and validation, e.g. `config.enabled = Rails.env.production?`.
+
+### Changed
+- Missing `api_key` no longer raises at `configure` time. Intercepted requests are silently skipped (with a warning log) when the key is absent, so apps that boot without a key in CI or non-production environments no longer crash.
+
 ## [0.3.0] - 2026-05-14
 
 ### 🚀 Major Changes

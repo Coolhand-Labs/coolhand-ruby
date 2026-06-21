@@ -45,6 +45,8 @@ module Coolhand
     def configure
       yield(configuration)
 
+      return unless configuration.enabled
+
       configuration.validate!
 
       NetHttpInterceptor.patch!
@@ -58,13 +60,15 @@ module Coolhand
         return
       end
 
+      return yield unless configuration.enabled
+
       patched = NetHttpInterceptor.patched?
-
       NetHttpInterceptor.patch!
-
-      yield
-    ensure
-      NetHttpInterceptor.unpatch! unless patched
+      begin
+        yield
+      ensure
+        NetHttpInterceptor.unpatch! unless patched
+      end
     end
 
     def without_capture

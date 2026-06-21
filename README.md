@@ -181,7 +181,8 @@ end
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `api_key` | String | *required* | Your Coolhand API key for authentication |
+| `api_key` | String | `nil` | Your Coolhand API key. If absent, intercepted requests are skipped with a warning log rather than raising at boot time |
+| `enabled` | Boolean | `true` | Set to `false` to disable all patching and validation (e.g. `Rails.env.production?`) |
 | `silent` | Boolean | `false` | Whether to suppress console output |
 | `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API endpoint strings to monitor |
 

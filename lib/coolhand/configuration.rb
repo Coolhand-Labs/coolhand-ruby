@@ -17,7 +17,7 @@ module Coolhand
     BASE_URL_ERROR_MSG = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
     LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
 
-    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns
+    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled
     attr_reader :intercept_addresses, :base_url
 
     def initialize
@@ -30,6 +30,7 @@ module Coolhand
       @debug_mode = false
       @capture = true
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
+      @enabled = true
     end
 
     # Custom setter that preserves defaults when nil/empty array is provided
@@ -47,12 +48,6 @@ module Coolhand
     end
 
     def validate!
-      # Validate API Key after configuration
-      if api_key.nil?
-        Coolhand.log "❌ Coolhand Error: API Key is required. Please set it in the configuration."
-        raise Error, "API Key is required"
-      end
-
       # Validate intercept_addresses after configuration
       if intercept_addresses.nil? || intercept_addresses.empty?
         Coolhand.log "❌ Coolhand Error: Intercept addresses cannot be empty. Please set it in the configuration."
