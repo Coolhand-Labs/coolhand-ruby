@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-22
+
 ### Added
-- `Configuration#enabled` flag (default `true`). Set to `false` to skip all patching and validation, e.g. `config.enabled = Rails.env.production?`.
+- **More default intercept addresses** — Vertex AI (`aiplatform.googleapis.com`), Cloudflare AI Gateway (`gateway.ai.cloudflare.com`), AWS Bedrock OpenAI-compatible endpoint (`bedrock-runtime`), and OpenRouter (`openrouter.ai`) are now monitored out of the box with no configuration required (#66).
+- **`Configuration#enabled` flag** — Set `config.enabled = false` (e.g. `config.enabled = Rails.env.production?`) to skip all patching and validation globally without restructuring your configure block (#68).
+- **Feedback `creator_type` field** — Pass `creator_type: 'human'`, `'agent'`, or `'unknown'` when submitting feedback to identify who originated the feedback; matches the Coolhand API field (#67).
 
 ### Changed
-- Missing `api_key` no longer raises at `configure` time. Intercepted requests are silently skipped (with a warning log) when the key is absent, so apps that boot without a key in CI or non-production environments no longer crash.
+- **Deferred `api_key` validation** — A missing `api_key` no longer raises at `Coolhand.configure` time. Intercepted requests are silently skipped (with a warning log) when the key is absent, so apps that boot without a key in CI or non-production environments no longer crash (#68).
+
+### Dependencies
+- Bumped `faraday` from 2.14.1 to 2.14.2 (#63).
 
 ## [0.3.0] - 2026-05-14
 
