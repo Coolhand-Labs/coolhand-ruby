@@ -65,6 +65,8 @@ module Coolhand
     end
 
     def send_request(payload, success_message)
+      return nil if missing_api_key?
+
       uri = URI.parse(@api_endpoint)
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = (uri.scheme == "https")
@@ -117,6 +119,8 @@ module Coolhand
     end
 
     def create_feedback(feedback, collection_method = nil)
+      return nil if !debug_mode? && missing_api_key?
+
       normalized = normalize_feedback_sentiment(feedback)
       feedback_with_collector = add_collector_to_data(normalized, collection_method)
 
@@ -144,6 +148,8 @@ module Coolhand
     end
 
     def create_log(captured_data, collection_method = nil)
+      return nil if !debug_mode? && missing_api_key?
+
       raw_request_with_collector = add_collector_to_data({ raw_request: captured_data }, collection_method)
 
       payload = {
@@ -192,6 +198,13 @@ module Coolhand
     }.freeze
 
     private
+
+    def missing_api_key?
+      return false if Coolhand.required_field?(api_key)
+
+      Coolhand.log "⚠️  Coolhand: API key is missing — skipping log for this request."
+      true
+    end
 
     # Get all filtered field names as a flat array
     def filtered_field_names

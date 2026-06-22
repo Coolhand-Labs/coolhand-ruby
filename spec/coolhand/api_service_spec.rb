@@ -43,6 +43,32 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "#send_llm_request_log with missing api_key" do
+    let(:service) { described_class.new }
+    let(:request_data) do
+      { method: "POST", url: "https://api.openai.com/v1/chat/completions",
+        request_body: {}, response_body: {}, status_code: 200 }
+    end
+
+    before { Coolhand.configuration.api_key = nil }
+
+    it "returns nil without sending an HTTP request" do
+      result = service.send_llm_request_log(request_data)
+      expect(result).to be_nil
+      expect(WebMock).not_to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+    end
+
+    it "logs a warning via Coolhand.log (respects silent)" do
+      expect(Coolhand).to receive(:log).with(/API key is missing/)
+      service.send_llm_request_log(request_data)
+    end
+
+    it "produces no output when silent is true" do
+      Coolhand.configuration.silent = true
+      expect { service.send_llm_request_log(request_data) }.not_to output.to_stdout
+    end
+  end
+
   describe "debug_mode with send_llm_request_log" do
     let(:service) { described_class.new }
     let(:request_data) do

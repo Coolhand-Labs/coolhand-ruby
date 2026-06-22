@@ -19,13 +19,37 @@ RSpec.describe Coolhand do
       expect(config.api_key).to eq("test-key")
     end
 
-    it "raises error if api_key is missing" do
+    it "does not raise when api_key is missing — validation is deferred to first use" do
+      expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
       expect do
         Coolhand.configure do |c|
           c.silent = true
           c.api_key = nil
         end
-      end.to raise_error(Coolhand::Error, /API Key is required/)
+      end.not_to raise_error
+    end
+
+    context "when enabled is false" do
+      it "does not call validate! or patch! and does not raise even with nil api_key" do
+        expect(Coolhand::NetHttpInterceptor).not_to receive(:patch!)
+        expect do
+          Coolhand.configure do |c|
+            c.enabled = false
+            c.silent = true
+            c.api_key = nil
+          end
+        end.not_to raise_error
+      end
+
+      it "stores config settings even when disabled" do
+        Coolhand.configure do |c|
+          c.enabled = false
+          c.silent = true
+          c.environment = "staging"
+        end
+        expect(config.environment).to eq("staging")
+        expect(config.enabled).to be false
+      end
     end
 
     it "preserves default intercept_addresses when set to nil" do
