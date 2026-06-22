@@ -109,6 +109,7 @@ feedback = feedback_service.create_feedback(
 - **`like`** 👍 *Low Signal (Deprecated)* - Boolean: `true` = like, `false` = dislike. Use `sentiment` instead. Conversion: `true` → `"like"`, `false` → `"dislike"`.
 - **`workload_hashid`** 🔗 *Workload Association* - Hashid of a workload to associate this feedback with.
 - **`creator_unique_id`** 👤 *User Tracking* - Unique ID to match feedback to the end user who created it
+- **`creator_type`** 🧑‍🤝‍🤖 *Creator Type* - What kind of creator submitted the feedback: `'human'`, `'agent'`, or `'unknown'`.
 
 ## Rails Integration
 
