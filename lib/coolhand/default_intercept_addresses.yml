@@ -13,3 +13,7 @@
 - "models.inference.ai.azure.com"
 - ":generateContent"
 - ":streamGenerateContent"
+- "aiplatform.googleapis.com"
+- "gateway.ai.cloudflare.com"
+- "bedrock-runtime"
+- "openrouter.ai"
