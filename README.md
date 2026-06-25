@@ -2,7 +2,7 @@
 
 [![Gem Version](https://badge.fury.io/rb/coolhand.svg)](https://badge.fury.io/rb/coolhand)
 
-Monitor and log LLM API calls from multiple providers (OpenAI, Anthropic, Google AI, Cohere, and more) to the Coolhand analytics platform.
+Monitor and log LLM API calls — OpenAI, Anthropic, Google Gemini, Cohere, and any Faraday-based or Net::HTTP client — to the Coolhand analytics platform. Supports Ruby LLM monitoring, request logging, and feedback collection.
 
 ## Installation
 
@@ -51,24 +51,7 @@ end
 
 ## Self-Hosted Deployments
 
-For compliance, data-residency, or cost reasons you can run your own Coolhand-compatible endpoint and point the SDK at it via `config.base_url`:
-
-```ruby
-Coolhand.configure do |config|
-  config.api_key  = ENV['COOLHAND_API_KEY']
-  config.base_url = ENV['COOLHAND_BASE_URL']  # e.g. "https://coolhand.internal.example.com/api"
-end
-```
-
-When `base_url` is unset the SDK defaults to `https://coolhandlabs.com/api` and behaviour is unchanged.
-
-**Accepted values:**
-- Any `https://` URL — required for production use
-- `http://localhost` or `http://127.0.0.1` — accepted for local development only
-
-**Trailing slashes** are stripped automatically, so `"https://example.com/api/"` and `"https://example.com/api"` are equivalent.
-
-The SDK raises `Coolhand::Error` at configure time if `base_url` is set to a plain `http://` URL pointing at a non-localhost host.
+Point the SDK at your own Coolhand-compatible endpoint via `config.base_url` for compliance or data-residency requirements. See [Self-Hosted Deployments →](docs/configuration.md).
 
 ## Feedback API
 
@@ -80,7 +63,7 @@ Collect feedback on LLM responses to improve model performance.
 require 'coolhand'
 
 # Create feedback for an LLM response
-feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+feedback_service = Coolhand::FeedbackService.new
 
 feedback = feedback_service.create_feedback(
   llm_request_log_id: 123,
@@ -94,22 +77,7 @@ feedback = feedback_service.create_feedback(
 )
 ```
 
-**Field Guide:** All fields are optional, but here's how to get the best results:
-
-### Matching Fields
-- **`llm_request_log_id`** 🎯 *Exact Match* - ID from the Coolhand API response when the original LLM request was logged. Provides exact matching.
-- **`llm_provider_unique_id`** 🎯 *Exact Match* - The x-request-id from the LLM API response (e.g., "req_xxxxxxx")
-- **`original_output`** 🔍 *Fuzzy Match* - The original LLM response text. Provides fuzzy matching but isn't 100% reliable.
-- **`client_unique_id`** 🔗 *Your Internal Matcher* - Connect to an identifier from your system for internal matching
-
-### Quality Data
-- **`revised_output`** ⭐ *Best Signal* - End user revision of the LLM response. The highest value data for improving quality scores.
-- **`explanation`** 💬 *Medium Signal* - End user explanation of why the response was good or bad. Valuable qualitative data.
-- **`sentiment`** 🎭 *Preferred* - String sentiment: `'like'`, `'dislike'`, or `'neutral'`. Takes precedence over `like` if both are provided. The gem automatically converts `like` to `sentiment` before sending.
-- **`like`** 👍 *Low Signal (Deprecated)* - Boolean: `true` = like, `false` = dislike. Use `sentiment` instead. Conversion: `true` → `"like"`, `false` → `"dislike"`.
-- **`workload_hashid`** 🔗 *Workload Association* - Hashid of a workload to associate this feedback with.
-- **`creator_unique_id`** 👤 *User Tracking* - Unique ID to match feedback to the end user who created it
-- **`creator_type`** 🧑‍🤝‍🤖 *Creator Type* - What kind of creator submitted the feedback: `'human'`, `'agent'`, or `'unknown'`.
+For a full field reference and matching strategy, see [Feedback API →](docs/feedback.md).
 
 ## Rails Integration
 
@@ -138,7 +106,7 @@ end
 ```ruby
 class ChatController < ApplicationController
   def create_feedback
-    feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+    feedback_service = Coolhand::FeedbackService.new
 
     feedback = feedback_service.create_feedback(
       llm_request_log_id: params[:log_id],
@@ -163,7 +131,7 @@ end
 ```ruby
 class FeedbackCollectionJob < ApplicationJob
   def perform(feedback_data)
-    feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+    feedback_service = Coolhand::FeedbackService.new
 
     feedback_service.create_feedback(
       llm_provider_unique_id: feedback_data[:request_id],
@@ -488,10 +456,12 @@ class Vertex::BatchCallbackProcessor < BaseService
 end
 ```
 
-## Integration Guides
+## Documentation
 
-- **[Anthropic Integration](docs/anthropic.md)** - Complete guide for both official and community Anthropic gems, including streaming, dual gem handling, and troubleshooting
-- **[ElevenLabs Integration](docs/elevenlabs.md)** - Complete guide for integrating ElevenLabs Conversational AI with webhook capture and feedback submission
+- **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, custom intercept addresses
+- **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
+- **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
+- **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 
 ## Security
 
@@ -510,6 +480,10 @@ end
 - **Questions?** [Create an issue](https://github.com/Coolhand-Labs/coolhand-ruby/issues)
 - **Contribute?** [Submit a pull request](https://github.com/Coolhand-Labs/coolhand-ruby/pulls)
 - **Support?** Visit [coolhandlabs.com](https://coolhandlabs.com)
+
+## About Coolhand Labs
+
+Coolhand Labs builds LLM observability and feedback tooling so teams can monitor, understand, and improve their AI applications. Learn more at [coolhandlabs.com](https://coolhandlabs.com).
 
 ## License
 

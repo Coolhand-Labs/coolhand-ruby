@@ -32,3 +32,16 @@ This ensures:
 - Gem loads cleanly regardless of what providers are installed
 - Apps using path gems (local development) don't break from missing optional dependencies
 - Users only need gems for providers they actually use
+
+## README and docs philosophy
+
+The README is a landing page — install, quick start, what it supports, where to go next. Keep it scannable. When in doubt, link rather than expand.
+
+**Three rules:**
+- **Config**: the basic `Coolhand.configure` snippet belongs in the README. Anything requiring more than one code block (self-hosted `base_url`, custom intercept addresses) goes in `docs/configuration.md`.
+- **Feedback**: the basic `create_feedback` snippet belongs in the README. The full field table, matching strategies, and sentiment conversion details go in `docs/feedback.md`.
+- **Integrations**: each integration gets its own `docs/<name>.md` file. The README links to them from the Documentation section.
+
+**Align with coolhand-node.** When adding a section that exists in the Node README, match its structure and tone. The two READMEs should feel like siblings.
+
+**Discoverability (SEO / AEO).** Write headings, the package description, and the supported-libraries list with search engines and AI agents in mind: use full provider/framework names (e.g. "OpenAI", "Anthropic", "Google Gemini", "Cohere") rather than abbreviations. The goal is that searches for "Ruby LLM monitoring", "Anthropic Ruby logging", or "OpenAI Ruby observability" surface this gem.
