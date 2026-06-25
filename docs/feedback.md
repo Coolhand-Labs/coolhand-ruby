@@ -9,7 +9,7 @@ Collect user feedback on LLM responses to improve your AI outputs. The Feedback 
 ```ruby
 require 'coolhand'
 
-feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+feedback_service = Coolhand::FeedbackService.new
 
 # Positive feedback linked by log ID (most reliable)
 feedback_service.create_feedback(

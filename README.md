@@ -63,7 +63,7 @@ Collect feedback on LLM responses to improve model performance.
 require 'coolhand'
 
 # Create feedback for an LLM response
-feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+feedback_service = Coolhand::FeedbackService.new
 
 feedback = feedback_service.create_feedback(
   llm_request_log_id: 123,
@@ -106,7 +106,7 @@ end
 ```ruby
 class ChatController < ApplicationController
   def create_feedback
-    feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+    feedback_service = Coolhand::FeedbackService.new
 
     feedback = feedback_service.create_feedback(
       llm_request_log_id: params[:log_id],
@@ -131,7 +131,7 @@ end
 ```ruby
 class FeedbackCollectionJob < ApplicationJob
   def perform(feedback_data)
-    feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
+    feedback_service = Coolhand::FeedbackService.new
 
     feedback_service.create_feedback(
       llm_provider_unique_id: feedback_data[:request_id],

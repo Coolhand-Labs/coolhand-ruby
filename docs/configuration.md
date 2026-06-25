@@ -11,13 +11,6 @@ Coolhand.configure do |config|
 end
 ```
 
-Or set both via environment variables — useful for 12-factor deployments where configuration comes from the environment:
-
-```bash
-export COOLHAND_API_KEY=your-api-key
-export COOLHAND_BASE_URL=https://coolhand.internal.example.com/api
-```
-
 When `base_url` is unset the SDK defaults to `https://coolhandlabs.com/api` and behaviour is unchanged.
 
 **URL validation rules:**
