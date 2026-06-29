@@ -154,6 +154,7 @@ end
 |--------|------|---------|-------------|
 | `api_key` | String | `nil` | Your Coolhand API key. If absent, intercepted requests are skipped with a warning log rather than raising at boot time |
 | `enabled` | Boolean | `true` | Set to `false` to disable all patching and validation (e.g. `Rails.env.production?`) |
+| `capture` | Boolean | `true` | Whether to capture and forward intercepted requests. Set to `false` to monitor without forwarding, then use [`Coolhand.with_capture`](#selective-capture) to re-enable selectively |
 | `silent` | Boolean | `false` | Whether to suppress console output |
 | `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API endpoint strings to monitor |
 
@@ -186,6 +187,38 @@ puts response.dig("choices", 0, "message", "content")
 ```
 
 📖 **[Complete Anthropic Integration Guide →](docs/anthropic.md)** - Supports both official and community gems with automatic detection
+
+### Selective Capture
+
+Use `Coolhand.with_capture` and `Coolhand.without_capture` to override the global `capture` setting for a specific block of code, without changing your configuration.
+
+**Capture a specific call when capture is globally disabled:**
+
+```ruby
+Coolhand.configure do |config|
+  config.api_key = 'your_api_key_here'
+  config.capture = false  # disabled globally
+end
+
+Coolhand.with_capture do
+  response = openai_client.chat(parameters: {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  })
+  # This request is captured and forwarded to Coolhand
+end
+```
+
+**Skip capture for a specific call when capture is globally enabled:**
+
+```ruby
+Coolhand.without_capture do
+  response = openai_client.chat(parameters: { ... })
+  # This request is NOT forwarded to Coolhand
+end
+```
+
+Both methods are thread-safe. Blocks nest correctly — the innermost block takes precedence, and the outer setting is restored when the block exits.
 
 ## Logging Inbound Webhooks
 
