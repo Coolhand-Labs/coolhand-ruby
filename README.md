@@ -4,6 +4,8 @@
 
 Monitor and log LLM API calls — OpenAI, Anthropic, Google Gemini, Cohere, and any Faraday-based or Net::HTTP client — to the Coolhand analytics platform. Supports Ruby LLM monitoring, request logging, and feedback collection.
 
+> **Scope**: Coolhand intercepts outgoing HTTP requests to configured LLM API endpoints only. It does not read, scan, or transmit your source code files.
+
 ## Installation
 
 ```ruby
@@ -279,11 +281,11 @@ The monitor works with multiple transport layers and Ruby libraries:
 
 ## How It Works
 
-Coolhand uses a unified Net::HTTP interceptor to monitor all HTTP traffic to configured LLM endpoints:
+Coolhand uses a unified Net::HTTP interceptor to capture outgoing requests to configured LLM API endpoints:
 
 ### Net::HTTP Interceptor
-- Patches Ruby's core `Net::HTTP` library using `Module#prepend`
-- Monitors **all** HTTP libraries that use Net::HTTP under the hood (which is most of them)
+- Extends Ruby's `Net::HTTP` using `Module#prepend` (a standard Ruby technique for wrapping library behavior)
+- Covers HTTP libraries that delegate to Net::HTTP under the hood (which is most of them)
 - Handles both standard requests and streaming responses via `read_body` interception
 - Thread-safe design using thread-local storage for streaming buffers
 
