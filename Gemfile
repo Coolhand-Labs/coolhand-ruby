@@ -9,6 +9,7 @@ gem "faraday-typhoeus", "~> 1.1"
 gem "ruby-openai", "~> 8.3"
 
 group :development, :test do
+  gem "bundler-audit", "~> 0.9", require: false
   gem "simplecov", require: false
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
