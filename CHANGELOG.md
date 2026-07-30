@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-30
+
+### Changed
+- **`llm_request_log_id` and `workload_id` in feedback API responses are now hashid strings, not raw integers** — the Coolhand API now returns these as hashids, matching every other external-facing identifier on the record (they previously leaked the raw integer foreign key). This gem never typed or coerced these fields (plain hashes throughout), so no code changes are required here, but if your application stores or compares `result[:llm_request_log_id]` or `result[:workload_id]` as an integer, update it to treat the value as an opaque string identifier instead. The `create_feedback`/`update_feedback` input fields (`llm_request_log_id`, `workload_hashid`) are unaffected — they still accept either a raw integer or a hashid string.
+- **`id` in feedback API responses has actually been a hashid string for some time** — flagging here since it's the same category of field; no gem-level change needed since this was never typed.
+
 ## [0.4.0] - 2026-06-22
 
 ### Added

@@ -68,7 +68,7 @@ require 'coolhand'
 feedback_service = Coolhand::FeedbackService.new
 
 feedback = feedback_service.create_feedback(
-  llm_request_log_id: 123,
+  llm_request_log_id: 'abc123def456', # hashid from a prior response; a raw integer FK also still works
   llm_provider_unique_id: 'req_xxxxxxx',
   client_unique_id: 'workorder-chat-456',
   creator_unique_id: 'user-789',
