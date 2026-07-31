@@ -141,7 +141,7 @@ module Coolhand
 
       matched = patterns.find { |pattern| url.include?(pattern) }
       if matched && Coolhand.configuration.debug_mode
-        Coolhand.log "🚫 Skipping capture for #{url} (matched exclude_api_pattern: \"#{matched}\")"
+        Coolhand.log "🚫 Skipping capture for #{sanitize_url(url)} (matched exclude_api_pattern: \"#{matched}\")"
       end
       !!matched
     end

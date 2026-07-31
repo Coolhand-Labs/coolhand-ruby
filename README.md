@@ -493,7 +493,7 @@ end
 
 ## Documentation
 
-- **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, custom intercept addresses
+- **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
