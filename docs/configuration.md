@@ -22,6 +22,23 @@ When `base_url` is unset the SDK defaults to `https://coolhandlabs.com/api` and 
 
 ---
 
+## Debug Mode
+
+`config.debug_mode` is a local-development aid: it prints every prepared payload to the console instead of sending it to the Coolhand API (or your self-hosted `base_url`), so you can inspect exactly what would be logged without an API key or network access.
+
+```ruby
+Coolhand.configure do |config|
+  config.debug_mode = Rails.env.development?
+end
+```
+
+**What changes when `debug_mode` is `true`:**
+- No HTTP request is made — `create_log`, `create_feedback`, and `send_llm_request_log` all return `nil` and print the payload via `JSON.pretty_generate` instead.
+- Capture is forced on for every request, including inside a `Coolhand.without_capture` block and when `config.capture = false`. This is intentional — debug mode is meant to show you everything, not respect capture suppression — so don't leave it enabled in an environment where you rely on `without_capture` to keep specific calls out of the logs.
+- Header and URL sanitization (`[REDACTED]` API keys/tokens, redacted `key=`/`token=` query params) still applies to the printed payload, exactly as it would to a real request.
+
+Because it forces capture unconditionally and prints full request/response bodies to the console, only enable `debug_mode` in development — never in production or in an environment handling real user data.
+
 ## Custom Intercept Addresses
 
 By default Coolhand captures requests to a built-in list of LLM API hosts (OpenAI, Anthropic, Google Gemini, ElevenLabs, GitHub Models, and more). To capture a custom endpoint — an internal proxy, a self-hosted model server, or a third-party gateway — override `intercept_addresses`:

@@ -3,6 +3,7 @@
 require "spec_helper"
 require "webmock/rspec"
 require "net/http"
+require "stringio"
 
 RSpec.describe Coolhand::NetHttpInterceptor do
   let(:api_service_instance) { instance_double(Coolhand::ApiService) }
@@ -244,6 +245,36 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
   end
 
+  describe ".unpatch!" do
+    it "marks the interceptor as unpatched so guarded requests fall through to the real implementation" do
+      described_class.patch!
+      expect(described_class.patched?).to be true
+
+      described_class.unpatch!
+
+      expect(described_class.patched?).to be false
+    end
+  end
+
+  it "captures the request body when set via body_stream instead of #body" do
+    stub_request(:post, "https://api.test.com/upload")
+      .to_return(status: 200, body: '{"ok":true}', headers: { "Content-Type" => "application/json" })
+
+    uri = URI("https://api.test.com/upload")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.body_stream = StringIO.new('{"streamed":true}')
+    req["Content-Length"] = req.body_stream.size.to_s
+
+    http.request(req)
+    sleep 0.05
+
+    expect(@captured_log).to be_a(Hash)
+    raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+    expect(raw[:request_body] || raw["request_body"]).to eq({ "streamed" => true })
+  end
+
   it "still logs when the HTTP call raises an exception (e.g. SDK error on 4xx)" do
     stub_request(:post, "https://api.test.com/v1/messages")
       .to_return(
@@ -327,6 +358,16 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     it "does not log a debug message for excluded URLs when debug_mode is disabled" do
       expect(Coolhand).not_to receive(:log).with(/Skipping capture/)
       make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
+    end
+
+    it "sanitizes the URL in the debug skip message so query-param secrets aren't logged raw" do
+      Coolhand.configuration.debug_mode = true
+      Coolhand.configuration.exclude_api_patterns << ":generateContent"
+      expect(Coolhand).to receive(:log) do |message|
+        expect(message).to include("REDACTED")
+        expect(message).not_to include("AIzaSyDEADBEEF1234567890")
+      end
+      make_request("/v1/models/gemini-pro:generateContent?key=AIzaSyDEADBEEF1234567890")
     end
 
     it "exposes DEFAULT_EXCLUDE_API_PATTERNS as a frozen constant" do
@@ -413,6 +454,75 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       headers = raw[:headers] || raw["headers"]
       goog_key = headers["x-goog-api-key"] || headers["X-Goog-Api-Key"]
       expect(goog_key).to eq("[REDACTED]")
+    end
+
+    it "sanitizes an Authorization Bearer header, preserving the 'Bearer' prefix as a marker" do
+      Coolhand.configuration.intercept_addresses << "authtest.example.com"
+      stub_request(:post, "https://authtest.example.com/v1/chat/completions")
+        .to_return(status: 200, body: "{}", headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://authtest.example.com/v1/chat/completions")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req["Authorization"] = "Bearer sk-DEADBEEF1234567890"
+      req["Content-Type"] = "application/json"
+      req.body = "{}"
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      headers = raw[:headers] || raw["headers"]
+      auth = headers["Authorization"] || headers["authorization"]
+      expect(auth).to eq("Bearer [REDACTED]")
+    end
+
+    it "fully redacts a non-Bearer Authorization header (e.g. AWS SigV4)" do
+      Coolhand.configuration.intercept_addresses << "authtest.example.com"
+      stub_request(:post, "https://authtest.example.com/v1/chat/completions")
+        .to_return(status: 200, body: "{}", headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://authtest.example.com/v1/chat/completions")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req["Authorization"] = "AWS4-HMAC-SHA256 Credential=AKIADEADBEEF/20260730/us-east-1/bedrock/aws4_request"
+      req["Content-Type"] = "application/json"
+      req.body = "{}"
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      headers = raw[:headers] || raw["headers"]
+      auth = headers["Authorization"] || headers["authorization"]
+      expect(auth).to eq("[REDACTED]")
+    end
+
+    it "sanitizes x-amz-security-token header (AWS Bedrock STS session token)" do
+      Coolhand.configuration.intercept_addresses << "bedrock-runtime"
+      stub_request(:post, "https://bedrock-runtime.us-east-1.amazonaws.com/model/foo/invoke")
+        .to_return(status: 200, body: "{}", headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://bedrock-runtime.us-east-1.amazonaws.com/model/foo/invoke")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req["x-amz-security-token"] = "FQoGZXIvYXdzEDEaDBEEF1234567890SESSIONTOKEN"
+      req["Content-Type"] = "application/json"
+      req.body = "{}"
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_a(Hash)
+      raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+      headers = raw[:headers] || raw["headers"]
+      token = headers["x-amz-security-token"] || headers["X-Amz-Security-Token"]
+      expect(token).to eq("[REDACTED]")
     end
 
     it "sanitizes key query parameter from URL" do

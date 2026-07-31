@@ -49,8 +49,8 @@ RSpec.describe Coolhand::FeedbackService do
     context "when API call is successful" do
       let(:mock_response) do
         {
-          id: 123,
-          llm_request_log_id: 456,
+          id: "xyz789abc123",
+          llm_request_log_id: "abc123def456",
           like: true,
           explanation: "Great response!",
           created_at: "2023-01-01T00:00:00Z",
@@ -77,7 +77,7 @@ RSpec.describe Coolhand::FeedbackService do
         result = service.create_feedback(feedback)
 
         expect(result).not_to be_nil
-        expect(result[:id]).to eq(123)
+        expect(result[:id]).to eq("xyz789abc123")
         expect(result[:like]).to be(true)
         expect(result[:explanation]).to eq("Great response!")
       end
@@ -316,8 +316,8 @@ RSpec.describe Coolhand::FeedbackService do
 
       let(:mock_response) do
         {
-          id: 789,
-          llm_request_log_id: 12_345,
+          id: "mno345pqr678",
+          llm_request_log_id: "def456ghi789",
           like: true,
           explanation: "This response was helpful and accurate!",
           created_at: "2023-01-01T00:00:00Z",
@@ -334,8 +334,8 @@ RSpec.describe Coolhand::FeedbackService do
 
         result = service.create_feedback(feedback)
 
-        expect(result[:id]).to eq(789)
-        expect(result[:llm_request_log_id]).to eq(12_345)
+        expect(result[:id]).to eq("mno345pqr678")
+        expect(result[:llm_request_log_id]).to eq("def456ghi789")
         expect(result[:like]).to be(true)
       end
 

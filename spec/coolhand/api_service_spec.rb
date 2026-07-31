@@ -184,4 +184,57 @@ RSpec.describe Coolhand::ApiService do
       end
     end
   end
+
+  describe "error handling in send_request" do
+    let(:service) { described_class.new }
+    let(:request_data) do
+      { method: "POST", url: "https://api.openai.com/v1/chat/completions",
+        request_body: {}, response_body: {}, status_code: 200 }
+    end
+
+    before { Coolhand.configuration.silent = false }
+
+    it "truncates HTML error pages instead of dumping the full body" do
+      long_html = "<!DOCTYPE html>#{'x' * 500}"
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: long_html)
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/\[HTML error page truncated\]/).to_stdout
+    end
+
+    it "logs the full body for non-HTML error responses" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: "plain text error")
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/plain text error/).to_stdout
+    end
+  end
+
+  describe "#sanitize_payload_for_json" do
+    let(:service) do
+      instance = described_class.new
+      instance.extend(Module.new do
+        def sanitize_payload_for_json_public(payload)
+          sanitize_payload_for_json(payload)
+        end
+      end)
+      instance
+    end
+
+    before { Coolhand.configuration.silent = false }
+
+    it "recovers and logs when sanitizing the payload itself raises" do
+      poison_key = Object.new
+      def poison_key.to_s
+        raise "boom"
+      end
+
+      result = nil
+      expect { result = service.sanitize_payload_for_json_public({ poison_key => "value" }) }
+        .to output(/Warning: Error sanitizing payload/).to_stdout
+      expect(result).to eq({ poison_key => "value" })
+    end
+  end
 end

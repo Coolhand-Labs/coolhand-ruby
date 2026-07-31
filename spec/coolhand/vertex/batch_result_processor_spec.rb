@@ -90,5 +90,15 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
         processor.call
       end
     end
+
+    context "when batch state is unrecognized" do
+      let(:batch_info) { { "displayName" => "batch_y", "state" => "JOB_STATE_SOME_FUTURE_STATE" } }
+
+      it "logs a warning and does not raise" do
+        expect(Rails.logger).to receive(:warn).with(a_string_including("Unknown batch status"))
+        processor = described_class.new(batch_info: batch_info)
+        expect { processor.call }.not_to raise_error
+      end
+    end
   end
 end

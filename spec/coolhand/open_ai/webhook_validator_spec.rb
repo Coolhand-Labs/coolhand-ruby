@@ -210,6 +210,59 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         expect(validator.valid?).to be true
       end
     end
+
+    context "when Rails.env is not production/staging (permissive fallback path)" do
+      before do
+        allow(Rails).to receive(:env).and_return("development")
+        allow(Rails.logger).to receive(:warn)
+      end
+
+      context "when the webhook secret is not configured" do
+        let(:webhook_secret) { nil }
+
+        it "allows the webhook through and warns instead of rejecting" do
+          expect(Rails.logger).to receive(:warn).with(/skipping signature verification in development/)
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the signature/timestamp headers are missing" do
+        let(:request) do
+          headers_hash = { "webhook-id" => webhook_id }
+
+          instance_double("hash",
+            headers: headers_hash,
+            raw_post: payload,
+            body: instance_double("IO", read: payload))
+        end
+
+        it "allows the webhook through and warns instead of rejecting" do
+          expect(Rails.logger).to receive(:warn).with(/Missing OpenAI webhook headers/)
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the payload is empty" do
+        let(:payload) { nil }
+        let(:request) do
+          headers_hash = {
+            "webhook-signature" => signature_header,
+            "webhook-timestamp" => timestamp,
+            "webhook-id" => webhook_id
+          }
+
+          instance_double("hash",
+            headers: headers_hash,
+            raw_post: payload,
+            body: instance_double("IO", read: payload))
+        end
+
+        it "allows the webhook through and warns instead of rejecting" do
+          expect(Rails.logger).to receive(:warn).with(/allowing in development environment/)
+          expect(validator.valid?).to be true
+        end
+      end
+    end
   end
 
   describe "#error_message" do
