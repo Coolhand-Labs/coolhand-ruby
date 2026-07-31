@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Vertex batch result logging** — `Coolhand::Vertex::BatchResultProcessor` now sends a fully-qualified URL (`https://aiplatform.googleapis.com/v1/<resource name>`) instead of the bare Vertex job resource name, and sends `source_api`/`model` explicitly so the ingestion backend no longer needs to classify these synthetic batch-result logs by URL heuristics alone. Pass `model:` to `BatchResultProcessor.new` (or include a `"model"` key in `batch_info`) to populate the `model` field (#76).
 
+## [0.5.0] - 2026-07-30
+
+### Changed
+- **`llm_request_log_id` and `workload_id` in feedback API responses are now hashid strings, not raw integers** — the Coolhand API now returns these as hashids, matching every other external-facing identifier on the record (they previously leaked the raw integer foreign key). This gem never typed or coerced these fields (plain hashes throughout), so no code changes are required here, but if your application stores or compares `result[:llm_request_log_id]` or `result[:workload_id]` as an integer, update it to treat the value as an opaque string identifier instead. The `create_feedback`/`update_feedback` input fields (`llm_request_log_id`, `workload_hashid`) are unaffected — they still accept either a raw integer or a hashid string.
+- **`id` in feedback API responses has actually been a hashid string for some time** — flagging here since it's the same category of field; no gem-level change needed since this was never typed.
+- `BaseInterceptor.sanitize_headers` and `LoggerService#sanitize_headers` (used for the main request/response logging path and webhook forwarding, respectively) now share the same sensitive-header pattern instead of each maintaining its own list, so both paths redact consistently.
+
+### Security
+- **AWS Bedrock SigV4 session tokens (`X-Amz-Security-Token`) are now redacted before logging.** The interceptor's header sanitizer used a hardcoded list of known API-key header names (`api-key`, `x-api-key`, `x-goog-api-key`, `openai-api-key`) instead of a general pattern, so this header — present on requests signed with temporary/STS credentials, the common case for Bedrock — was forwarded to the Coolhand backend and printed in `debug_mode` unredacted. The sanitizer now redacts any header whose name matches `key`, `token`, `secret`, `signature`, or `authorization`, closing this and similar gaps for any current or future provider header.
+- **`debug_mode`'s "skipping capture" log line no longer prints the raw URL.** When a request matched `exclude_api_patterns` while `debug_mode` was on, the log line bypassed the usual URL sanitizer, so a Gemini/Vertex `?key=...` query-param API key could be printed in full. It now goes through the same URL sanitizer as every other log line.
+- **Outbound requests to the Coolhand backend now set a 5-second connect/read timeout.** Previously this call had no explicit timeout and ran inline on the same thread as the intercepted LLM request, so a slow or unreachable Coolhand endpoint (including a self-hosted `base_url`) could add Ruby's ~60s Net::HTTP default (up to ~120s total) of latency to real LLM calls made by the host app.
+
+### Removed
+- Deleted unused `BaseInterceptor` methods with no callers anywhere in the gem: `extract_response_data`, `extract_usage_metadata`, `clean_request_headers`, `clean_response_headers`. The latter two duplicated `sanitize_headers` with a narrower, case-sensitive header list and were never wired into any interceptor — dead code carrying its own security debt.
+
+### Dependencies
+- Bumped `faraday` from 2.14.2 to 2.14.3 (#73).
+
 ## [0.4.0] - 2026-06-22
 
 ### Added

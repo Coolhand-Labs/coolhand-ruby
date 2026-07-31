@@ -13,7 +13,7 @@ feedback_service = Coolhand::FeedbackService.new
 
 # Positive feedback linked by log ID (most reliable)
 feedback_service.create_feedback(
-  llm_request_log_id: 12345,
+  llm_request_log_id: 'abc123def456', # hashid from a prior response; a raw integer FK also still works
   sentiment: 'like',
   explanation: 'Clear and accurate answer.',
 )
@@ -39,7 +39,7 @@ These fields identify which LLM request the feedback refers to. Use the most spe
 
 | Field | Match type | Description |
 |---|---|---|
-| `llm_request_log_id` | Exact | Coolhand log ID returned when the original request was logged. Most reliable. |
+| `llm_request_log_id` | Exact | Hashid returned when the original request was logged (a raw integer FK is also still accepted for backward compatibility). Most reliable. |
 | `llm_provider_unique_id` | Exact | The provider's own request ID (e.g. `x-request-id` from Anthropic or OpenAI). |
 | `client_unique_id` | Exact | Your own internal identifier for the request (e.g. a database row ID). |
 | `original_output` | Fuzzy | The raw text the LLM produced. Used for fuzzy matching when no ID is available — less reliable. |

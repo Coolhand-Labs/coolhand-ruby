@@ -5,93 +5,12 @@ module Coolhand
   module BaseInterceptor
     module_function
 
-    def extract_response_data(response)
-      case response
-      when Hash
-        response
-      when Struct
-        response.to_h
-      else
-        # Handle streaming responses - these are often enumerator objects
-        # that can't be serialized directly
-        if response.class.name.include?("Stream") || response.respond_to?(:each)
-          {
-            response_type: "streaming",
-            class: response.class.name,
-            note: "Streaming response - content captured during enumeration"
-          }
-        elsif response.respond_to?(:to_h)
-          begin
-            response.to_h
-          rescue StandardError => e
-            {
-              serialization_error: e.message,
-              class: response.class.name,
-              raw_response: response.to_s
-            }
-          end
-        else
-          # Extract content and token usage information
-          response_data = {}
-
-          # Get content
-          response_data[:content] = response.content if response.respond_to?(:content)
-
-          # Extract token usage information
-          response_data[:usage] = extract_usage_metadata(response.usage) if response.respond_to?(:usage)
-
-          # Extract model information
-          response_data[:model] = response.model if response.respond_to?(:model)
-
-          # Extract role information
-          response_data[:role] = response.role if response.respond_to?(:role)
-
-          # Extract ID if available
-          response_data[:id] = response.id if response.respond_to?(:id)
-
-          # Extract stop reason if available
-          response_data[:stop_reason] = response.stop_reason if response.respond_to?(:stop_reason)
-
-          # Add class info for debugging
-          response_data[:class] = response.class.name
-
-          response_data.empty? ? { raw_response: response.to_s, class: response.class.name } : response_data
-        end
-      end
-    end
-
-    def extract_usage_metadata(usage)
-      if usage.respond_to?(:to_h)
-        usage.to_h
-      elsif usage.is_a?(Hash)
-        usage
-      else
-        # Extract individual usage fields
-        usage_data = {}
-        usage_data[:input_tokens] = usage.input_tokens if usage.respond_to?(:input_tokens)
-        usage_data[:output_tokens] = usage.output_tokens if usage.respond_to?(:output_tokens)
-        usage_data[:total_tokens] = usage_data[:input_tokens].to_i + usage_data[:output_tokens].to_i
-        usage_data
-      end
-    end
-
-    def clean_request_headers(headers)
-      cleaned = headers.dup
-
-      # Remove sensitive headers
-      cleaned.delete("Authorization")
-      cleaned.delete("authorization")
-      cleaned.delete("x-api-key")
-      cleaned.delete("X-API-Key")
-
-      cleaned
-    end
-
-    def clean_response_headers(headers)
-      # Response headers typically don't contain sensitive data
-      # but we can filter if needed
-      headers.dup
-    end
+    # Matches any header whose *name* signals sensitive content, regardless of
+    # provider — covers known keys (x-api-key, x-goog-api-key, openai-api-key),
+    # AWS SigV4 session tokens (x-amz-security-token), and future/unknown
+    # providers using a similarly-named header. Shared with LoggerService so
+    # the two logging paths (interceptor + webhook forwarding) stay consistent.
+    SENSITIVE_HEADER_PATTERN = /key|token|secret|signature|authorization/i
 
     def sanitize_headers(headers)
       return {} if headers.nil?
@@ -122,7 +41,6 @@ module Coolhand
 
       sanitized = raw.dup
 
-      sanitized_keys = %w[openai-api-key api-key x-api-key x-goog-api-key]
       sanitized.each do |k, v|
         next if v.nil?
 
@@ -134,7 +52,7 @@ module Coolhand
           else
             "[REDACTED]"
           end
-        elsif sanitized_keys.include?(key_down)
+        elsif key_down.match?(SENSITIVE_HEADER_PATTERN)
           sanitized[k] = "[REDACTED]"
         end
       end

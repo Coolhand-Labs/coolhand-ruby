@@ -73,8 +73,9 @@ module Coolhand
         # Convert Rails HTTP_ prefix headers
         clean_key = key.to_s.gsub(/^HTTP_/, "").tr("_", "-").downcase
 
-        # Redact sensitive headers
-        clean_value = clean_key.match?(/key|token|secret|authorization|signature/i) ? "[REDACTED]" : value.to_s
+        # Redact sensitive headers (shared with BaseInterceptor so both logging
+        # paths treat the same header names as sensitive)
+        clean_value = clean_key.match?(BaseInterceptor::SENSITIVE_HEADER_PATTERN) ? "[REDACTED]" : value.to_s
         clean_headers[clean_key] = clean_value
       end
       clean_headers

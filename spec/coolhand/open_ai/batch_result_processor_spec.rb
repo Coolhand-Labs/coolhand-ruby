@@ -110,6 +110,83 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
 
         described_class.new(event_data: { "id" => "batch-3" }).call
       end
+
+      it "skips a response item with no matching request custom_id and sends nothing for it" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(input_items_jsonl)
+
+        unmatched_output = [
+          { "custom_id" => "no-such-request",
+            "response" => { "request_id" => "req-999", "body" => {}, "status_code" => 200 } }
+        ].map(&:to_json).join("\n")
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-1").and_return(unmatched_output)
+
+        expect(api_service).not_to receive(:send_llm_request_log)
+
+        described_class.new(event_data: { "id" => "batch-3" }).call
+      end
+    end
+
+    context "when batch status is unrecognized" do
+      let(:batch_info) { { "id" => "batch-4", "status" => "some_future_status" } }
+
+      it "logs a warning and does not raise" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        expect(Rails.logger).to receive(:warn).with(a_string_including("Unknown batch status"))
+        expect { described_class.new(event_data: { "id" => "batch-4" }).call }.not_to raise_error
+      end
+    end
+
+    context "when downloading a batch result file fails outright (e.g. network error)" do
+      let(:batch_info) do
+        {
+          "id" => "batch-6",
+          "status" => "completed",
+          "input_file_id" => "file-in-down",
+          "output_file_id" => "file-out-down",
+          "in_progress_at" => 1_700_000_000,
+          "completed_at" => 1_700_000_005
+        }
+      end
+
+      it "logs a download error and treats the file as having no items, without raising" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-down")
+          .and_raise(StandardError, "connection reset")
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-down")
+          .and_raise(StandardError, "connection reset")
+
+        expect(Rails.logger).to receive(:error).with(a_string_including("Failed to download OpenAI batch results"))
+          .at_least(:once)
+        expect(api_service).not_to receive(:send_llm_request_log)
+
+        expect { described_class.new(event_data: { "id" => "batch-6" }).call }.not_to raise_error
+      end
+    end
+
+    context "when a batch result file is malformed JSONL" do
+      let(:batch_info) do
+        {
+          "id" => "batch-5",
+          "status" => "completed",
+          "input_file_id" => "file-in-bad",
+          "output_file_id" => "file-out-bad",
+          "in_progress_at" => 1_700_000_000,
+          "completed_at" => 1_700_000_005
+        }
+      end
+
+      it "logs a parse error and treats the file as having no items, without raising" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-bad").and_return("not json{{{")
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-bad").and_return("not json{{{")
+
+        expect(Rails.logger).to receive(:error).with(a_string_including("Failed to parse OpenAI batch results"))
+          .at_least(:once)
+        expect(api_service).not_to receive(:send_llm_request_log)
+
+        expect { described_class.new(event_data: { "id" => "batch-5" }).call }.not_to raise_error
+      end
     end
   end
 end

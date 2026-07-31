@@ -68,7 +68,7 @@ require 'coolhand'
 feedback_service = Coolhand::FeedbackService.new
 
 feedback = feedback_service.create_feedback(
-  llm_request_log_id: 123,
+  llm_request_log_id: 'abc123def456', # hashid from a prior response; a raw integer FK also still works
   llm_provider_unique_id: 'req_xxxxxxx',
   client_unique_id: 'workorder-chat-456',
   creator_unique_id: 'user-789',
@@ -493,7 +493,7 @@ end
 
 ## Documentation
 
-- **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, custom intercept addresses
+- **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
