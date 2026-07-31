@@ -58,7 +58,9 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
               id: fixed_id,
               timestamp: start_time,
               method: "post",
-              url: batch_info["name"],
+              url: "https://aiplatform.googleapis.com/v1/#{batch_info['name']}",
+              source_api: "vertex",
+              model: nil,
               request_body: batch_item["request"],
               response_body: batch_item["response"],
               status_code: 200,
@@ -70,6 +72,36 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
         )
 
         processor = described_class.new(batch_info: batch_info)
+        processor.call([batch_item])
+      end
+
+      it "sends the explicitly provided model when given" do
+        api_service = instance_double(Coolhand::ApiService)
+        allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
+
+        expect(api_service).to receive(:send_llm_request_log).with(
+          hash_including(
+            raw_request: hash_including(source_api: "vertex", model: "gemini-2.0-flash")
+          )
+        )
+
+        processor = described_class.new(batch_info: batch_info, model: "gemini-2.0-flash")
+        processor.call([batch_item])
+      end
+
+      it "falls back to batch_info's model when no explicit model is given" do
+        batch_info_with_model = batch_info.merge("model" => "publishers/google/models/gemini-2.0-flash")
+
+        api_service = instance_double(Coolhand::ApiService)
+        allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
+
+        expect(api_service).to receive(:send_llm_request_log).with(
+          hash_including(
+            raw_request: hash_including(model: "publishers/google/models/gemini-2.0-flash")
+          )
+        )
+
+        processor = described_class.new(batch_info: batch_info_with_model)
         processor.call([batch_item])
       end
     end

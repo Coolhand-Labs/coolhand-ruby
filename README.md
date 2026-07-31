@@ -472,7 +472,7 @@ class Vertex::BatchCallbackProcessor < BaseService
     when "JOB_STATE_RUNNING", "JOB_STATE_QUEUED"
       batch_request.update!(status: "processing")
 
-      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call
+      Coolhand::Vertex::BatchResultProcessor.new(batch_info:, model: batch_request.llm_model).call
     when "JOB_STATE_SUCCEEDED"
       output_file_id = batch_info["outputInfo"]["gcsOutputDirectory"]
       results = download_batch_results(output_file_id)
@@ -480,7 +480,7 @@ class Vertex::BatchCallbackProcessor < BaseService
 
       batch_request.update!(status: "completed", completed_at: Time.current, output_file_id:)
 
-      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call(results)
+      Coolhand::Vertex::BatchResultProcessor.new(batch_info:, model: batch_request.llm_model).call(results)
 
       # Clean up GCS files after successful processing
       cleanup_gcs_files(output_file_id)

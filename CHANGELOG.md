@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Vertex batch result logging** — `Coolhand::Vertex::BatchResultProcessor` now sends a fully-qualified URL (`https://aiplatform.googleapis.com/v1/<resource name>`) instead of the bare Vertex job resource name, and sends `source_api`/`model` explicitly so the ingestion backend no longer needs to classify these synthetic batch-result logs by URL heuristics alone. Pass `model:` to `BatchResultProcessor.new` (or include a `"model"` key in `batch_info`) to populate the `model` field (#76).
+
 ## [0.4.0] - 2026-06-22
 
 ### Added

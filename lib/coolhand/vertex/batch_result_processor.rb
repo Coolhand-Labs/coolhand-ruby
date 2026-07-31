@@ -3,10 +3,14 @@
 module Coolhand
   module Vertex
     class BatchResultProcessor
-      attr_reader :batch_info
+      VERTEX_API_BASE_URL = "https://aiplatform.googleapis.com/v1/"
+      SOURCE_API = "vertex"
 
-      def initialize(batch_info:)
+      attr_reader :batch_info, :model
+
+      def initialize(batch_info:, model: nil)
         @batch_info = batch_info
+        @model = model
       end
 
       def call(batch_results = [])
@@ -31,7 +35,9 @@ module Coolhand
       def process_completed_batch(batch_item)
         send_complete_request_log(request_id: SecureRandom.hex(16),
           method: "POST",
-          url: batch_info["name"],
+          url: "#{VERTEX_API_BASE_URL}#{batch_info['name']}",
+          source_api: SOURCE_API,
+          model: model || batch_info["model"],
           request_body: batch_item["request"],
           response_body: batch_item["response"],
           status_code: 200,
@@ -43,8 +49,8 @@ module Coolhand
         Rails.logger.error("[Interceptor] Failed to send request log: #{e.message}")
       end
 
-      def send_complete_request_log(request_id:, method:, url:, request_body:, response_body:, status_code:,
-        start_time:, end_time:)
+      def send_complete_request_log(request_id:, method:, url:, source_api:, model:, request_body:, response_body:,
+        status_code:, start_time:, end_time:)
         start_time = Time.iso8601(start_time)
         end_time   = Time.iso8601(end_time)
         duration_ms = ((end_time - start_time) * 1000).to_i
@@ -54,7 +60,9 @@ module Coolhand
             id: request_id,
             timestamp: start_time,
             method: method.to_s.downcase,
-            url: url,
+            url: BaseInterceptor.sanitize_url(url),
+            source_api: source_api,
+            model: model,
             headers: {},
             request_body: request_body,
             response_headers: {},
