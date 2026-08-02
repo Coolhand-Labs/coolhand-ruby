@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`Coolhand::Vertex::BatchResultProcessor.new` accepts an optional `model:` keyword** (falls back to a `"model"` key in `batch_info` when omitted) to populate the `model` field on batch-result logs — included only when one of those is available and non-blank, and omitted from the payload entirely otherwise (#76).
+- **`Coolhand::BaseInterceptor.send_complete_request_log` accepts optional `source_api:`/`model:` keywords**, for synthetic/batch log types (like the Vertex processor above) that aren't backed by a real intercepted HTTP request (#76).
+
+### Changed
+- **Vertex batch results with a missing or malformed job resource name or unparseable `startTime`/`endTime` are no longer logged at all.** Previously the processor still sent a request log using whatever was in `batch_info["name"]` (even if blank), just with a broken URL. It now validates these fields and skips the log entirely — with a `Rails.logger.error` explaining why — rather than sending something unusable (#76).
+- **A batch whose `endTime` precedes its `startTime` (e.g. clock skew) is still logged**, with `duration_ms` clamped to `0` and a warning logged, rather than dropped — unlike the missing/malformed cases above, the request/response content itself is still valid here (#76).
+- **A Vertex batch result item that isn't a `Hash` with a `"request"` and/or `"response"` key is now rejected and logged as an error**, instead of being sent as a log with `nil` request/response bodies (#76).
+- **The published gem no longer packages `.claude/`, `.idea/`, or `CLAUDE.md`** — these are repo/agent tooling, not part of the library.
+
 ### Fixed
-- **Vertex batch result logging** — `Coolhand::Vertex::BatchResultProcessor` now sends a fully-qualified URL (`https://aiplatform.googleapis.com/v1/<resource name>`) instead of the bare Vertex job resource name, and sends `source_api`/`model` explicitly so the ingestion backend no longer needs to classify these synthetic batch-result logs by URL heuristics alone. Pass `model:` to `BatchResultProcessor.new` (or include a `"model"` key in `batch_info`) to populate the `model` field (#76).
+- **Vertex batch result logging** — `Coolhand::Vertex::BatchResultProcessor` now sends a fully-qualified URL (`https://aiplatform.googleapis.com/v1/<resource name>`) instead of the bare Vertex job resource name, plus explicit `source_api` and `model` values, all inside `raw_request`. The Coolhand API treats `raw_request` as free-form JSON, so this improves the data available to its classification without depending on new top-level payload fields being accepted. Also fixed: `timestamp`/`completed_at` are now sent as proper ISO 8601 strings instead of raw `Time` objects, and the URL is now run through the same `sanitize_url` helper used by every other logging path in the gem, for consistency (a Vertex batch URL can't actually carry a redactable query string today, so this is defense-in-depth rather than a fix for a live leak) (#76).
+- **`require "coolhand"` no longer requires `faraday`.** The gem hasn't used Faraday directly since the 0.4.0 unified `NetHttpInterceptor`, but a stale top-level `require "faraday"` meant loading the gem could raise `LoadError` for anyone without faraday installed — it was never a declared dependency. If your app relied on `require "coolhand"` transitively loading Faraday, require it yourself.
+- `Coolhand::Vertex::BatchResultProcessor`, `Coolhand::OpenAi::BatchResultProcessor`, and `Coolhand::OpenAi::WebhookValidator` can now each be required independently (e.g. `require "coolhand/vertex/batch_result_processor"`) without first requiring `"coolhand"` — previously this could raise `NameError` depending on load order.
 
 ## [0.5.0] - 2026-07-30
 

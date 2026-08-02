@@ -96,23 +96,25 @@ module Coolhand
     end
 
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
-      response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:)
-      request_data = {
-        raw_request: {
-          id: request_id,
-          timestamp: start_time.iso8601,
-          method: method.to_s.downcase,
-          url: sanitize_url(url),
-          headers: request_headers,
-          request_body: request_body,
-          response_headers: response_headers,
-          response_body: response_body,
-          status_code: status_code,
-          duration_ms: duration_ms,
-          completed_at: end_time.iso8601,
-          is_streaming: is_streaming
-        }
+      response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:, source_api: nil, model: nil)
+      raw_request = {
+        id: request_id,
+        timestamp: start_time.iso8601,
+        method: method.to_s.downcase,
+        url: sanitize_url(url),
+        headers: sanitize_headers(request_headers),
+        request_body: request_body,
+        response_headers: sanitize_headers(response_headers),
+        response_body: response_body,
+        status_code: status_code,
+        duration_ms: duration_ms,
+        completed_at: end_time.iso8601,
+        is_streaming: is_streaming
       }
+      raw_request[:source_api] = source_api if Coolhand.required_field?(source_api)
+      raw_request[:model] = model if Coolhand.required_field?(model)
+
+      request_data = { raw_request: raw_request }
 
       api_service = Coolhand::ApiService.new
       api_service.send_llm_request_log(request_data)

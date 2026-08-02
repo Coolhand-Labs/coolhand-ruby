@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "open_ai/webhook_validator"
+require_relative "open_ai/batch_result_processor"
+
 module Coolhand
   module WebhookInterceptor
     def intercept_batch_request

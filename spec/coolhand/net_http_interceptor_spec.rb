@@ -47,6 +47,8 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect((raw[:method] || raw["method"]).to_s).to match(/get/i)
     expect(raw[:response_body] || raw["response_body"]).to eq({ "msg" => "hi" })
     expect(raw[:status_code] || raw["status_code"]).to eq(200)
+    expect(raw).not_to have_key(:source_api)
+    expect(raw).not_to have_key(:model)
   end
 
   describe "re-entry guard" do
