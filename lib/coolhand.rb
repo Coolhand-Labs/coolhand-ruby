@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 require "uri"
-require "faraday"
 require "securerandom"
 require "json"
 require "base64"
+require "time"
 
 require_relative "coolhand/version"
 require_relative "coolhand/configuration"

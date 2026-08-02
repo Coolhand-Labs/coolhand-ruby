@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../../coolhand"
+
 module Coolhand
   module OpenAi
     class BatchResultProcessor

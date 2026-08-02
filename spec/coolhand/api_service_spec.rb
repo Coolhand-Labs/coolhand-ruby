@@ -41,6 +41,23 @@ RSpec.describe Coolhand::ApiService do
       expect(WebMock).to have_requested(:post, "https://self-hosted.example.com/api/v2/llm_request_logs")
       expect(WebMock).not_to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
     end
+
+    it "does not re-intercept and re-log its own request to the Coolhand API, even when its own host " \
+       "matches intercept_addresses" do
+      Coolhand.configuration.intercept_addresses = ["coolhandlabs.com"]
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 200, body: JSON.generate({ id: 1 }), headers: { "Content-Type" => "application/json" })
+
+      described_class.new.send_llm_request_log(
+        method: "POST",
+        url: "https://api.openai.com/v1/chat/completions",
+        request_body: {},
+        response_body: {},
+        status_code: 200
+      )
+
+      expect(WebMock).to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs").once
+    end
   end
 
   describe "#send_llm_request_log with missing api_key" do

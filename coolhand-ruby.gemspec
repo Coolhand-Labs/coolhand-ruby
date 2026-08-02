@@ -10,9 +10,10 @@ Gem::Specification.new do |spec|
 
   spec.summary = "Monitor and log LLM API calls from OpenAI, Anthropic, and other providers to Coolhand analytics."
   spec.description = "Automatically intercept and log LLM requests from Ruby applications. Supports OpenAI, " \
-                     "official Anthropic gem, ruby-anthropic gem, and other Faraday-based libraries. Features " \
-                     "dual interceptor architecture, streaming support, thread-safe operation, and automatic " \
-                     "duplicate request prevention."
+                     "official Anthropic gem, ruby-anthropic gem, Google Gemini, Google Vertex AI, AWS Bedrock, " \
+                     "OpenRouter, and any other library using Net::HTTP (directly, or via Faraday's default " \
+                     "adapter). Features a single unified Net::HTTP interceptor, streaming support, " \
+                     "thread-safe operation, and automatic duplicate request prevention."
   spec.homepage = "https://coolhandlabs.com/"
   spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 3.0.0"
@@ -28,7 +29,8 @@ Gem::Specification.new do |spec|
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |f|
       (File.expand_path(f) == __FILE__) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git appveyor Gemfile])
+        (f == "CLAUDE.md") ||
+        f.start_with?(*%w[bin/ test/ spec/ features/ .git .claude .idea appveyor Gemfile])
     end
   end
   spec.bindir = "exe"

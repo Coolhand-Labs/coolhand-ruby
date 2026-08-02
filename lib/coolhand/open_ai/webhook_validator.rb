@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require "openssl"
+
 module Coolhand
   module OpenAi
     class WebhookValidator
-      attr_reader :request, :errors, :payload, :webhook_secret
+      attr_reader :request, :errors, :payload
 
       def initialize(request, webhook_secret)
         @request = request
@@ -16,7 +18,7 @@ module Coolhand
         @payload = request.raw_post || request.body.read
 
         return false unless payload_valid?
-        return validate_in_non_production_env unless webhook_secret
+        return validate_in_non_production_env unless Coolhand.required_field?(webhook_secret)
 
         secret_bytes = extract_secret_bytes
         webhook_signature, webhook_timestamp, webhook_id = extract_webhook_headers
@@ -31,6 +33,8 @@ module Coolhand
       end
 
       private
+
+      attr_reader :webhook_secret
 
       def payload_valid?
         return true if @payload

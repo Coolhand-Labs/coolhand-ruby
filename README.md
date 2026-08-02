@@ -39,14 +39,14 @@ end
 # ✅ OpenAI SDK calls
 # ✅ Anthropic API calls
 # ✅ Direct HTTP requests to AI APIs
-# ✅ ANY library making AI API calls via Faraday
+# ✅ Any library making AI API calls via Faraday's default adapter
 
 # NO code changes needed in your existing services!
 ```
 
 **✨ Why Automatic Monitoring:**
 - 🚫 **Zero refactoring** - No code changes to existing services
-- 📊 **Complete coverage** - Monitors ALL AI libraries using Faraday automatically
+- 📊 **Complete coverage** - Monitors AI libraries using Net::HTTP or Faraday's default adapter automatically
 - 🔒 **Security built-in** - Automatic credential sanitization
 - ⚡ **Performance optimized** - Negligible overhead via async logging
 - 🛡️ **Future-proof** - Automatically captures new AI calls added by your team
@@ -297,18 +297,24 @@ The filtering is automatic and applies to all monitored API calls and webhook lo
 
 The monitor works with multiple transport layers and Ruby libraries:
 
-**Faraday-based libraries:**
+**Faraday-based libraries** (via Faraday's default `net_http` adapter — a non-Net::HTTP adapter such as `faraday-typhoeus` is not covered):
 - OpenAI Ruby SDK
 - ruby-anthropic gem (community Anthropic gem)
 - ruby-openai gem
 - LangChain.rb
-- Direct Faraday requests
-- Any other Faraday-based HTTP client
+- Direct Faraday requests using the default adapter
 
 **Native HTTP libraries:**
 - Official Anthropic Ruby SDK (using Net::HTTP)
 - GitHub Models SDK / any client using `models.github.ai`
 - Any library using Net::HTTP directly
+
+**Other providers monitored out of the box:**
+- Google Gemini (`generativelanguage.googleapis.com`)
+- Google Vertex AI (`aiplatform.googleapis.com`) — see the [Vertex AI batch result logging guide](docs/vertex.md) for async batch jobs
+- AWS Bedrock (OpenAI-compatible endpoint)
+- Cloudflare AI Gateway
+- OpenRouter
 
 **Universal Coverage**: Since most Ruby HTTP libraries use Net::HTTP under the hood, Coolhand's single interceptor provides comprehensive monitoring without needing library-specific integrations.
 
@@ -325,11 +331,11 @@ Coolhand uses a unified Net::HTTP interceptor to capture outgoing requests to co
 ### Request Flow
 When a request matches configured LLM endpoints:
 
-1. The original request executes normally with zero performance impact
+1. The original request executes normally
 2. Request and response data (body, headers, status) are captured by the interceptor
 3. For streaming requests, the complete accumulated response is captured (not individual chunks)
-4. Data is sent to the Coolhand API asynchronously in a background thread
-5. Your application continues without interruption
+4. Data is sent to the Coolhand API inline, after the original response is available (bounded by a 5-second connect/read timeout so a slow or unreachable Coolhand backend can't hang your request indefinitely)
+5. Your application continues once the log is sent (or times out) — the original request/response is never blocked on Coolhand being reachable
 
 For non-matching endpoints, requests pass through unchanged.
 
@@ -395,108 +401,14 @@ The monitor handles errors gracefully:
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
 
-
-## Batch webhook handler (OpenAI)
-
-Automatically handle OpenAI batch event logs (batch.completed, batch.failed, batch.expired, batch.cancelled)
-by intercepting webhook requests and enqueuing your batch result processor.
-
-Usage:
-- Include the interceptor in your controller:
-  include Coolhand::WebhookInterceptor
-- Add the before_action to validate and populate @validator payload:
-  before_action :intercept_batch_request, only: :openai
-- Ensure you skip CSRF for the webhook endpoint:
-  skip_before_action :verify_authenticity_token
-- Override the webhook_secret method to return your OpenAI webhook secret
-
-Minimal example (only key lines shown):
-
-```ruby
-# app/controllers/webhooks/batch_api_requests_controller.rb
-# ...existing code...
-include Coolhand::WebhookInterceptor
-
-skip_before_action :verify_authenticity_token
-before_action :intercept_batch_request, only: :openai
-
-def openai
-  event = JSON.parse(@validator.payload)
-  case event["type"]
-  when "batch.completed", "batch.failed", "batch.expired", "batch.cancelled"
-    batch_id = event.dig("data", "id")
-    batch_request = BatchApiRequest.find_by(provider: "openai", provider_batch_id: batch_id)
-
-    if batch_request
-      OpenAi::BatchResultProcessor.perform_async(batch_request.id)
-      Rails.logger.info("Queued batch result processing for BatchApiRequest #{batch_request.id}")
-    else
-      Rails.logger.warn("Could not find BatchApiRequest for OpenAI batch ID: #{batch_id}")
-    end
-  else
-    Rails.logger.info("Unhandled OpenAI webhook event type: #{event["type"]}")
-  end
-
-  head :ok
-rescue JSON::ParserError
-  head :bad_request
-rescue StandardError => e
-  Rails.logger.error("OpenAI webhook error: #{e.message}")
-  head :internal_server_error
-end
-
-def webhook_secret
-  Rails.application.credentials.openai_webhook_secret
-end
-# ...existing code...
-```
-
-## Batch webhook handler (Vertex)
-
-Automatically handle Vertex batch event logs.
-
-Usage:
-- call Coolhand::Vertex::BatchResultProcessor service with batch_info and download batch results
-
-Minimal example (only key lines shown):
-
-```ruby
-class Vertex::BatchCallbackProcessor < BaseService
-  option :batch_request, model: BatchApiRequest
-  option :batch_info
-
-  def call
-    case batch_info["state"]
-    when "JOB_STATE_PENDING"
-      nil
-    when "JOB_STATE_RUNNING", "JOB_STATE_QUEUED"
-      batch_request.update!(status: "processing")
-
-      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call
-    when "JOB_STATE_SUCCEEDED"
-      output_file_id = batch_info["outputInfo"]["gcsOutputDirectory"]
-      results = download_batch_results(output_file_id)
-      results.each { |batch_item| process_batch_result(batch_item) }
-
-      batch_request.update!(status: "completed", completed_at: Time.current, output_file_id:)
-
-      Coolhand::Vertex::BatchResultProcessor.new(batch_info:).call(results)
-
-      # Clean up GCS files after successful processing
-      cleanup_gcs_files(output_file_id)
-    when "JOB_STATE_FAILED"
-      handle_failed_batch(batch_info["error"]["message"])
-    end
-  end
-end
-```
-
 ## Documentation
 
 - **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
+- **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception
+- **[Google Vertex AI Batch Result Logging](docs/vertex.md)** — Log completed Vertex AI batch prediction job results
 
 ## Security
 

@@ -6,11 +6,11 @@ require "uri"
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
-    DEFAULT_EXCLUDE_API_PATTERNS = YAML.load_file(
+    DEFAULT_EXCLUDE_API_PATTERNS = YAML.safe_load_file(
       File.join(__dir__, "default_exclude_api_patterns.yml")
     ).freeze
 
-    DEFAULT_INTERCEPT_ADDRESSES = YAML.load_file(
+    DEFAULT_INTERCEPT_ADDRESSES = YAML.safe_load_file(
       File.join(__dir__, "default_intercept_addresses.yml")
     ).freeze
 

@@ -2,6 +2,8 @@
 
 require "spec_helper"
 require "coolhand/webhook_interceptor"
+require "shellwords"
+require "logger"
 
 RSpec.describe Coolhand::WebhookInterceptor do
   let(:test_class) do
@@ -30,7 +32,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
   end
 
   let(:controller) { test_class.new }
-  let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }
+  let(:logger) { instance_double(Logger, info: nil, warn: nil, error: nil) }
   let(:validator_valid) { true }
   let(:validator_payload) { { "type" => "batch.completed", "data" => { "id" => "batch_1" } }.to_json }
   let(:validator) do
@@ -91,11 +93,24 @@ RSpec.describe Coolhand::WebhookInterceptor do
     end
 
     context "when processing the event raises" do
-      it "rescues, logs, and does not propagate the error" do
+      it "rescues, logs, halts with :unauthorized (fails closed), and does not propagate the error" do
         allow(controller).to receive(:process_event).and_raise(StandardError, "boom")
         expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request: boom"))
 
         expect { controller.intercept_batch_request }.not_to raise_error
+        expect(controller.head_status).to eq(:unauthorized)
+      end
+    end
+
+    context "when the webhook payload is valid JSON but not an object (e.g. an array or string)" do
+      it "rescues, logs, and halts with :unauthorized instead of passing a non-Hash payload downstream" do
+        allow(validator).to receive(:payload).and_return('["not", "an", "object"]')
+
+        expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request"))
+        expect(controller).not_to receive(:process_event)
+
+        expect { controller.intercept_batch_request }.not_to raise_error
+        expect(controller.head_status).to eq(:unauthorized)
       end
     end
   end
@@ -104,6 +119,26 @@ RSpec.describe Coolhand::WebhookInterceptor do
     it "raises NotImplementedError when the including class doesn't override it" do
       bare_class = Class.new { include Coolhand::WebhookInterceptor }
       expect { bare_class.new.webhook_secret }.to raise_error(NotImplementedError, /must implement #webhook_secret/)
+    end
+  end
+
+  describe "loading this file in isolation" do
+    it "defines Coolhand::OpenAi::WebhookValidator and Coolhand::OpenAi::BatchResultProcessor on its own, " \
+       "without relying on another file having required them first" do
+      lib_path = File.expand_path("../../lib", __dir__)
+      script = <<~RUBY
+        $LOAD_PATH.unshift(#{lib_path.inspect})
+        require "coolhand/webhook_interceptor"
+        raise "WebhookValidator not defined" unless defined?(Coolhand::OpenAi::WebhookValidator)
+        raise "BatchResultProcessor not defined" unless defined?(Coolhand::OpenAi::BatchResultProcessor)
+        puts "ok"
+      RUBY
+
+      # Strip bundler env so this genuinely tests $LOAD_PATH in isolation,
+      # not an inherited RUBYOPT/BUNDLE_GEMFILE from `bundle exec rspec`.
+      output = `env -u RUBYOPT -u RUBYLIB -u BUNDLE_GEMFILE #{RbConfig.ruby.shellescape} -e #{script.shellescape} 2>&1`
+
+      expect(output).to match(/^ok$/)
     end
   end
 end
