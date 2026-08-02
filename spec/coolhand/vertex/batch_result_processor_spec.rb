@@ -340,6 +340,18 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
         processor = described_class.new(batch_info: batch_info)
         processor.call
       end
+
+      context "when error is missing or not a Hash" do
+        let(:batch_info) { { "displayName" => "evals_batch_bad", "state" => "JOB_STATE_FAILED", "error" => nil } }
+
+        it "still logs the batch-failure message (not the generic outer-rescue message from a NoMethodError " \
+           "on nil['message'])" do
+          expect(Rails.logger).to receive(:error)
+            .with(a_string_including("Vertex batch for evals_batch_bad failed"))
+          processor = described_class.new(batch_info: batch_info)
+          expect { processor.call }.not_to raise_error
+        end
+      end
     end
 
     context "when batch state is unrecognized" do

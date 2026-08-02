@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "stringio"
+
 module Coolhand
   module NetHttpInterceptor
     include BaseInterceptor
@@ -7,7 +9,12 @@ module Coolhand
     # Response streaming interceptor nested under NetHttpInterceptor
     module ResponseInterceptor
       def read_body(dest = nil, &block)
-        return super unless block
+        # Only buffer while a #request call below is actively capturing —
+        # otherwise every block-form read_body in the process (including
+        # ones on responses this gem never intercepted) accumulates into a
+        # thread-local that's never freed, which is an unbounded memory
+        # leak on any thread that streams large non-LLM responses.
+        return super unless block && Thread.current[:coolhand_capturing_stream]
 
         super do |chunk|
           Thread.current[:coolhand_stream_buffer] ||= +""
@@ -49,8 +56,16 @@ module Coolhand
       return super unless should_capture?
 
       # Capture body before setting the guard — if this raises we skip logging cleanly
-      # and the guard is never set, so there is no leak.
-      captured_body = capture_request_body(req, body)
+      # and the guard is never set, so there is no leak. A failure here (e.g. an
+      # already-consumed body_stream) must never prevent the real request below
+      # from being attempted — this gem must never be the reason the host
+      # app's actual LLM call doesn't happen.
+      captured_body = begin
+        capture_request_body(req, body)
+      rescue StandardError => e
+        Coolhand.log "❌ Error capturing request body: #{e.message}"
+        nil
+      end
 
       active[self] = true
       start_time = Time.now
@@ -59,7 +74,14 @@ module Coolhand
       status_code = nil
       response_body = nil
 
+      # Save/restore rather than just nil-ing: a request made from inside
+      # this request's own streaming block (nested interception) would
+      # otherwise clobber this request's in-progress buffer with its own
+      # chunks, mixing one request's content into another's log.
+      previous_stream_buffer = Thread.current[:coolhand_stream_buffer]
+      previous_capturing_stream = Thread.current[:coolhand_capturing_stream]
       Thread.current[:coolhand_stream_buffer] = nil
+      Thread.current[:coolhand_capturing_stream] = true
 
       begin
         response = super
@@ -73,7 +95,8 @@ module Coolhand
         raise
       ensure
         active.delete(self)
-        Thread.current[:coolhand_stream_buffer] = nil
+        Thread.current[:coolhand_stream_buffer] = previous_stream_buffer
+        Thread.current[:coolhand_capturing_stream] = previous_capturing_stream
         end_time = Time.now
         duration_ms = ((end_time - start_time) * 1000).round(2)
 

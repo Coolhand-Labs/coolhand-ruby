@@ -133,8 +133,8 @@ module Coolhand
 
       # TODO: implement API to handle failed batch results and display errors on dashboard page
       def handle_failed_batch
-        Rails.logger.error("[Interceptor] Vertex batch for #{batch_info['displayName']} " \
-                           "failed: #{batch_info['error']['message']}")
+        message = batch_info["error"].is_a?(Hash) ? batch_info["error"]["message"] : batch_info["error"]
+        Rails.logger.error("[Interceptor] Vertex batch for #{batch_info['displayName']} failed: #{message}")
       end
     end
   end

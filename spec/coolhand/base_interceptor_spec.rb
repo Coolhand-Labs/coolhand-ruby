@@ -90,4 +90,42 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect { described_class.send_complete_request_log(**base_args) }.not_to raise_error
     end
   end
+
+  describe ".sanitize_headers" do
+    it "redacts cookie and set-cookie headers, not just auth/key/token-shaped ones" do
+      sanitized = described_class.sanitize_headers(
+        "Cookie" => "_session=abc123; remember_token=deadbeef",
+        "Set-Cookie" => "_session=xyz789; path=/",
+        "Content-Type" => "application/json"
+      )
+
+      expect(sanitized["Cookie"]).to eq("[REDACTED]")
+      expect(sanitized["Set-Cookie"]).to eq("[REDACTED]")
+      expect(sanitized["Content-Type"]).to eq("application/json")
+    end
+  end
+
+  describe ".sanitize_url" do
+    it "redacts presigned-URL credential params for AWS SigV4 and Google Cloud storage URLs, " \
+       "not just the small fixed list it used to check" do
+      aws_url = described_class.sanitize_url(
+        "https://bucket.s3.amazonaws.com/file?X-Amz-Signature=abc&X-Amz-Credential=AKIA%2Fx&" \
+        "X-Amz-Security-Token=TOKENSECRET"
+      )
+      goog_url = described_class.sanitize_url(
+        "https://storage.googleapis.com/file?X-Goog-Signature=deadbeef&X-Goog-Credential=svc%40proj"
+      )
+      misc_url = described_class.sanitize_url("https://example.com?sig=abc&password=p&auth=ghi&safe=1")
+
+      expect(aws_url).not_to include("abc")
+      expect(aws_url).not_to include("AKIA")
+      expect(aws_url).not_to include("TOKENSECRET")
+      expect(goog_url).not_to include("deadbeef")
+      expect(goog_url).not_to include("svc%40proj")
+      expect(misc_url).to include("safe=1")
+      expect(misc_url).not_to include("=abc")
+      expect(misc_url).not_to include("=p&")
+      expect(misc_url).not_to include("=ghi")
+    end
+  end
 end

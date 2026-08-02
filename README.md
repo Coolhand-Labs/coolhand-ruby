@@ -331,11 +331,11 @@ Coolhand uses a unified Net::HTTP interceptor to capture outgoing requests to co
 ### Request Flow
 When a request matches configured LLM endpoints:
 
-1. The original request executes normally with zero performance impact
+1. The original request executes normally
 2. Request and response data (body, headers, status) are captured by the interceptor
 3. For streaming requests, the complete accumulated response is captured (not individual chunks)
-4. Data is sent to the Coolhand API asynchronously in a background thread
-5. Your application continues without interruption
+4. Data is sent to the Coolhand API inline, after the original response is available (bounded by a 5-second connect/read timeout so a slow or unreachable Coolhand backend can't hang your request indefinitely)
+5. Your application continues once the log is sent (or times out) — the original request/response is never blocked on Coolhand being reachable
 
 For non-matching endpoints, requests pass through unchanged.
 

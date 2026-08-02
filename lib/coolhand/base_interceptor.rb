@@ -7,10 +7,11 @@ module Coolhand
 
     # Matches any header whose *name* signals sensitive content, regardless of
     # provider — covers known keys (x-api-key, x-goog-api-key, openai-api-key),
-    # AWS SigV4 session tokens (x-amz-security-token), and future/unknown
-    # providers using a similarly-named header. Shared with LoggerService so
-    # the two logging paths (interceptor + webhook forwarding) stay consistent.
-    SENSITIVE_HEADER_PATTERN = /key|token|secret|signature|authorization/i
+    # AWS SigV4 session tokens (x-amz-security-token), session/CSRF cookies
+    # (cookie, set-cookie), and future/unknown providers using a
+    # similarly-named header. Shared with LoggerService so the two logging
+    # paths (interceptor + webhook forwarding) stay consistent.
+    SENSITIVE_HEADER_PATTERN = /key|token|secret|signature|authorization|cookie/i
 
     def sanitize_headers(headers)
       return {} if headers.nil?
@@ -69,15 +70,22 @@ module Coolhand
       end
     end
 
+    # Matches query param *names* that signal sensitive content, the same way
+    # SENSITIVE_HEADER_PATTERN does for headers — covers exact params this
+    # gem already knew about (key/token/secret) as well as presigned-URL
+    # credential params used by AWS (X-Amz-Signature, X-Amz-Credential,
+    # X-Amz-Security-Token) and Google Cloud (X-Goog-Signature,
+    # X-Goog-Credential) storage APIs.
+    SENSITIVE_QUERY_PARAM_PATTERN = /key|token|secret|sig|credential|password|auth/i
+
     def sanitize_url(url)
       uri = URI.parse(url)
       return url unless uri.query
 
-      sensitive = %w[key api_key apikey token access_token secret]
       params = URI.decode_www_form(uri.query)
       redacted = false
       params.map! do |n, v|
-        if sensitive.include?(n.downcase)
+        if n.match?(SENSITIVE_QUERY_PARAM_PATTERN)
           redacted = true
           [n, "[REDACTED]"]
         else

@@ -93,11 +93,24 @@ RSpec.describe Coolhand::WebhookInterceptor do
     end
 
     context "when processing the event raises" do
-      it "rescues, logs, and does not propagate the error" do
+      it "rescues, logs, halts with :unauthorized (fails closed), and does not propagate the error" do
         allow(controller).to receive(:process_event).and_raise(StandardError, "boom")
         expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request: boom"))
 
         expect { controller.intercept_batch_request }.not_to raise_error
+        expect(controller.head_status).to eq(:unauthorized)
+      end
+    end
+
+    context "when the webhook payload is valid JSON but not an object (e.g. an array or string)" do
+      it "rescues, logs, and halts with :unauthorized instead of passing a non-Hash payload downstream" do
+        allow(validator).to receive(:payload).and_return('["not", "an", "object"]')
+
+        expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request"))
+        expect(controller).not_to receive(:process_event)
+
+        expect { controller.intercept_batch_request }.not_to raise_error
+        expect(controller.head_status).to eq(:unauthorized)
       end
     end
   end

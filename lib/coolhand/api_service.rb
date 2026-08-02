@@ -92,7 +92,13 @@ module Coolhand
       request.body = json_body.force_encoding("UTF-8")
 
       begin
-        response = http.request(request)
+        # This request goes through the same patched Net::HTTP as the host
+        # app's real LLM calls. Without this, a base_url/intercept_addresses
+        # configuration that also matches Coolhand's own API host would
+        # re-intercept this log-shipping call, generating a second log
+        # request that itself gets intercepted, and so on — unbounded
+        # request amplification.
+        response = Coolhand.without_capture { http.request(request) }
 
         if response.is_a?(Net::HTTPSuccess)
           result = JSON.parse(response.body, symbolize_names: true)

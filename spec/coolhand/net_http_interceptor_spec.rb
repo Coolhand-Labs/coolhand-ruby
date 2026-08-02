@@ -277,6 +277,82 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw[:request_body] || raw["request_body"]).to eq({ "streamed" => true })
   end
 
+  it "still attempts (and logs) the real request even when capturing the request body raises" do
+    stub_request(:post, "https://api.test.com/upload")
+      .to_return(status: 200, body: '{"ok":true}', headers: { "Content-Type" => "application/json" })
+
+    uri = URI("https://api.test.com/upload")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    # Raise only on the first #read (simulating capture_request_body hitting
+    # a transient failure) so the real send below it can still succeed —
+    # proving execution reaches `super` instead of aborting before it.
+    call_count = 0
+    stream = StringIO.new('{"streamed":true}')
+    allow(stream).to receive(:read) do
+      call_count += 1
+      raise(IOError, "stream already consumed") if call_count == 1
+
+      '{"streamed":true}'
+    end
+    req.body_stream = stream
+    req["Content-Length"] = "18"
+
+    response = nil
+    expect { response = http.request(req) }.not_to raise_error
+    sleep 0.05
+
+    expect(call_count).to be >= 2
+    expect(response.code).to eq("200")
+    expect(@captured_log).to be_a(Hash)
+    raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+    expect(raw[:request_body] || raw["request_body"]).to be_nil
+  end
+
+  it "does not buffer a streamed read_body for a request that was never intercepted" do
+    stub_request(:get, "https://not-intercepted.example.com/stream")
+      .to_return(status: 200, body: "chunk1chunk2")
+
+    Thread.current[:coolhand_stream_buffer] = nil
+
+    uri = URI("https://not-intercepted.example.com/stream")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Get.new(uri)
+
+    http.request(req) do |res|
+      res.read_body { |_chunk| nil }
+    end
+
+    expect(Thread.current[:coolhand_stream_buffer]).to be_nil
+  end
+
+  it "restores the enclosing request's stream buffer (rather than clobbering it) after a nested " \
+     "intercepted request completes inside a callback" do
+    stub_request(:get, "https://api.test.com/inner").to_return(status: 200, body: "inner-body")
+
+    # Simulate being in the middle of an outer request's streaming capture:
+    # some chunks already buffered, capturing flag on. A real nested call
+    # (e.g. a second LLM call made from inside a chunk-processing callback)
+    # must not permanently wipe this out for the outer request.
+    Thread.current[:coolhand_stream_buffer] = "OUTER-PARTIAL-CHUNKS-SO-FAR"
+    Thread.current[:coolhand_capturing_stream] = true
+
+    begin
+      uri = URI("https://api.test.com/inner")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      http.request(Net::HTTP::Get.new(uri))
+      sleep 0.05
+
+      expect(Thread.current[:coolhand_stream_buffer]).to eq("OUTER-PARTIAL-CHUNKS-SO-FAR")
+    ensure
+      Thread.current[:coolhand_stream_buffer] = nil
+      Thread.current[:coolhand_capturing_stream] = nil
+    end
+  end
+
   it "still logs when the HTTP call raises an exception (e.g. SDK error on 4xx)" do
     stub_request(:post, "https://api.test.com/v1/messages")
       .to_return(

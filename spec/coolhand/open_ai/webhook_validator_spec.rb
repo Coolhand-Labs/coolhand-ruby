@@ -109,6 +109,20 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       end
     end
 
+    context "when webhook secret is a blank string in production" do
+      let(:webhook_secret) { "   " }
+
+      before do
+        allow(Rails).to receive(:env).and_return("production")
+        allow(Rails.logger).to receive(:error)
+      end
+
+      it "is treated the same as an unconfigured secret and rejected, rather than used as the HMAC key" do
+        expect(Rails.logger).to receive(:error).with(/not configured - rejecting webhook/)
+        expect(validator.valid?).to be false
+      end
+    end
+
     context "when signature header is missing in production" do
       let(:request) do
         headers_hash = {
