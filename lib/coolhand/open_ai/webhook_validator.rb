@@ -40,7 +40,8 @@ module Coolhand
         return true if @payload
 
         if should_enforce_strict_validation?
-          @errors << "Empty webhook payload - rejecting webhook in production/staging"
+          @errors << "Empty webhook payload - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
+                     "not in development/test allowlist)"
           Rails.logger.error(@errors.last)
           false
         else
@@ -51,7 +52,8 @@ module Coolhand
 
       def validate_in_non_production_env
         if should_enforce_strict_validation?
-          @errors << "OpenAI webhook secret not configured - rejecting webhook in production/staging"
+          @errors << "OpenAI webhook secret not configured - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
+                     "not in development/test allowlist)"
           Rails.logger.error(@errors.last)
           false
         else
@@ -81,7 +83,7 @@ module Coolhand
       def validate_headers_in_non_production_env
         if should_enforce_strict_validation?
           @errors << "Missing OpenAI webhook signature or timestamp headers - " \
-                     "rejecting webhook in production/staging"
+                     "rejecting webhook (Rails.env=#{Rails.env.inspect} not in development/test allowlist)"
           Rails.logger.error(@errors.last)
           false
         else
@@ -124,7 +126,7 @@ module Coolhand
       end
 
       def should_enforce_strict_validation?
-        ["production", "staging"].include?(Rails.env)
+        !%w[development test].include?(Rails.env)
       end
     end
   end
