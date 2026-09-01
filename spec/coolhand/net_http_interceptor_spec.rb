@@ -4,6 +4,7 @@ require "spec_helper"
 require "webmock/rspec"
 require "net/http"
 require "stringio"
+require "timeout"
 
 RSpec.describe Coolhand::NetHttpInterceptor do
   let(:api_service_instance) { instance_double(Coolhand::ApiService) }
@@ -245,16 +246,106 @@ RSpec.describe Coolhand::NetHttpInterceptor do
 
       expect(Net::HTTP.ancestors).to include(described_class)
     end
+
+    it "rolls back both the refcount and the patched flag when the underlying patch step raises" do
+      described_class.reset!
+      allow(Coolhand).to receive(:log).with(/patched/).and_raise("boom from log")
+
+      expect { described_class.patch! }.to raise_error("boom from log")
+
+      expect(described_class.patched?).to be false
+
+      # A subsequent, successful patch!/unpatch! pair must still balance cleanly — proves the
+      # failed call above left no leaked refcount behind.
+      allow(Coolhand).to receive(:log).and_call_original
+      described_class.patch!
+      expect(described_class.patched?).to be true
+      described_class.unpatch!
+      expect(described_class.patched?).to be false
+    end
   end
 
   describe ".unpatch!" do
     it "marks the interceptor as unpatched so guarded requests fall through to the real implementation" do
+      described_class.reset!
       described_class.patch!
       expect(described_class.patched?).to be true
 
       described_class.unpatch!
 
       expect(described_class.patched?).to be false
+    end
+
+    it "stays patched while a second overlapping patch! is still outstanding" do
+      described_class.reset!
+      described_class.patch! # outer holder starts
+      described_class.patch! # inner overlapping holder starts
+
+      described_class.unpatch! # inner finishes first
+      expect(described_class.patched?).to be true
+
+      described_class.unpatch! # outer finishes
+      expect(described_class.patched?).to be false
+    end
+
+    it "does not log a spurious 'disabled' message on an unbalanced extra unpatch! call" do
+      described_class.reset!
+
+      described_class.unpatch! # no matching patch! — a caller bug, but must be a harmless no-op
+
+      expect(described_class.patched?).to be false
+      expect(Coolhand).not_to have_received(:log).with(/disabled/)
+    end
+  end
+
+  # Integration-level sanity check that Coolhand.capture composes correctly across threads.
+  # This does NOT reproduce the original TOCTOU race itself (that requires two threads reading
+  # a stale `patched?` snapshot at the same instant, which can't be forced deterministically
+  # through the public API) — the deterministic regression coverage for the race is the
+  # ".unpatch!" example above ("stays patched while a second overlapping patch! is still
+  # outstanding").
+  describe "overlapping Coolhand.capture blocks" do
+    it "keeps requests intercepted for an overlapping in-flight capture block" do
+      described_class.reset!
+      stub_request(:get, "https://api.test.com/hello")
+        .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
+
+      release_outer = Queue.new
+      outer_started = Queue.new
+
+      outer = Thread.new do
+        Coolhand.capture do
+          outer_started << true
+          release_outer.pop
+        end
+      end
+
+      begin
+        # Bounded, not an unbounded #pop: if the outer thread's Coolhand.capture block raised
+        # before ever reaching `outer_started << true` (e.g. patch! itself failed), we'd
+        # otherwise block here forever with no way to reach the `ensure` below.
+        Timeout.timeout(2) { outer_started.pop }
+        expect(Coolhand::NetHttpInterceptor.patched?).to be true
+
+        uri = URI("https://api.test.com/hello")
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+        # Synchronous: NetHttpInterceptor#request calls the stubbed ApiService synchronously
+        # (see the `before` block above), so @captured_log is populated before capture returns.
+        Coolhand.capture { http.request(Net::HTTP::Get.new(uri)) }
+
+        expect(@captured_log).to be_a(Hash)
+        expect(Coolhand::NetHttpInterceptor.patched?).to be true
+      ensure
+        # Always release and join the outer thread, even if an assertion above failed, so a
+        # failing example doesn't leak a thread blocked forever on release_outer.pop. Bounded
+        # with a timeout + kill as a last resort in case the outer thread is wedged some other way.
+        release_outer << true
+        outer.join(2)
+        outer.kill if outer.alive?
+      end
+
+      expect(Coolhand::NetHttpInterceptor.patched?).to be false
     end
   end
 

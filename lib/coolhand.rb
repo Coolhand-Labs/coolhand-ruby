@@ -62,12 +62,11 @@ module Coolhand
 
       return yield unless configuration.enabled
 
-      patched = NetHttpInterceptor.patched?
       NetHttpInterceptor.patch!
       begin
         yield
       ensure
-        NetHttpInterceptor.unpatch! unless patched
+        NetHttpInterceptor.unpatch!
       end
     end
 

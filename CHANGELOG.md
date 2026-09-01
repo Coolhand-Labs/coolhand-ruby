@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **`NetHttpInterceptor`'s patched/unpatched state is no longer a plain boolean shared across threads.** `Coolhand.capture` snapshotted `NetHttpInterceptor.patched?` before yielding and used that snapshot at the end of a potentially long-running block (an in-flight HTTP request) to decide whether to unpatch. Two threads concurrently entering `Coolhand.capture` before the interceptor was already permanently patched could both observe `patched? == false`, and whichever thread's block finished first would call `unpatch!`, silently disabling interception for the other thread's still in-flight request. `patch!`/`unpatch!` are now a mutex-guarded reference count, so overlapping/nested callers compose correctly and the interceptor only actually unpatches once every outstanding caller has released it (#90). One behavior change: `patch!` is no longer idempotent on its own — every call now needs a matching `unpatch!` to release it, so an app that calls `Coolhand.configure` more than once (e.g. a reloader re-running an initializer) holds an extra, permanent reference each time rather than no-op'ing. This is harmless (interception simply stays on) but is a change from the prior behavior.
+
 ## [0.5.1] - 2026-08-02
 
 ### Added
