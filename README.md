@@ -315,6 +315,7 @@ The monitor works with multiple transport layers and Ruby libraries:
 - AWS Bedrock (OpenAI-compatible endpoint)
 - Cloudflare AI Gateway
 - OpenRouter
+- OpenCode Zen (`opencode.ai`)
 
 **Universal Coverage**: Since most Ruby HTTP libraries use Net::HTTP under the hood, Coolhand's single interceptor provides comprehensive monitoring without needing library-specific integrations.
 

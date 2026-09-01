@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **OpenCode added to default intercept addresses** — `opencode.ai` (OpenCode Zen's OpenAI-compatible gateway) is now monitored out of the box with no configuration required. Since matching is substring-based, this also covers requests to `api.opencode.ai` (a host with no real OpenCode endpoint, but one we've observed real client traffic hitting) without needing a separate entry, so misrouted requests show up in logs instead of vanishing (#97).
+
 ## [0.5.1] - 2026-08-02
 
 ### Added
