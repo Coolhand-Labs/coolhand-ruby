@@ -312,7 +312,7 @@ RSpec.describe Coolhand do
       called = false
 
       expect(Coolhand::NetHttpInterceptor).to receive(:patch!).ordered
-      expect(Coolhand::NetHttpInterceptor).not_to receive(:unpatch!).ordered
+      expect(Coolhand::NetHttpInterceptor).to receive(:unpatch!).ordered
 
       Coolhand.capture do
         called = true
