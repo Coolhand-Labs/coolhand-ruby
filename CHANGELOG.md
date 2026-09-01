@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Captured request bodies are now capped in size and skipped entirely for non-JSON content types.** `Coolhand::NetHttpInterceptor#capture_request_body` previously read the entirety of `req.body_stream` (or `req.body`/the `body` param) into memory with no limit and forwarded it in full as `request_body` — since `intercept?` matches configured hosts on any path, a large upload to an endpoint like `/v1/files`, `/v1/audio/transcriptions`, or `/v1/batches` was held in memory and shipped to Coolhand's API in its entirety. A binary/multipart upload (audio, a batch JSONL file, a fine-tune corpus) is now skipped before it's ever read into memory for capture, and any body over the new `config.max_captured_body_bytes` (default 1 MB) is replaced with a placeholder instead of the full content. The real request to the LLM provider is unaffected — only what gets captured/logged changes (#88).
+
 ## [0.5.1] - 2026-08-02
 
 ### Added
