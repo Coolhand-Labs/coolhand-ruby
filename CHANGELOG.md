@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **`Coolhand::OpenAi::WebhookValidator#should_enforce_strict_validation?` no longer fails open on unrecognized `Rails.env` names.** It previously blocklisted `"production"`/`"staging"` exactly, so any other spelling — `"prod"`, `"production-eu"`, a Heroku/Render `"review"` app env, or an unset `Rails.env` — fell into the permissive fallback path, where a missing/misconfigured webhook secret let an unsigned request pass as valid. It now uses a fail-safe allowlist of `"development"`/`"test"` — every other value, including `nil`, enforces strict validation (#84).
+
 ## [0.5.1] - 2026-08-02
 
 ### Added
