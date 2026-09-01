@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **`Coolhand::OpenAi::WebhookValidator#should_enforce_strict_validation?` no longer fails open on unrecognized `Rails.env` names.** It previously blocklisted `"production"`/`"staging"` exactly, so any other spelling — `"prod"`, `"production-eu"`, a Heroku/Render `"review"` app env, or an unset `Rails.env` — fell into the permissive fallback path, where a missing/misconfigured webhook secret let an unsigned request pass as valid. It now uses a fail-safe allowlist of `"development"`/`"test"` — every other value, including `nil`, enforces strict validation (#84).
+- **The full captured request/webhook body is no longer printed to stdout by default.** `Coolhand::ApiService#log_request_info` (reached via `LoggerService#log_to_api`/`#forward_webhook`) previously dumped the entire captured payload — including raw webhook bodies like voice-call transcripts — to stdout whenever `silent` was `false` (the default). In a containerized deploy, stdout typically flows straight into a log aggregator with a different retention/access model than Coolhand itself. It now logs only an identifier and a byte count by default; the full payload is still printed when `debug_mode` is explicitly enabled (#87).
 
 ## [0.5.1] - 2026-08-02
 
