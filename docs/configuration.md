@@ -57,3 +57,23 @@ end
 Setting `intercept_addresses` **replaces** the default list entirely, so include any default hosts you still need.
 
 The default list can be found in `Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES`.
+
+`intercept_addresses` is a required allow-list — nothing is captured unless its URL matches an entry here. Because of that, `config.intercept_addresses = []` is **not** a supported way to disable capture (it's ignored, with a warning logged, and the previous value is kept). To disable capture entirely, use `config.enabled = false` or `config.capture = false` instead — see [Capture Control](#capture-control) below.
+
+## Excluding API Patterns
+
+`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match here is skipped and never forwarded as an `llm_request_log`. It defaults to `["/batchPredictionJobs/"]`, to suppress Vertex AI batch job management noise.
+
+```ruby
+Coolhand.configure do |config|
+  config.exclude_api_patterns << "/myOperationalPath/"    # extend the defaults
+  # config.exclude_api_patterns = ["/only_this/"]          # replace the defaults entirely
+  # config.exclude_api_patterns = []                       # disable exclusion entirely
+end
+```
+
+Unlike `intercept_addresses`, `exclude_api_patterns` genuinely supports `= []` — since it only narrows an allow-list that already passed, an empty deny-list just means "exclude nothing," which is safe.
+
+## Capture Control
+
+`config.enabled` and `config.capture` are the supported ways to turn capture off entirely — see the Configuration Parameters table in the [README](../README.md#configuration-options).

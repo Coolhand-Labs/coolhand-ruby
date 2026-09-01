@@ -156,7 +156,8 @@ end
 | `enabled` | Boolean | `true` | Set to `false` to disable all patching and validation (e.g. `Rails.env.production?`) |
 | `capture` | Boolean | `true` | Whether to capture and forward intercepted requests. Set to `false` to monitor without forwarding, then use [`Coolhand.with_capture`](#selective-capture) to re-enable selectively |
 | `silent` | Boolean | `false` | Whether to suppress console output |
-| `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API endpoint strings to monitor |
+| `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API endpoint strings to monitor. This is a required allow-list — `[]` is ignored (a warning is logged) rather than disabling capture; use `enabled` or `capture` for that. See [Configuration](docs/configuration.md) |
+| `exclude_api_patterns` | Array | `["/batchPredictionJobs/"]` | Deny-list checked after `intercept_addresses`; matching URLs are skipped. Unlike `intercept_addresses`, `exclude_api_patterns = []` genuinely disables exclusion. See [Configuration](docs/configuration.md) |
 
 ## Usage Examples
 
