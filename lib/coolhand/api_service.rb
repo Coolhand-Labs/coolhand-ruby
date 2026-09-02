@@ -4,9 +4,19 @@ require "net/http"
 require "uri"
 require "json"
 require_relative "collector"
+require_relative "errors"
+require_relative "read_requests"
 
 module Coolhand
   class ApiService
+    # The GET half of this class. See Coolhand::ReadRequests for why reads raise where writes
+    # log and return nil.
+    include ReadRequests
+
+    # Caps how much of a failed response body is interpolated into a log line or an exception
+    # message. Without it an oversized body from a proxy or gateway becomes the message.
+    ERROR_BODY_LIMIT = 2000
+
     attr_reader :api_endpoint
 
     def initialize(endpoint = "v2/llm_request_logs")
@@ -77,12 +87,7 @@ module Coolhand
       http.read_timeout = 5
 
       request = Net::HTTP::Post.new(uri.request_uri)
-      headers = create_request_options(payload)
-      headers.each do |key, value|
-        # Ensure header values are UTF-8 encoded
-        encoded_value = value.is_a?(String) ? value.dup.force_encoding("UTF-8") : value
-        request[key] = encoded_value
-      end
+      apply_headers(request, create_request_options(payload))
 
       # Clean payload and ensure UTF-8 encoding before JSON generation
       cleaned_payload = sanitize_payload_for_json(payload)
@@ -105,14 +110,7 @@ module Coolhand
           log success_message
           result
         else
-          body = response.body.force_encoding("UTF-8") if response.body
-          # Only show first part of HTML error pages
-          error_msg = if body&.include?("<!DOCTYPE html>")
-            "#{body[0..200]}... [HTML error page truncated]"
-          else
-            body
-          end
-          log "❌ Request failed: #{response.code} - #{error_msg}"
+          log "❌ Request failed: #{response.code} - #{format_error_body(response.body)}"
           nil
         end
       rescue StandardError => e
@@ -209,6 +207,26 @@ module Coolhand
     }.freeze
 
     private
+
+    # Shared by the write path's failure log and the read path's raised message, so a large
+    # response body never dumps a whole document into either. An HTML error page (a proxy's 502,
+    # say) is cut short hard; anything else keeps enough to diagnose from and no more.
+    def format_error_body(body)
+      return nil if body.nil?
+
+      text = body.dup.force_encoding("UTF-8")
+      return "#{text[0..200]}... [HTML error page truncated]" if text.include?("<!DOCTYPE html>")
+      return text if text.length <= ERROR_BODY_LIMIT
+
+      "#{text[0, ERROR_BODY_LIMIT]}... [truncated]"
+    end
+
+    def apply_headers(request, headers)
+      headers.each do |key, value|
+        # Net::HTTP rejects header values that are not UTF-8.
+        request[key] = value.is_a?(String) ? value.dup.force_encoding("UTF-8") : value
+      end
+    end
 
     def missing_api_key?
       return false if Coolhand.required_field?(api_key)
