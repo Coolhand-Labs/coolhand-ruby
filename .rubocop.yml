@@ -142,13 +142,6 @@ Lint/MissingSuper:
 RSpec/HookArgument:
   Enabled: false
 
-# spec/live holds the opt-in live suite, deliberately named *_live.rb so RSpec's default
-# pattern - and therefore CI, which has neither a server nor a private key - never picks it up.
-# The suffix is load-bearing, not an oversight.
-RSpec/SpecFilePathSuffix:
-  Exclude:
-    - 'spec/live/**/*'
-
 RSpec/MultipleExpectations:
   Enabled: false
 

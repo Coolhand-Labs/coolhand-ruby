@@ -41,7 +41,7 @@ This is **not** a port of the `search_templates` MCP tool, and the two do not ag
 Template *creation, update and deprecation* stay on the MCP surface. This REST surface is
 read-only, and there is no version-history sub-resource.
 
-## `search_templates(**filters)`
+## `search_templates(search: nil, workload_id: nil, status: nil, include_deprecated: nil, include_system: nil, page: nil, per: nil)`
 
 Search is a *parameter* on the list endpoint rather than a route of its own, so this is one method
 rather than a list/search pair.
@@ -216,22 +216,3 @@ server bounds each *statement* behind a response at 10 seconds, but one response
 a slow-but-working `include_system=true` call measured 7-15 seconds against a development database
 while returning `200` every time. Giving up sooner would report a working endpoint as a transport
 failure, and would pre-empt the `504` you are meant to see and retry.
-
-## Verifying against a live server
-
-The gem ships an opt-in live suite that drives both methods against a real Coolhand server with no
-stubbing anywhere. Every request it makes is a read.
-
-```bash
-COOLHAND_LIVE_BASE_URL=http://127.0.0.1:3000/api \
-COOLHAND_LIVE_API_KEY=<a client's private API key> \
-  bundle exec rake spec:live
-```
-
-It lives in `spec/live/` and is named `*_live.rb` rather than `*_spec.rb` so RSpec's default
-pattern — and therefore `bundle exec rake` and CI, which have neither a server nor a private key —
-never picks it up. Nothing in it is marked pending or skipped; it simply is not matched.
-
-Both variables are required and the suite hard-fails without them, so a missing key can never be
-mistaken for a passing run. Read the key from the environment: never write it into a fixture, a
-commit, or a PR body.
