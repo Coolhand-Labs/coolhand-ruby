@@ -2,10 +2,8 @@
 
 # Opt-in live suite: real HTTP against a real Coolhand server, no stubbing anywhere.
 #
-# Deliberately named `_live.rb` rather than `_spec.rb` so RSpec's default pattern never picks it
-# up. `bundle exec rspec` — which is what CI runs, with neither a server nor a private key — skips
-# it by not matching it, rather than by any example being marked pending or skipped. Run it with
-# `bundle exec rake spec:live`.
+# Named `_live.rb`, not `_spec.rb`, so RSpec's default pattern — and therefore CI — never matches it.
+# Run with: bundle exec rake spec:live
 #
 # Every request it makes is a read. Nothing here inserts or mutates a record.
 
@@ -24,8 +22,7 @@ end
 # The two buckets every Coolhand client is created with.
 SYSTEM_TEMPLATE_NAMES = ["Unmatched", "Ignored API Calls"].freeze
 
-# Exactly the fields the API definition declares on a list row - asserted as a set, so a field
-# quietly disappearing from the response fails here rather than turning into a nil downstream.
+# Asserted as a set, so a field vanishing from the response fails here rather than becoming a nil.
 LIST_FIELDS = %i[
   id name status version group workload_id workload_name
   system_template deprecated_at log_count created_at updated_at

@@ -304,6 +304,13 @@ RSpec.describe Coolhand::TemplateService do
           .to raise_error(Coolhand::HttpError, /x{2000}\.\.\. \[truncated\]/)
       end
 
+      it "raises when a 200 body parses but is not the array the endpoint documents" do
+        stub_request(:get, /llm_request_templates/)
+          .to_return(status: 200, body: "null", headers: { "Content-Type" => "application/json" })
+
+        expect { service.search_templates }.to raise_error(Coolhand::Error, /not a JSON array/)
+      end
+
       it "raises Coolhand::Error, not HttpError, when the body is not JSON" do
         stub_request(:get, /llm_request_templates/).to_return(status: 200, body: "<html>nope</html>")
 

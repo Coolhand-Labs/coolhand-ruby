@@ -99,9 +99,7 @@ detail = templates.get_template(result.templates.first[:id])
 detail[:user_prompt_pattern]
 ```
 
-Search is a parameter on the list endpoint, not a route of its own. The `Unmatched` / `Ignored API Calls` system buckets are hidden unless you pass `include_system: true`, so a client with no templates of its own gets an empty array rather than those two rows.
-
-These are read methods, so they **raise** where the write methods log and return `nil` — a `Coolhand::HttpError` carrying `#status`, including a retryable `504` when the `log_count` aggregate exceeds the server's statement timeout.
+Search is a parameter on the list endpoint, not a route of its own, and the `Unmatched` / `Ignored API Calls` system buckets are hidden unless you pass `include_system: true`. These are read methods, so they **raise** `Coolhand::HttpError` where the write methods log and return `nil`.
 
 For the full filter reference, pagination, and error handling, see [Reading Templates →](docs/template-search.md).
 
@@ -425,8 +423,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-
-The read methods (`search_templates`, `get_template`) are the deliberate exception: they raise a `Coolhand::HttpError` carrying `#status`, because a caller that asked for data has to be able to tell a `404` from a timeout from a genuinely empty result. See [Reading Templates →](docs/template-search.md).
+- The read methods (`search_templates`, `get_template`) are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md)
 
 ## Documentation
 
