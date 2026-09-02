@@ -131,16 +131,41 @@ module Coolhand
     end
 
     def capture_request_body(req, body)
-      return parse_json(body) if body
-      return parse_json(req.body) if req.body
+      # Check content-type before touching body_stream at all — for a binary
+      # upload (multipart/form-data, audio/*, etc.) this avoids reading the
+      # stream into memory a second time just to build a log entry no one
+      # can read anyway.
+      return skipped_capture_marker(req, "non_json_content_type") if binary_upload?(req)
 
-      if req.respond_to?(:body_stream) && req.body_stream
+      content = body || req.body
+      if content.nil? && req.respond_to?(:body_stream) && req.body_stream
         content = req.body_stream.read
         req.body_stream = StringIO.new(content)
-        return parse_json(content)
+      end
+      return nil if content.nil?
+
+      cap_and_parse(content, req)
+    end
+
+    def binary_upload?(req)
+      content_type = req.respond_to?(:content_type) ? req.content_type : nil
+      content_type && !content_type.match?(/json/i)
+    end
+
+    def cap_and_parse(content, req)
+      max_bytes = Coolhand.configuration.max_captured_body_bytes
+      if max_bytes && content.bytesize > max_bytes
+        return skipped_capture_marker(req, "body_too_large", size_bytes: content.bytesize, max_bytes: max_bytes)
       end
 
-      nil
+      parse_json(content)
+    end
+
+    def skipped_capture_marker(req, reason, extra = {})
+      marker = { "_coolhand_capture_skipped" => reason }.merge(extra.transform_keys(&:to_s))
+      content_type = req.respond_to?(:content_type) ? req.content_type : nil
+      marker["content_type"] = content_type if content_type
+      marker
     end
 
     def extract_status_from_exception(e)

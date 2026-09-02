@@ -7,7 +7,7 @@ description: |
   until clean", "keep reviewing and fixing until nothing's left", or wants
   a self-healing code review cycle instead of a single one-shot pass.
 user_invocable: true
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Loop Review
@@ -65,30 +65,46 @@ Repeat the following cycle up to the round cap:
 
 1. **Review.** Spawn a review Agent (via the `Agent` tool) against the
    current scope. Give it: the scope command from above, the round
-   number, the effort level, the full "Review criteria" checklist below,
-   and the list of fixes already applied in prior rounds (so it doesn't
-   re-flag them). Ask it to return a numbered list of issues with file
-   path and line number, or the exact string `LGTM: No issues found.` if
-   there are none.
-2. **Clean round (`LGTM: No issues found.`) → run the Verify step (step 4)
-   once** — a clean-looking diff can still have a broken test suite the
-   reviewer Agent never ran. If Verify passes, converged: move to
-   Wrap-up. If Verify fails, it's not actually converged: treat the
-   failures as findings and go to step 3, then run another round (subject
-   to the round cap) to confirm the fix.
-3. **Findings found → fix every one of them.** Use Edit, Write, and Bash
-   tools to apply fixes directly in this session — don't skip any
-   finding. Record what was found and what was fixed for this round (see
-   the log format below) so the next round's reviewer prompt can list
-   them as already-applied.
+   number, the effort level, the full "Review criteria" checklist below
+   (including the severity taxonomy), and the list of fixes already
+   applied in prior rounds (so it doesn't re-flag them). Ask it to return
+   a numbered list of issues, each tagged with its severity bucket and
+   prefixed in the form `1. [CRITICAL] file:line — problem — fix`, or the
+   exact string `LGTM: No issues found.` if there are none. Its response
+   should end with a line `TOKENS_USED: <number>` — its own best estimate
+   of tokens consumed that round, approximate rather than metered, based
+   on whatever visibility it has into its own context/conversation size.
+   Because the response now ends with that line, the LGTM check is: the
+   *first line* of the response is exactly `LGTM: No issues found.`, not
+   the whole response. Also record `date +%s` immediately before spawning
+   this round's review Agent — the start of this round's timing window
+   for the CSV log (see Wrap-up).
+2. **Clean round (first line `LGTM: No issues found.`) → run the Verify
+   step (step 4) once** — a clean-looking diff can still have a broken
+   test suite the reviewer Agent never ran. If Verify passes, converged:
+   move to Wrap-up. If Verify fails, it's not actually converged: treat
+   the failures as a `[CRITICAL]` finding and go to step 3, then run
+   another round (subject to the round cap) to confirm the fix.
+3. **Findings found → give every one of them a disposition.** For each
+   finding, either fix it (using Edit, Write, and Bash tools to apply the
+   fix directly in this session) or reject it with a one-line reason
+   (false positive / out of scope / disagree with the call) — no silent
+   skipping. Verify failures should essentially never be rejected; a
+   reviewer-agent finding can be, when the reason genuinely holds up.
+   Record, per round: what was found (with severity), what was fixed,
+   and what was rejected (with its reason) — see the log format below —
+   so the next round's reviewer prompt can list fixes as already-applied
+   and the final report can show fixed/rejected counts.
 4. **Verify.** Run `bundle exec rake` (`rspec` then `rubocop`, per the
    `Rakefile`) after applying this round's fixes. If it fails, that
-   failure is itself a finding for the next round — don't move on with a
-   red build. A fix can pass its own narrow spec while breaking something
-   elsewhere, and the next round's reviewer Agent isn't checking
-   test/lint output, only the diff. If a fix round changed something
-   outside this repo's usual toolchain, discover the right command
-   instead of assuming.
+   failure is itself a `[CRITICAL]` finding for the next round — don't
+   move on with a red build. A fix can pass its own narrow spec while
+   breaking something elsewhere, and the next round's reviewer Agent
+   isn't checking test/lint output, only the diff. If a fix round changed
+   something outside this repo's usual toolchain, discover the right
+   command instead of assuming. Record `date +%s` again once Verify
+   completes — the end of this round's timing window for the CSV log
+   (see Wrap-up).
 5. **Findings found and fixed** → do not declare victory yet. Run another
    round to confirm the fixes didn't introduce a regression and that
    nothing was missed.
@@ -109,12 +125,16 @@ Maintain a running log across rounds:
 
 ```
 === Round 1 ===
-Reviewer found N issues:
-  1. [file:line] description
-  2. ...
-Fixed:
+Reviewer found N issues (X critical, Y nice-to-have, Z nitpick):
+  1. [CRITICAL] file:line — problem — fix
+  2. [NICE-TO-HAVE] file:line — problem — fix
+  ...
+Fixed (F):
   - [what was done to resolve issue 1]
   - [what was done to resolve issue 2]
+Rejected (R):
+  - [issue N] — [one-line reason]
+Tokens used (reviewer estimate): NNNN
 
 === Round 2 ===
 ...
@@ -130,6 +150,20 @@ Give the review Agent spawned in each round the full checklist below —
 correctness bugs, reuse/simplification/efficiency, and the repo-specific
 items that follow. Nothing here is optional or a "beyond code-review"
 extra; it's the whole review.
+
+Every finding the review Agent returns must be tagged with one of these
+severity buckets, prefixed onto the finding as shown in "The round loop"
+step 1 (e.g. `1. [CRITICAL] file:line — problem — fix`):
+
+- `[CRITICAL]` — security vulnerabilities, wrong/broken behavior,
+  performance problems.
+- `[NICE-TO-HAVE]` — DRY violations, missing test coverage, code-reuse
+  opportunities.
+- `[NITPICK]` — documentation, comments, naming, formatting-adjacent
+  issues.
+
+A failing `bundle exec rake` from the Verify step counts as `[CRITICAL]`
+when tallying findings for the round log and CSV row.
 
 The top-line priorities this repo cares about most: Ruby best practices
 (DRY, semantic naming), gem publishing discipline (don't break public
@@ -237,12 +271,49 @@ result in this shape:
    fired).
 2. **Verification status**: pass/fail result of the last Verify step
    (`bundle exec rake`) that actually ran.
-3. **Per-round breakdown**: findings found vs. fixed each round (a small
-   table is fine — round / found / fixed).
+3. **Per-round breakdown**: findings found vs. fixed vs. rejected each
+   round, broken down by severity (a small table is fine — round /
+   critical / nice-to-have / nitpick / found / fixed / rejected).
 4. **All files modified**: complete list of files touched across every
    round.
 5. **Remaining issues** (only if stopped early): unresolved findings with
    context on why they need a human decision.
+6. **CSV run log**: once the result above is otherwise final, append one
+   row per round to `~/loop-review-outputs/coolhand-ruby.csv` (a
+   Bash/file-write action — it does not commit anything, so it doesn't
+   touch the never-commits policy in Safety). Create the directory and
+   file with this header if either is absent:
+
+   ```
+   timestamp,branch,iteration,model,thinking_level,clock_seconds,tokens_used_approx,critical_found,nice_to_have_found,nitpick_found,total_found,issues_addressed,issues_ignored
+   ```
+
+   (The column is named `iteration` for consistency with the equivalent
+   CSV in other Coolhand repos, even though this skill's own terminology
+   is "round" everywhere else — populate it with the round number.) For
+   each round, populate:
+   - `timestamp` — `date -u +%Y-%m-%dT%H:%M:%SZ` at the moment the row is
+     written.
+   - `branch` — `git branch --show-current`.
+   - `iteration` — the round number.
+   - `model` — `default`.
+   - `thinking_level` — the effort level used that round (default
+     `medium`).
+   - `clock_seconds` — the difference between the `date +%s` captured
+     before spawning that round's review Agent (step 1) and the
+     `date +%s` captured after that round's fix+Verify completed
+     (step 4).
+   - `tokens_used_approx` — the reviewer Agent's self-reported
+     `TOKENS_USED` value for that round.
+   - `critical_found` / `nice_to_have_found` / `nitpick_found` /
+     `total_found` — that round's severity tally (a failed Verify counts
+     as one `[CRITICAL]`).
+   - `issues_addressed` — that round's fixed count.
+   - `issues_ignored` — that round's rejected count.
+
+   Use a plain `cat >> ~/loop-review-outputs/coolhand-ruby.csv <<EOF ...
+   EOF` append per row — no CSV quoting needed. Note in the final report
+   how many rows were appended and the file path.
 
 ## Rationalizations to resist
 

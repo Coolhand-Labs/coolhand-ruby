@@ -158,6 +158,7 @@ end
 | `silent` | Boolean | `false` | Whether to suppress console output |
 | `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API endpoint strings to monitor. This is a required allow-list — `[]` is ignored (a warning is logged) rather than disabling capture; use `enabled` or `capture` for that. See [Configuration](docs/configuration.md) |
 | `exclude_api_patterns` | Array | `["/batchPredictionJobs/"]` | Deny-list checked after `intercept_addresses`; matching URLs are skipped. Unlike `intercept_addresses`, `exclude_api_patterns = []` genuinely disables exclusion. See [Configuration](docs/configuration.md) |
+| `max_captured_body_bytes` | Integer | `1_000_000` | Maximum size of a captured JSON request body — oversized bodies are replaced with a placeholder. Non-JSON bodies (e.g. file/audio uploads) are always skipped regardless of size — see [Advanced Configuration](docs/configuration.md) |
 
 ## Usage Examples
 

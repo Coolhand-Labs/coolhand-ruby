@@ -310,6 +310,78 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw[:request_body] || raw["request_body"]).to be_nil
   end
 
+  it "replaces an oversized body_stream with a truncation marker in the log, but still sends it in full" do
+    Coolhand.configuration.max_captured_body_bytes = 10
+    content = '{"streamed":"this payload is well over ten bytes long"}'
+
+    stub_request(:post, "https://api.test.com/upload")
+      .with(body: content)
+      .to_return(status: 200, body: '{"ok":true}', headers: { "Content-Type" => "application/json" })
+
+    uri = URI("https://api.test.com/upload")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.body_stream = StringIO.new(content)
+    req["Content-Length"] = content.bytesize.to_s
+
+    response = http.request(req)
+    sleep 0.05
+
+    expect(response.code).to eq("200")
+    expect(@captured_log).to be_a(Hash)
+    raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+    body = raw[:request_body] || raw["request_body"]
+    expect(body["_coolhand_capture_skipped"]).to eq("body_too_large")
+    expect(body["size_bytes"]).to eq(content.bytesize)
+    expect(body["max_bytes"]).to eq(10)
+  end
+
+  it "skips capturing a non-JSON content-type body_stream without reading/rewrapping it, but still sends it in full" do
+    content = (+"\xFF\xD8\xFF\xE0binary-ish-audio-bytes").force_encoding("BINARY")
+
+    stub_request(:post, "https://api.test.com/upload")
+      .with(body: content)
+      .to_return(status: 200, body: '{"ok":true}', headers: { "Content-Type" => "application/json" })
+
+    uri = URI("https://api.test.com/upload")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.content_type = "audio/mpeg"
+    stream = StringIO.new(content)
+    req.body_stream = stream
+    req["Content-Length"] = content.bytesize.to_s
+
+    response = http.request(req)
+    sleep 0.05
+
+    expect(response.code).to eq("200")
+    expect(@captured_log).to be_a(Hash)
+    raw = @captured_log[:raw_request] || @captured_log["raw_request"]
+    body = raw[:request_body] || raw["request_body"]
+    expect(body["_coolhand_capture_skipped"]).to eq("non_json_content_type")
+    expect(body["content_type"]).to eq("audio/mpeg")
+  end
+
+  it "never reads a non-JSON content-type body_stream while capturing (avoids the double memory hold)" do
+    uri = URI("https://api.test.com/upload")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new(uri)
+    req.content_type = "multipart/form-data; boundary=x"
+    stream = StringIO.new("some large binary upload")
+    allow(stream).to receive(:read).and_call_original
+    req.body_stream = stream
+
+    captured = http.send(:capture_request_body, req, nil)
+
+    expect(stream).not_to have_received(:read)
+    expect(req.body_stream).to equal(stream)
+    expect(captured["_coolhand_capture_skipped"]).to eq("non_json_content_type")
+    expect(captured["content_type"]).to eq("multipart/form-data")
+  end
+
   it "does not buffer a streamed read_body for a request that was never intercepted" do
     stub_request(:get, "https://not-intercepted.example.com/stream")
       .to_return(status: 200, body: "chunk1chunk2")

@@ -39,6 +39,22 @@ end
 
 Because it forces capture unconditionally and prints full request/response bodies to the console, only enable `debug_mode` in development — never in production or in an environment handling real user data.
 
+## Request Body Capture Limits
+
+To avoid holding large uploads (batch JSONL files, fine-tune corpora, audio for transcription) in memory and shipping them to Coolhand in full, `config.max_captured_body_bytes` caps how much of a request body gets captured:
+
+```ruby
+Coolhand.configure do |config|
+  config.max_captured_body_bytes = 2_000_000 # default: 1_000_000 (1 MB)
+end
+```
+
+**What happens at the limits:**
+- A request body whose `Content-Type` doesn't look like JSON (e.g. `multipart/form-data`, `audio/mpeg`) is never read into memory for capture — the log entry gets a placeholder (`{"_coolhand_capture_skipped" => "non_json_content_type", ...}`) instead of the body. This is intentional: an opaque binary blob isn't human/LLM-readable in Coolhand's UI anyway.
+- A JSON (or content-type-unset) body larger than the configured limit is replaced with a placeholder (`{"_coolhand_capture_skipped" => "body_too_large", ...}`) instead of being logged in full.
+
+In both cases, only the *captured log entry* is affected — the real request to the LLM provider always sends the complete, untruncated body.
+
 ## Custom Intercept Addresses
 
 By default Coolhand captures requests to a built-in list of LLM API hosts (OpenAI, Anthropic, Google Gemini, ElevenLabs, GitHub Models, and more). To capture a custom endpoint — an internal proxy, a self-hosted model server, or a third-party gateway — override `intercept_addresses`:
