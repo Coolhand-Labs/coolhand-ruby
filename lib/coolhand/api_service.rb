@@ -299,8 +299,24 @@ module Coolhand
       return if silent
 
       puts "\n🎉 LOGGING OpenAI API Call #{@api_endpoint}"
-      puts captured_data
+
+      if debug_mode?
+        puts captured_data
+      else
+        puts request_body_summary(captured_data)
+      end
+
       puts "📤 Sending to: #{@api_endpoint}"
+    end
+
+    def request_body_summary(captured_data)
+      return "captured_data: (unavailable)" unless captured_data.is_a?(Hash)
+
+      id = captured_data[:id] || captured_data["id"] || "N/A"
+      body = captured_data[:request_body] || captured_data["request_body"]
+      "id: #{id}, request_body: #{body.to_json.bytesize} bytes"
+    rescue StandardError
+      "captured_data: (unavailable)"
     end
   end
 end
