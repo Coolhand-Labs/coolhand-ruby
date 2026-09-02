@@ -27,6 +27,12 @@ module Coolhand
     READ_OPEN_TIMEOUT = 5
     READ_TIMEOUT = 60
 
+    # The exception message is already capped at ApiService::ERROR_BODY_LIMIT; this caps the body
+    # the exception itself carries. A gateway can answer a failed read with a multi-megabyte HTML
+    # page, and unbounded that whole document rides on the exception object through every rescue
+    # and into whatever the host app logs.
+    RETAINED_ERROR_BODY_LIMIT = 8_000
+
     protected
 
     # GET +url+ and parse the JSON body, raising on any failure.
@@ -53,7 +59,7 @@ module Coolhand
         raise HttpError.new(
           "#{noun} request failed (#{response.code}): #{format_error_body(response.body)}",
           status: response.code.to_i,
-          body: response.body
+          body: retained_error_body(response.body)
         )
       end
 
@@ -80,6 +86,12 @@ module Coolhand
       Coolhand.without_capture { http.request(request) }
     rescue StandardError => e
       raise Error, "#{noun} request failed: #{e.message}"
+    end
+
+    def retained_error_body(body)
+      return body if body.nil? || body.length <= RETAINED_ERROR_BODY_LIMIT
+
+      "#{body[0, RETAINED_ERROR_BODY_LIMIT]}... [truncated]"
     end
 
     def parse_json_body(body, noun)

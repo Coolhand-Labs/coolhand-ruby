@@ -63,8 +63,9 @@ RSpec.describe Coolhand::TemplateService, :live do
       expect(pagination).to have_attributes(
         current_page: 1,
         total_count: 0,
-        # The server sends X-Total-Pages: 1 next to X-Total-Count: 0. Read, not second-guessed.
-        total_pages: 1,
+        # Kaminari computes (0.0 / per).ceil, and PaginationHeaders sends that verbatim, so an
+        # empty result is X-Total-Pages: 0 - not 1.
+        total_pages: 0,
         has_next_page: false,
         has_prev_page: false
       )

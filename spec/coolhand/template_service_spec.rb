@@ -195,7 +195,7 @@ RSpec.describe Coolhand::TemplateService do
         expect(service.search_templates.pagination.total_count).to eq(97)
       end
 
-      it "trusts X-Total-Pages: 1 alongside X-Total-Count: 0, which is what the server sends" do
+      it "reads a total page count that disagrees with the total, rather than recomputing it" do
         stub_list(
           body: [],
           headers: { "X-Page" => "1", "X-Per-Page" => "25", "X-Total-Count" => "0", "X-Total-Pages" => "1" }
@@ -232,9 +232,39 @@ RSpec.describe Coolhand::TemplateService do
           per_page: 0, total_count: 1, total_pages: 1, has_next_page: false
         )
       end
+
+      it "reports a next page when the totals are missing and the page came back full" do
+        stub_list(body: Array.new(25) { summary }, headers: { "X-Page" => "1", "X-Per-Page" => "25" })
+
+        expect(service.search_templates.pagination).to have_attributes(
+          total_count: 25, has_next_page: true
+        )
+      end
+
+      it "trusts the server page count over the totals when it sends one" do
+        stub_list(
+          body: Array.new(25) { summary },
+          headers: pagination_headers.merge("X-Total-Count" => "100", "X-Total-Pages" => "1")
+        )
+
+        expect(service.search_templates.pagination.has_next_page).to be(false)
+      end
     end
 
     describe "error handling" do
+      it "does not follow a redirect, so the API key is never replayed to another host" do
+        stub_list(body: {}, status: 302, headers: { "Location" => "https://elsewhere.example.com/" })
+
+        expect { service.search_templates }.to raise_error(an_object_having_attributes(status: 302))
+      end
+
+      it "bounds the body it keeps, so a huge error page cannot ride on the exception" do
+        stub_request(:get, /llm_request_templates/).to_return(status: 500, body: "x" * 20_000)
+
+        expect { service.search_templates }
+          .to raise_error(an_object_having_attributes(body: a_string_ending_with("... [truncated]")))
+      end
+
       it "raises rather than returning nil, unlike the write methods" do
         stub_list(body: { error: "API key is required" }, status: 401)
 

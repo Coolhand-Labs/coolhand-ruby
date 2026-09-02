@@ -34,23 +34,32 @@ module Coolhand
 
         current_page = header_int(response, "X-Page") || requested_page
         per_page = header_int(response, "X-Per-Page") || requested_per
+        reported_total_pages = header_int(response, "X-Total-Pages")
         total_count = header_int(response, "X-Total-Count") || fallback_total_count(current_page, per_page, items)
-        total_pages = header_int(response, "X-Total-Pages") || fallback_total_pages(total_count, per_page)
+        total_pages = reported_total_pages || fallback_total_pages(total_count, per_page)
 
         new(
           current_page: current_page,
           per_page: per_page,
           total_count: total_count,
           total_pages: total_pages,
-          # Derived from the server's own page count rather than recomputed from the total: the
-          # live server answers `X-Total-Pages: 1` alongside `X-Total-Count: 0`, and second-guessing
-          # that would advertise a next page that does not exist.
-          has_next_page: current_page < total_pages,
+          has_next_page: next_page?(reported_total_pages, current_page, per_page, items),
           has_prev_page: current_page > 1
         )
       end
 
       private
+
+      # The server's page count is authoritative whenever it sends one, so it is read rather than
+      # recomputed. Without it the totals above are only a lower bound, and comparing against them
+      # reports "no next page" for a page that is plainly full - a caller looping on has_next_page
+      # would stop early and silently drop the rest. A full page is the honest signal there.
+      def next_page?(reported_total_pages, current_page, per_page, items)
+        return current_page < reported_total_pages if reported_total_pages
+        return false unless per_page.positive?
+
+        items.size >= per_page
+      end
 
       # Only reached when a total header is missing or unparseable, which
       # `GET /api/v2/llm_request_templates` never does — it has no `include_total` opt-out. It
