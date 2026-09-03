@@ -81,6 +81,28 @@ feedback = feedback_service.create_feedback(
 
 For a full field reference and matching strategy, see [Feedback API →](docs/feedback.md).
 
+## Reading Templates
+
+Read back the LLM request templates your logs are matched against. Unlike the logging and feedback methods, these require your **private** API key — the public key is write-only on this API and is rejected exactly like an invalid one.
+
+```ruby
+require 'coolhand'
+
+templates = Coolhand.template_service
+
+result = templates.search_templates(search: 'summar', status: 'published')
+result.templates.each { |template| puts "#{template[:name]} (#{template[:log_count]} logs)" }
+result.pagination.total_count
+
+# Prompt patterns come from a single-template fetch only
+detail = templates.get_template(result.templates.first[:id])
+detail[:user_prompt_pattern]
+```
+
+Search is a parameter on the list endpoint, not a route of its own, and the `Unmatched` / `Ignored API Calls` system buckets are hidden unless you pass `include_system: true`. These are read methods, so they **raise** `Coolhand::HttpError` where the write methods log and return `nil`.
+
+For the full filter reference, pagination, and error handling, see [Reading Templates →](docs/template-search.md).
+
 ## Rails Integration
 
 ### Configuration
@@ -402,11 +424,13 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
+- The read methods (`search_templates`, `get_template`) are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md)
 
 ## Documentation
 
 - **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
+- **[Reading Templates](docs/template-search.md)** — Search LLM request templates and fetch a single one, prompt patterns included, using the private API key
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 - **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception
