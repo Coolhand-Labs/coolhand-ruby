@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **OpenCode added to default intercept addresses** — `opencode.ai` (OpenCode Zen's OpenAI-compatible gateway) is now monitored out of the box with no configuration required. Since matching is substring-based, this also covers requests to `api.opencode.ai` (a host with no real OpenCode endpoint, but one we've observed real client traffic hitting) without needing a separate entry, so misrouted requests show up in logs instead of vanishing (#97).
+
 ### Changed
 - **`config.intercept_addresses = []` (or `nil`) now logs a warning instead of silently doing nothing.** `intercept_addresses` is a required allow-list — an empty list would mean "capture nothing" — so `[]` has always been ignored and the previous value kept, unlike the deny-list `exclude_api_patterns`, which genuinely supports `= []` to disable exclusion. That asymmetry meant a user modeling `intercept_addresses` on its sibling setting got no error and no signal that anything happened. Behavior is unchanged; it's just no longer silent. Documented next to both settings in `docs/configuration.md` and the README (#89).
 
