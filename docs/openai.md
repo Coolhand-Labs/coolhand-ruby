@@ -58,3 +58,34 @@ def webhook_secret
 end
 # ...existing code...
 ```
+
+## Replay protection
+
+`Coolhand::OpenAi::WebhookValidator` rejects requests whose `webhook-timestamp` is more than **300 seconds** away from the current time, and rejects a `webhook-id` it has already seen within that window — this prevents a captured request (from a log aggregator, APM trace, or proxy log) from being replayed to re-trigger `Coolhand::OpenAi::BatchResultProcessor`.
+
+Both are configurable:
+
+```ruby
+Coolhand.configure do |config|
+  # Widen or narrow the timestamp tolerance window (seconds). Default: 300.
+  config.webhook_replay_tolerance_seconds = 600
+end
+```
+
+The default `webhook-id` dedup store is in-memory and per-process, so it only protects a single process — replays across multiple app processes/dynos within the tolerance window aren't caught by default. If you run more than one process, supply your own store via `config.webhook_id_store`; any object responding to `claim!(id, ttl_seconds)` works, e.g. one backed by `Rails.cache`. `claim!` must atomically check-and-record the id in one operation (not a separate read then write) — otherwise two requests racing on the same id can both "win" — so lean on your cache backend's compare-and-set primitive (`unless_exist:` below maps to Redis `SET NX` when using `RedisCacheStore`):
+
+```ruby
+class RailsCacheWebhookIdStore
+  # Returns true if this is the first time `id` has been claimed (the
+  # write happened), false if it was already claimed within its TTL.
+  def claim!(id, ttl_seconds)
+    Rails.cache.write("coolhand:openai_webhook:#{id}", true, expires_in: ttl_seconds, unless_exist: true)
+  end
+end
+
+Coolhand.configure do |config|
+  config.webhook_id_store = RailsCacheWebhookIdStore.new
+end
+```
+
+Note: the `webhook-id` is claimed as soon as the signature and timestamp are confirmed valid — before your controller's `process_event` runs. If something downstream fails before the batch is actually handled (e.g. an unexpectedly-shaped payload), a same-id retry within the tolerance window will be rejected as a replay rather than reprocessed.

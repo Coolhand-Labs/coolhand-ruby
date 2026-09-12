@@ -3,6 +3,8 @@
 require "yaml"
 require "uri"
 
+require_relative "open_ai/webhook_id_store"
+
 module Coolhand
   # Handles all configuration settings for the gem.
   class Configuration
@@ -23,7 +25,7 @@ module Coolhand
     DEFAULT_MAX_CAPTURED_BODY_BYTES = 1_000_000
 
     attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled,
-      :max_captured_body_bytes
+      :max_captured_body_bytes, :webhook_replay_tolerance_seconds, :webhook_id_store
     attr_reader :intercept_addresses, :base_url
 
     def initialize
@@ -38,6 +40,8 @@ module Coolhand
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
       @enabled = true
       @max_captured_body_bytes = DEFAULT_MAX_CAPTURED_BODY_BYTES
+      @webhook_replay_tolerance_seconds = 300
+      @webhook_id_store = Coolhand::OpenAi::WebhookIdStore.new
     end
 
     # intercept_addresses is a required allow-list: NetHttpInterceptor#intercept? only
