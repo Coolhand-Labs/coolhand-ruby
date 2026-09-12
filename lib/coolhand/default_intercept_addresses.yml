@@ -4,6 +4,9 @@
 #
 # Users can extend defaults:   c.intercept_addresses << "my.custom.api.com"
 # Users can override entirely: c.intercept_addresses = ["only.this.com"]
+# This list cannot be emptied — it's required (unlike exclude_api_patterns, which
+# can be disabled with `= []`). To disable capture entirely, use
+# c.enabled = false or c.capture = false instead.
 
 - "api.openai.com"
 - "api.anthropic.com"
