@@ -351,6 +351,19 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe "OpenCode default configuration" do
+    it "includes opencode.ai in default intercept_addresses" do
+      fresh_config = Coolhand::Configuration.new
+      expect(fresh_config.intercept_addresses).to include("opencode.ai")
+    end
+
+    it "captures the misconfigured api.opencode.ai host via substring match, no separate entry needed" do
+      fresh_config = Coolhand::Configuration.new
+      matching_address = fresh_config.intercept_addresses.find { |a| "https://api.opencode.ai/v1/chat/completions".include?(a) }
+      expect(matching_address).to eq("opencode.ai")
+    end
+  end
+
   describe ".required_field?" do
     it "returns true for valid values" do
       expect(Coolhand.required_field?("valid")).to be true

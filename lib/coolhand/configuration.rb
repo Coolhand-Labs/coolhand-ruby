@@ -17,7 +17,13 @@ module Coolhand
     BASE_URL_ERROR_MSG = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
     LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
 
-    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled
+    # 1 MB — generous for real chat/completion payloads, small enough to stop
+    # a multi-MB file upload from being logged in full when its content-type
+    # happens to look JSON-ish (or is unset).
+    DEFAULT_MAX_CAPTURED_BODY_BYTES = 1_000_000
+
+    attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled,
+      :max_captured_body_bytes
     attr_reader :intercept_addresses, :base_url
 
     def initialize
@@ -31,6 +37,7 @@ module Coolhand
       @capture = true
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
       @enabled = true
+      @max_captured_body_bytes = DEFAULT_MAX_CAPTURED_BODY_BYTES
     end
 
     # Custom setter that preserves defaults when nil/empty array is provided

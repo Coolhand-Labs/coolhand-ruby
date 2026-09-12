@@ -141,6 +141,65 @@ RSpec.describe Coolhand::LoggerService do
           expect { verbose_service.log_to_api(captured_data) }
             .to output(/🎉 LOGGING OpenAI/).to_stdout
         end
+
+        it "logs an identifier and byte count instead of the full request body" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          pii_captured_data = captured_data.merge(
+            request_body: { transcript: [{ role: "user", message: "my SSN is 123-45-6789" }] }
+          )
+
+          expect { verbose_service.log_to_api(pii_captured_data) }
+            .to output(/id: uuid-123, request_body: \d+ bytes/).to_stdout
+
+          expect { verbose_service.log_to_api(pii_captured_data) }
+            .not_to output(/123-45-6789/).to_stdout
+        end
+
+        it "does not raise and logs a placeholder when captured_data is not a Hash" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.log_to_api("not a hash") }
+            .not_to raise_error
+
+          expect { verbose_service.log_to_api("not a hash") }
+            .to output(/captured_data: \(unavailable\)/).to_stdout
+        end
+
+        it "falls back to defaults when captured_data is missing id/request_body keys" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.log_to_api({}) }
+            .to output(%r{id: N/A, request_body: \d+ bytes}).to_stdout
+        end
+
+        context "when debug_mode is enabled" do
+          let(:debug_config) do
+            instance_double(Coolhand::Configuration,
+              api_key: "test-api-key",
+              base_url: "https://coolhandlabs.com/api",
+              silent: false,
+              environment: "production",
+              debug_mode: true)
+          end
+
+          let(:debug_service) do
+            allow(Coolhand).to receive(:configuration).and_return(debug_config)
+            described_class.new
+          end
+
+          it "still logs the full captured data" do
+            pii_captured_data = captured_data.merge(
+              request_body: { transcript: [{ role: "user", message: "my SSN is 123-45-6789" }] }
+            )
+
+            expect { debug_service.log_to_api(pii_captured_data) }
+              .to output(/123-45-6789/).to_stdout
+          end
+        end
       end
     end
   end

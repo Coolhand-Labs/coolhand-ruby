@@ -225,7 +225,7 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       end
     end
 
-    context "when Rails.env is not production/staging (permissive fallback path)" do
+    context "when Rails.env is in the development/test allowlist (permissive fallback path)" do
       before do
         allow(Rails).to receive(:env).and_return("development")
         allow(Rails.logger).to receive(:warn)
@@ -236,6 +236,17 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
 
         it "allows the webhook through and warns instead of rejecting" do
           expect(Rails.logger).to receive(:warn).with(/skipping signature verification in development/)
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when Rails.env is \"test\"" do
+        let(:webhook_secret) { nil }
+
+        before { allow(Rails).to receive(:env).and_return("test") }
+
+        it "also allows the webhook through and warns instead of rejecting" do
+          expect(Rails.logger).to receive(:warn).with(/skipping signature verification in test/)
           expect(validator.valid?).to be true
         end
       end
@@ -274,6 +285,32 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         it "allows the webhook through and warns instead of rejecting" do
           expect(Rails.logger).to receive(:warn).with(/allowing in development environment/)
           expect(validator.valid?).to be true
+        end
+      end
+    end
+
+    context "when Rails.env is an unrecognized or unset name (must default to strict)" do
+      let(:webhook_secret) { nil }
+
+      before { allow(Rails.logger).to receive(:error) }
+
+      %w[prod production-eu review staging production].each do |env_name|
+        context "when Rails.env is #{env_name.inspect}" do
+          before { allow(Rails).to receive(:env).and_return(env_name) }
+
+          it "rejects the webhook instead of falling back to the permissive path" do
+            expect(Rails.logger).to receive(:error).with(/not configured - rejecting webhook/)
+            expect(validator.valid?).to be false
+          end
+        end
+      end
+
+      context "when Rails.env is nil (unset)" do
+        before { allow(Rails).to receive(:env).and_return(nil) }
+
+        it "rejects the webhook instead of falling back to the permissive path" do
+          expect(Rails.logger).to receive(:error).with(/not configured - rejecting webhook/)
+          expect(validator.valid?).to be false
         end
       end
     end
