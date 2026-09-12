@@ -77,6 +77,22 @@ RSpec.describe Coolhand do
       expect(Coolhand.configuration.intercept_addresses).to eq(Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES)
     end
 
+    it "warns (rather than silently ignoring) when intercept_addresses is set to an empty array" do
+      config.silent = false
+
+      expect do
+        config.intercept_addresses = []
+      end.to output(/intercept_addresses = \[\] is ignored/).to_stdout
+
+      expect(config.intercept_addresses).to eq(Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES)
+    end
+
+    it "does not warn when intercept_addresses = [] is silenced" do
+      config.silent = true
+
+      expect { config.intercept_addresses = [] }.not_to output.to_stdout
+    end
+
     it "allows custom intercept_addresses to be set" do
       expect(Coolhand::NetHttpInterceptor).to receive(:patch!)
       Coolhand.configure do |c|

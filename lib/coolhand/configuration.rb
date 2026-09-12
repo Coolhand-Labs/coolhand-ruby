@@ -40,9 +40,19 @@ module Coolhand
       @max_captured_body_bytes = DEFAULT_MAX_CAPTURED_BODY_BYTES
     end
 
-    # Custom setter that preserves defaults when nil/empty array is provided
+    # intercept_addresses is a required allow-list: NetHttpInterceptor#intercept? only
+    # captures a request whose URL matches an entry here, so an empty list would mean
+    # "never capture anything" (validate! deliberately rejects that). Unlike
+    # exclude_api_patterns, `= []` is not a supported way to disable it — use
+    # config.enabled = false or config.capture = false to disable capture entirely.
+    # nil/empty here is treated as "leave the current value alone" rather than cleared.
     def intercept_addresses=(value)
-      return if value.nil? || (value.is_a?(Array) && value.empty?)
+      if value.nil? || (value.is_a?(Array) && value.empty?)
+        Coolhand.log "⚠️  Coolhand: intercept_addresses = #{value.inspect} is ignored " \
+                     "(would disable capture entirely) — keeping the current value. " \
+                     "Use config.enabled = false or config.capture = false to disable capture."
+        return
+      end
 
       @intercept_addresses = value.is_a?(Array) ? value : [value]
     end
