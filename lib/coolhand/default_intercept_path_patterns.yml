@@ -1,0 +1,12 @@
+# Colon-action path suffixes from Google's API Discovery convention
+# (e.g. ".../v1beta/models/gemini-pro:generateContent"). These have no host
+# component of their own, so — unlike intercept_addresses — they are only
+# ever matched against the *path* of requests whose host is already
+# googleapis.com or a googleapis.com subdomain. They can never match on
+# their own against an unrelated/attacker-controlled host.
+#
+# Users can extend defaults:   c.intercept_path_patterns << ":myAction"
+# Users can override entirely: c.intercept_path_patterns = [":onlyThis"]
+
+- ":generateContent"
+- ":streamGenerateContent"

@@ -220,20 +220,60 @@ module Coolhand
 
     def intercept?(url)
       return false unless url && Coolhand.configuration.respond_to?(:intercept_addresses)
-      return false if excluded_by_pattern?(url)
 
-      Coolhand.configuration.intercept_addresses.any? { |a| url.include?(a) }
+      uri = safe_parse(url)
+      return false unless uri&.host
+
+      return false if excluded_by_pattern?(uri)
+
+      host = uri.host.downcase
+      addresses = Coolhand.configuration.intercept_addresses
+      return true if addresses.any? { |a| host_matches?(host, a) }
+
+      return false unless google_api_host_configured?(addresses)
+      return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
+
+      path = uri.path.to_s
+      Coolhand.configuration.intercept_path_patterns.any? { |p| path.include?(p) }
     end
 
-    def excluded_by_pattern?(url)
+    def excluded_by_pattern?(uri)
       patterns = Coolhand.configuration.exclude_api_patterns
       return false if patterns.nil? || patterns.empty?
 
-      matched = patterns.find { |pattern| url.include?(pattern) }
+      path = uri.path.to_s
+      matched = patterns.find { |pattern| path.include?(pattern) }
       if matched && Coolhand.configuration.debug_mode
-        Coolhand.log "🚫 Skipping capture for #{sanitize_url(url)} (matched exclude_api_pattern: \"#{matched}\")"
+        Coolhand.log "🚫 Skipping capture for #{sanitize_url(uri.to_s)} (matched exclude_api_pattern: \"#{matched}\")"
       end
       !!matched
+    end
+
+    # intercept_path_patterns only ever applies to googleapis.com hosts, and only when the
+    # user still wants Google API traffic intercepted at all — otherwise overriding
+    # intercept_addresses to exclude Google hosts wouldn't actually stop Google API capture.
+    def google_api_host_configured?(addresses)
+      addresses.any? do |a|
+        a = a.to_s.downcase
+        a == "googleapis.com" || a.end_with?(".googleapis.com")
+      end
+    end
+
+    # Host-boundary match: exact, or a dot-delimited suffix (case-insensitive).
+    # A single "*" in `pattern` matches exactly one host label, e.g.
+    # "bedrock-runtime.*.amazonaws.com" matches "bedrock-runtime.us-east-1.amazonaws.com".
+    def host_matches?(host, pattern)
+      pattern = pattern.to_s.downcase
+      return host == pattern || host.end_with?(".#{pattern}") unless pattern.include?("*")
+
+      regex = /\A#{pattern.split('*', -1).map { |part| Regexp.escape(part) }.join('[^.]+')}\z/
+      !!(host =~ regex)
+    end
+
+    def safe_parse(url)
+      URI.parse(url)
+    rescue URI::InvalidURIError
+      nil
     end
 
     def build_url_for_request(http, req)

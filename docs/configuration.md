@@ -74,11 +74,15 @@ Setting `intercept_addresses` **replaces** the default list entirely, so include
 
 The default list can be found in `Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES`.
 
-`intercept_addresses` is a required allow-list — nothing is captured unless its URL matches an entry here. Because of that, `config.intercept_addresses = []` is **not** a supported way to disable capture (it's ignored, with a warning logged, and the previous value is kept). To disable capture entirely, use `config.enabled = false` or `config.capture = false` instead — see [Capture Control](#capture-control) below.
+Each entry is matched against the request's parsed host — an exact match, or a dot-boundary suffix match (`my-llm-proxy.internal` also matches `eu.my-llm-proxy.internal`) — case-insensitively. A single `*` in an entry matches exactly one host label, e.g. `bedrock-runtime.*.amazonaws.com`. Entries are never matched against the full URL, so query strings or paths that merely mention a host can't trigger a false match.
+
+A small number of Google API endpoints use a colon-suffixed path (e.g. `.../gemini-pro:generateContent`) with no host of their own. Those live in the separate `intercept_path_patterns` setting (default: `Coolhand::Configuration::DEFAULT_INTERCEPT_PATH_PATTERNS`) and, unlike `intercept_addresses`, are only checked against the path of requests whose host is already `googleapis.com` or a subdomain of it — and only when `intercept_addresses` still includes at least one `googleapis.com` host. If you override `intercept_addresses` to a list with no Google hosts, `intercept_path_patterns` has no effect and Google API traffic is not captured at all.
+
+`intercept_addresses` is a required allow-list — nothing is captured unless its host matches an entry here. Because of that, `config.intercept_addresses = []` is **not** a supported way to disable capture (it's ignored, with a warning logged, and the previous value is kept). To disable capture entirely, use `config.enabled = false` or `config.capture = false` instead — see [Capture Control](#capture-control) below.
 
 ## Excluding API Patterns
 
-`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match here is skipped and never forwarded as an `llm_request_log`. It defaults to `["/batchPredictionJobs/"]`, to suppress Vertex AI batch job management noise.
+`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match against the request's path is skipped and never forwarded as an `llm_request_log`. It defaults to `["/batchPredictionJobs/"]`, to suppress Vertex AI batch job management noise.
 
 ```ruby
 Coolhand.configure do |config|

@@ -1,6 +1,7 @@
 # Coolhand default exclude API patterns
-# These substrings are matched against request URLs after the intercept_addresses
-# allow-list passes. Matching URLs are skipped and not forwarded as llm_request_logs.
+# These substrings are matched against the request's path (not the full URL or
+# query string). A request whose path matches is skipped and not forwarded as
+# an llm_request_log, regardless of whether it would otherwise match intercept_addresses.
 #
 # Users can extend defaults:   c.exclude_api_patterns << "/myOperationalPath/"
 # Users can override entirely: c.exclude_api_patterns = ["/only_this/"]
