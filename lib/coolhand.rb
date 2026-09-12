@@ -6,6 +6,7 @@ require "json"
 require "base64"
 require "time"
 
+require_relative "coolhand/errors"
 require_relative "coolhand/version"
 require_relative "coolhand/configuration"
 require_relative "coolhand/collector"
@@ -14,13 +15,12 @@ require_relative "coolhand/net_http_interceptor"
 require_relative "coolhand/api_service"
 require_relative "coolhand/logger_service"
 require_relative "coolhand/feedback_service"
+require_relative "coolhand/template_service"
 require_relative "coolhand/webhook_interceptor"
 
 # The main module for the Coolhand gem.
 # It provides the configuration interface and initializes the patching.
 module Coolhand
-  class Error < StandardError; end
-
   # Class-level instance variables to hold the configuration
   @configuration = Configuration.new
 
@@ -102,6 +102,12 @@ module Coolhand
     # Creates a new LoggerService instance
     def logger_service
       LoggerService.new
+    end
+
+    # Creates a new TemplateService instance, for reading LLM request templates back out of
+    # Coolhand. Needs the private API key - the public key is write-only on this API.
+    def template_service
+      TemplateService.new
     end
 
     def required_field?(value)
