@@ -33,6 +33,12 @@ This ensures:
 - Apps using path gems (local development) don't break from missing optional dependencies
 - Users only need gems for providers they actually use
 
+## Changelog and versioning
+
+Do not add `CHANGELOG.md` entries or bump `lib/coolhand/version.rb` on feature/fix branches or in PRs. The `/prep-release` skill is the sole owner of both — it writes changelog entries for the PRs actually shipping in a release and bumps the version once, at release time.
+
+Per-PR changelog edits create merge conflicts across concurrent branches for no benefit, since the entries get rewritten from the final, user-approved set of merged PRs anyway. Leave `CHANGELOG.md` and `version.rb` alone in your PR.
+
 ## README and docs philosophy
 
 The README is a landing page — install, quick start, what it supports, where to go next. Keep it scannable. When in doubt, link rather than expand.

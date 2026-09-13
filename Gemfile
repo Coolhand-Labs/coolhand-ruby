@@ -7,6 +7,7 @@ gemspec
 
 gem "faraday-typhoeus", "~> 1.1"
 gem "ruby-openai", "~> 8.3"
+gem "anthropic", "~> 0.3"
 
 group :development, :test do
   gem "bundler-audit", "~> 0.9", require: false
