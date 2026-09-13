@@ -10,7 +10,7 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
   let(:webhook_secret_key) { "MzBOMFki+RuS5YQqmN2O85Dj1/sOFHdncBhwXECP+VY=" }
   let(:secret_bytes) { Base64.strict_decode64(webhook_secret_key) }
   let(:webhook_id) { "wh_123456" }
-  let(:timestamp) { "1234567890" }
+  let(:timestamp) { Time.now.to_i.to_s }
   let(:payload) { { type: "batch.completed", data: { id: "batch_123", status: "completed" } }.to_json }
   let(:signed_payload) { "#{webhook_id}.#{timestamp}.#{payload}" }
   let(:valid_signature) do
@@ -142,14 +142,42 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       end
 
       it "returns false and logs an error" do
-        message = /Missing OpenAI webhook signature or timestamp headers - rejecting webhook/
+        message = /Missing OpenAI webhook signature, timestamp, or id headers - rejecting webhook/
         expect(Rails.logger).to receive(:error).with(message)
         expect(validator.valid?).to be false
       end
 
       it "sets appropriate error message" do
         validator.valid?
-        expect(validator.error_message).to include("Missing OpenAI webhook signature or timestamp headers")
+        expect(validator.error_message).to include("Missing OpenAI webhook signature, timestamp, or id headers")
+      end
+    end
+
+    context "when webhook id header is missing in production" do
+      let(:request) do
+        headers_hash = {
+          "webhook-signature" => signature_header,
+          "webhook-timestamp" => timestamp
+        }
+
+        instance_double("hash",
+          headers: headers_hash,
+          raw_post: payload,
+          body: instance_double("IO", read: payload))
+      end
+
+      before do
+        allow(Rails).to receive(:env).and_return("production")
+        allow(Rails.logger).to receive(:error)
+      end
+
+      it "returns false rather than treating a nil id as a valid, dedupable webhook id" do
+        expect(validator.valid?).to be false
+      end
+
+      it "sets appropriate error message" do
+        validator.valid?
+        expect(validator.error_message).to include("Missing OpenAI webhook signature, timestamp, or id headers")
       end
     end
 
@@ -311,6 +339,72 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         it "rejects the webhook instead of falling back to the permissive path" do
           expect(Rails.logger).to receive(:error).with(/not configured - rejecting webhook/)
           expect(validator.valid?).to be false
+        end
+      end
+    end
+
+    context "when replay protection checks apply" do
+      context "when the timestamp is older than the tolerance window" do
+        let(:timestamp) { (Time.now.to_i - 301).to_s }
+
+        it "returns false" do
+          expect(validator.valid?).to be false
+        end
+
+        it "sets appropriate error message" do
+          validator.valid?
+          expect(validator.error_message).to include("timestamp outside replay-protection tolerance window")
+        end
+      end
+
+      context "when the timestamp is further in the future than the tolerance window" do
+        let(:timestamp) { (Time.now.to_i + 301).to_s }
+
+        it "returns false" do
+          expect(validator.valid?).to be false
+        end
+      end
+
+      context "when a custom tolerance is configured" do
+        let(:timestamp) { (Time.now.to_i - 301).to_s }
+
+        before { Coolhand.configuration.webhook_replay_tolerance_seconds = 600 }
+
+        it "honors the wider window" do
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the same webhook id is replayed" do
+        it "accepts the first request and rejects the replay" do
+          expect(validator.valid?).to be true
+
+          replay = described_class.new(request, webhook_secret)
+          expect(replay.valid?).to be false
+          expect(replay.error_message).to include("already processed")
+        end
+      end
+
+      context "when two requests use different webhook ids" do
+        it "does not treat the second as a replay of the first" do
+          expect(validator.valid?).to be true
+
+          other_id = "wh_654321"
+          other_signed_payload = "#{other_id}.#{timestamp}.#{payload}"
+          other_signature = Base64.strict_encode64(
+            OpenSSL::HMAC.digest(OpenSSL::Digest.new("sha256"), secret_bytes, other_signed_payload)
+          )
+          other_headers = {
+            "webhook-signature" => "v1,#{other_signature}",
+            "webhook-timestamp" => timestamp,
+            "webhook-id" => other_id
+          }
+          other_request = instance_double("hash",
+            headers: other_headers,
+            raw_post: payload,
+            body: instance_double("IO", read: payload))
+
+          expect(described_class.new(other_request, webhook_secret).valid?).to be true
         end
       end
     end

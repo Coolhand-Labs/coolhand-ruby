@@ -2,6 +2,8 @@
 
 require "openssl"
 
+require_relative "webhook_id_store"
+
 module Coolhand
   module OpenAi
     class WebhookValidator
@@ -23,7 +25,7 @@ module Coolhand
         secret_bytes = extract_secret_bytes
         webhook_signature, webhook_timestamp, webhook_id = extract_webhook_headers
 
-        return validate_headers_in_non_production_env unless webhook_signature && webhook_timestamp
+        return validate_headers_in_non_production_env unless webhook_signature && webhook_timestamp && webhook_id
 
         verify_signature(webhook_signature, webhook_timestamp, webhook_id, secret_bytes)
       end
@@ -82,7 +84,7 @@ module Coolhand
 
       def validate_headers_in_non_production_env
         if should_enforce_strict_validation?
-          @errors << "Missing OpenAI webhook signature or timestamp headers - " \
+          @errors << "Missing OpenAI webhook signature, timestamp, or id headers - " \
                      "rejecting webhook (Rails.env=#{Rails.env.inspect} not in development/test allowlist)"
           Rails.logger.error(@errors.last)
           false
@@ -98,13 +100,43 @@ module Coolhand
 
         signature_valid = webhook_signature.start_with?("v1,") &&
                           secure_compare(webhook_signature[3..], expected_signature)
-        if signature_valid
-          true
-        else
+
+        unless signature_valid
           @errors << "OpenAI webhook signature verification failed"
           Rails.logger.error(@errors.last)
-          false
+          return false
         end
+
+        return false unless timestamp_fresh?(webhook_timestamp)
+        return false unless webhook_id_unused?(webhook_id)
+
+        true
+      end
+
+      # Checked only after the signature is confirmed valid, so an
+      # unsigned/forged request can't poison the id-dedup store (or fail a
+      # freshness check) and DoS a later legitimate webhook with the same id.
+      def timestamp_fresh?(webhook_timestamp)
+        tolerance = Coolhand.configuration.webhook_replay_tolerance_seconds
+        age = (Time.now.to_i - webhook_timestamp.to_i).abs
+        return true if age <= tolerance
+
+        @errors << "OpenAI webhook timestamp outside replay-protection tolerance window"
+        Rails.logger.error(@errors.last)
+        false
+      end
+
+      def webhook_id_unused?(webhook_id)
+        tolerance = Coolhand.configuration.webhook_replay_tolerance_seconds
+        return true if id_store.claim!(webhook_id, tolerance)
+
+        @errors << "OpenAI webhook id already processed (replay protection)"
+        Rails.logger.error(@errors.last)
+        false
+      end
+
+      def id_store
+        Coolhand.configuration.webhook_id_store
       end
 
       def secure_compare(a, b)
