@@ -436,6 +436,7 @@ The monitor handles errors gracefully:
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 - **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception
 - **[Google Vertex AI Batch Result Logging](docs/vertex.md)** — Log completed Vertex AI batch prediction job results
+- **[Examples](examples/README.md)** — Runnable scripts that make a real provider call through Coolhand, useful as a live smoke test
 
 ## Security
 
