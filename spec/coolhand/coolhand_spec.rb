@@ -103,6 +103,28 @@ RSpec.describe Coolhand do
 
       expect(Coolhand.configuration.intercept_addresses).to eq(["custom.api.com"])
     end
+
+    it "preserves default intercept_path_patterns when set to nil" do
+      expect do
+        Coolhand.configure do |c|
+          c.api_key = "test-key"
+          c.silent = true
+          c.intercept_path_patterns = nil
+        end
+      end.not_to raise_error
+
+      expect(Coolhand.configuration.intercept_path_patterns).to eq(Coolhand::Configuration::DEFAULT_INTERCEPT_PATH_PATTERNS)
+    end
+
+    it "allows custom intercept_path_patterns to be set" do
+      Coolhand.configure do |c|
+        c.api_key = "key"
+        c.silent = true
+        c.intercept_path_patterns = [":myAction"]
+      end
+
+      expect(Coolhand.configuration.intercept_path_patterns).to eq([":myAction"])
+    end
   end
 
   describe "debug_mode config" do
@@ -361,9 +383,9 @@ RSpec.describe Coolhand do
       expect(fresh_config.intercept_addresses).to include("generativelanguage.googleapis.com")
     end
 
-    it "includes :streamGenerateContent in default intercept_addresses" do
+    it "includes :streamGenerateContent in default intercept_path_patterns" do
       fresh_config = Coolhand::Configuration.new
-      expect(fresh_config.intercept_addresses).to include(":streamGenerateContent")
+      expect(fresh_config.intercept_path_patterns).to include(":streamGenerateContent")
     end
   end
 

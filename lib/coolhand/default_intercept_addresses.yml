@@ -1,6 +1,9 @@
 # Coolhand default intercept addresses
-# These substrings are matched against request URLs to decide whether a request
-# should be captured and forwarded as an llm_request_log.
+# These are matched against the request's parsed host (exact match, or a
+# dot-boundary suffix match, case-insensitive) to decide whether a request
+# should be captured and forwarded as an llm_request_log. A single "*" in an
+# entry matches exactly one host label — e.g. "bedrock-runtime.*.amazonaws.com"
+# matches "bedrock-runtime.us-east-1.amazonaws.com" but nothing else.
 #
 # Users can extend defaults:   c.intercept_addresses << "my.custom.api.com"
 # Users can override entirely: c.intercept_addresses = ["only.this.com"]
@@ -14,10 +17,8 @@
 - "generativelanguage.googleapis.com"
 - "models.github.ai"
 - "models.inference.ai.azure.com"
-- ":generateContent"
-- ":streamGenerateContent"
 - "aiplatform.googleapis.com"
 - "gateway.ai.cloudflare.com"
-- "bedrock-runtime"
+- "bedrock-runtime.*.amazonaws.com"
 - "openrouter.ai"
 - "opencode.ai"

@@ -549,11 +549,11 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       end
     end
 
-    def make_request(path)
-      stub_request(:get, "https://aiplatform.googleapis.com#{path}")
+    def make_request(path_and_query)
+      stub_request(:get, "https://aiplatform.googleapis.com#{path_and_query}")
         .to_return(status: 200, body: '{"status":"ok"}', headers: { "Content-Type" => "application/json" })
 
-      uri = URI("https://aiplatform.googleapis.com#{path}")
+      uri = URI("https://aiplatform.googleapis.com#{path_and_query}")
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = true
       req = Net::HTTP::Get.new(uri)
@@ -564,6 +564,11 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     it "does not capture URLs matching the default /batchPredictionJobs/ pattern" do
       make_request("/v1/projects/my-project/locations/us-central1/batchPredictionJobs/123")
       expect(@captured_log).to be_nil
+    end
+
+    it "still captures a request when the exclude pattern only appears in the query string, not the path" do
+      make_request("/v1/projects/my-project/locations/us-central1/models?x=/batchPredictionJobs/")
+      expect(@captured_log).to be_a(Hash)
     end
 
     it "captures URLs that do not match any exclude pattern" do
@@ -629,7 +634,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       Coolhand.configure do |c|
         c.api_key = "test-key"
         c.silent = true
-        c.intercept_addresses = ["generativelanguage.googleapis.com", ":generateContent", ":streamGenerateContent"]
+        c.intercept_addresses = ["generativelanguage.googleapis.com"]
       end
     end
 
@@ -744,7 +749,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
 
     it "sanitizes x-amz-security-token header (AWS Bedrock STS session token)" do
-      Coolhand.configuration.intercept_addresses << "bedrock-runtime"
+      Coolhand.configuration.intercept_addresses << "bedrock-runtime.*.amazonaws.com"
       stub_request(:post, "https://bedrock-runtime.us-east-1.amazonaws.com/model/foo/invoke")
         .to_return(status: 200, body: "{}", headers: { "Content-Type" => "application/json" })
 
@@ -786,6 +791,91 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       url = raw[:url] || raw["url"]
       expect(url).not_to include("AIzaSyDEADBEEF1234567890")
       expect(url).to include("REDACTED")
+    end
+
+    it "does not intercept an unrelated host just because a Gemini-style path token appears in its path" do
+      stub_request(:post, "https://attacker.tld/v1/models/gemini-pro:generateContent")
+        .to_return(status: 200, body: "{}", headers: { "Content-Type" => "application/json" })
+
+      uri = URI("https://attacker.tld/v1/models/gemini-pro:generateContent")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(uri)
+      req["Content-Type"] = "application/json"
+      req.body = "{}"
+
+      http.request(req)
+      sleep 0.05
+
+      expect(@captured_log).to be_nil
+    end
+  end
+
+  describe "issue #85 — host-boundary matching" do
+    let(:interceptor) { Class.new { include Coolhand::NetHttpInterceptor }.new }
+
+    before do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.intercept_addresses = Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES.dup
+      end
+    end
+
+    it "does not intercept a redirect URL that merely mentions a real host in its query string" do
+      expect(interceptor.send(:intercept?, "https://evil.com/redirect?to=api.openai.com")).to be false
+    end
+
+    it "does not intercept a host that merely has a real host as a prefix (suffix confusion)" do
+      expect(interceptor.send(:intercept?, "https://api.openai.com.attacker.net/v1/chat/completions")).to be false
+    end
+
+    it "does not intercept an unrelated host just because a bare Gemini path token appears in its path" do
+      expect(interceptor.send(:intercept?, "https://attacker.tld/:generateContent")).to be false
+    end
+
+    it "intercepts the real host regardless of case" do
+      expect(interceptor.send(:intercept?, "https://API.OPENAI.COM/v1/chat/completions")).to be true
+    end
+
+    it "fails closed (does not intercept, does not raise) for an unparseable URL" do
+      expect(interceptor.send(:intercept?, "https://api.openai.com:notaport/v1/chat/completions")).to be false
+    end
+
+    it "matches a wildcard host entry against exactly one label" do
+      expect(interceptor.send(:host_matches?, "bedrock-runtime.us-east-1.amazonaws.com",
+        "bedrock-runtime.*.amazonaws.com")).to be true
+      expect(interceptor.send(:host_matches?, "bedrock-runtime.amazonaws.com",
+        "bedrock-runtime.*.amazonaws.com")).to be false
+      expect(interceptor.send(:host_matches?, "bedrock-runtime.us-east-1.evil.com",
+        "bedrock-runtime.*.amazonaws.com")).to be false
+    end
+
+    it "does not fall back to intercept_path_patterns for googleapis.com hosts when intercept_addresses " \
+       "has been overridden to exclude all Google hosts" do
+      Coolhand.configuration.intercept_addresses = ["only.mycompany.internal"]
+
+      expect(interceptor.send(:intercept?,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")).to be false
+    end
+
+    it "falls back to intercept_path_patterns for a googleapis.com host not explicitly listed, as long as " \
+       "intercept_addresses still includes a Google host" do
+      expect(interceptor.send(:intercept?,
+        "https://some-other-service.googleapis.com/v1/models/gemini-pro:generateContent")).to be true
+    end
+
+    it "does not treat a lookalike host (e.g. evilgoogleapis.com) as a configured Google host" do
+      Coolhand.configuration.intercept_addresses = ["evilgoogleapis.com"]
+
+      expect(interceptor.send(:intercept?,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")).to be false
+    end
+
+    it "exposes DEFAULT_INTERCEPT_PATH_PATTERNS as a frozen constant" do
+      defaults = Coolhand::Configuration::DEFAULT_INTERCEPT_PATH_PATTERNS
+      expect(defaults).to include(":generateContent", ":streamGenerateContent")
+      expect(defaults).to be_frozen
     end
   end
 

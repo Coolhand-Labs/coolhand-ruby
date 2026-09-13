@@ -16,6 +16,10 @@ module Coolhand
       File.join(__dir__, "default_intercept_addresses.yml")
     ).freeze
 
+    DEFAULT_INTERCEPT_PATH_PATTERNS = YAML.safe_load_file(
+      File.join(__dir__, "default_intercept_path_patterns.yml")
+    ).freeze
+
     BASE_URL_ERROR_MSG = "base_url must use https:// (or http://localhost / http://127.0.0.1 for local dev)"
     LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
 
@@ -26,7 +30,7 @@ module Coolhand
 
     attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled,
       :max_captured_body_bytes, :webhook_replay_tolerance_seconds, :webhook_id_store
-    attr_reader :intercept_addresses, :base_url
+    attr_reader :intercept_addresses, :intercept_path_patterns, :base_url
 
     def initialize
       # Set defaults
@@ -34,6 +38,7 @@ module Coolhand
       @api_key = nil
       @silent = false
       @intercept_addresses = DEFAULT_INTERCEPT_ADDRESSES.dup
+      @intercept_path_patterns = DEFAULT_INTERCEPT_PATH_PATTERNS.dup
       self.base_url = "https://coolhandlabs.com/api"
       @debug_mode = false
       @capture = true
@@ -59,6 +64,13 @@ module Coolhand
       end
 
       @intercept_addresses = value.is_a?(Array) ? value : [value]
+    end
+
+    # Custom setter that preserves defaults when nil/empty array is provided
+    def intercept_path_patterns=(value)
+      return if value.nil? || (value.is_a?(Array) && value.empty?)
+
+      @intercept_path_patterns = value.is_a?(Array) ? value : [value]
     end
 
     def base_url=(value)
