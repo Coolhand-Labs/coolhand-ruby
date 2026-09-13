@@ -24,25 +24,67 @@ module Coolhand
       end
     end
 
+    @patch_mutex = Mutex.new
+    @patch_count = 0
+    @patched = false
+
+    # patch!/unpatch! are reference-counted so concurrent/nested callers (e.g. overlapping
+    # Coolhand.capture blocks across threads) compose safely — the interceptor only actually
+    # unpatches once every outstanding caller has released it. Coolhand.configure's patch! is
+    # never balanced by an unpatch!, so it permanently holds the count at >=1 for the process
+    # lifetime once the gem is enabled; that's intentional, not a leak.
+    #
+    # Unlike before, patch! is no longer idempotent on its own — every call must be matched by
+    # exactly one unpatch! to release it. A host app that calls Coolhand.configure more than once
+    # (e.g. a reloader re-running an initializer) will hold an extra, permanent reference each
+    # time rather than no-op'ing; harmless (interception simply stays on), but worth knowing.
     def self.patch!
-      return if @patched
+      @patch_mutex.synchronize do
+        @patch_count += 1
+        next if @patched
 
-      Net::HTTP.prepend(self)
-      Net::HTTPResponse.prepend(ResponseInterceptor)
+        begin
+          Net::HTTP.prepend(self)
+          Net::HTTPResponse.prepend(ResponseInterceptor)
 
-      @patched = true
-      Coolhand.log "🔗 Net::HTTP interceptor patched"
+          @patched = true
+          Coolhand.log "🔗 Net::HTTP interceptor patched"
+        rescue StandardError
+          # Roll back this call's hold — it never actually took effect, so it must not count
+          # toward the refcount or a legitimate later unpatch! would underflow against it. This
+          # branch only runs when @patched was false on entry (see `next if @patched` above), so
+          # forcing it back to false here is correct regardless of which line above raised —
+          # including a failure in the log call itself, after prepend already succeeded.
+          @patch_count -= 1
+          @patched = false
+          raise
+        end
+      end
     end
 
     def self.unpatch!
       # NOTE: With prepend, there's no clean way to unpatch
       # We'll mark it as unpatched so it can be re-patched
-      @patched = false
-      Coolhand.log "🔌 Faraday monitoring disabled ..."
+      @patch_mutex.synchronize do
+        @patch_count -= 1 if @patch_count.positive?
+        next if @patch_count.positive? || !@patched
+
+        @patched = false
+        Coolhand.log "🔌 Faraday monitoring disabled ..."
+      end
     end
 
     def self.patched?
       @patched
+    end
+
+    # Testing-only: force a clean slate. Real callers should only ever use balanced
+    # patch!/unpatch! pairs.
+    def self.reset!
+      @patch_mutex.synchronize do
+        @patch_count = 0
+        @patched = false
+      end
     end
 
     def request(req, body = nil, &block)

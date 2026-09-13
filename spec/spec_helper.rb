@@ -18,5 +18,6 @@ RSpec.configure do |config|
   # Reset configuration before each test to avoid state pollution
   config.before(:each) do
     Coolhand.reset_configuration!
+    Coolhand::NetHttpInterceptor.reset!
   end
 end
