@@ -103,6 +103,15 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized["Set-Cookie"]).to eq("[REDACTED]")
       expect(sanitized["Content-Type"]).to eq("application/json")
     end
+
+    it "fails closed to an empty hash, instead of raising, when a header-like object's own to_hash raises" do
+      headers = Object.new
+      def headers.to_hash
+        raise "boom"
+      end
+
+      expect(described_class.sanitize_headers(headers)).to eq({})
+    end
   end
 
   describe ".sanitize_url" do
@@ -126,6 +135,20 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(misc_url).not_to include("=abc")
       expect(misc_url).not_to include("=p&")
       expect(misc_url).not_to include("=ghi")
+    end
+
+    it "redacts embedded userinfo credentials even when the URL has no query string" do
+      sanitized = described_class.sanitize_url("https://user:s3cr3t@my-llm-proxy.internal/v1/chat")
+
+      expect(sanitized).not_to include("s3cr3t")
+      expect(sanitized).to include("REDACTED@my-llm-proxy.internal")
+    end
+
+    it "redacts both embedded userinfo credentials and sensitive query params on the same URL" do
+      sanitized = described_class.sanitize_url("https://user:s3cr3t@my-llm-proxy.internal/v1/chat?token=abc123")
+
+      expect(sanitized).not_to include("s3cr3t")
+      expect(sanitized).not_to include("abc123")
     end
   end
 end

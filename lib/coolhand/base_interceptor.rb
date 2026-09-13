@@ -23,7 +23,9 @@ module Coolhand
         begin
           headers.to_hash.transform_keys(&:to_s).transform_values { |v| normalize_header_value(v) }
         rescue StandardError
-          # fall through to other enumeration strategies
+          # Deliberately fails closed to an empty hash rather than trying each_header/each on
+          # this object next — an object whose own to_hash raises is untrustworthy enough that
+          # guessing at another enumeration strategy isn't worth the risk of a second failure.
           nil
         end
       elsif headers.respond_to?(:each_header)
@@ -80,25 +82,33 @@ module Coolhand
 
     def sanitize_url(url)
       uri = URI.parse(url)
-      return url unless uri.query
+      modified = false
 
-      params = URI.decode_www_form(uri.query)
-      redacted = false
-      params.map! do |n, v|
-        if n.match?(SENSITIVE_QUERY_PARAM_PATTERN)
-          redacted = true
-          [n, "[REDACTED]"]
-        else
-          [n, v]
+      if uri.userinfo
+        # URI userinfo syntax disallows "[" / "]", so this can't reuse the [REDACTED]
+        # placeholder used elsewhere.
+        uri.userinfo = "REDACTED"
+        modified = true
+      end
+
+      if uri.query
+        params = URI.decode_www_form(uri.query)
+        redacted_query = false
+        params.map! do |n, v|
+          if n.match?(SENSITIVE_QUERY_PARAM_PATTERN)
+            redacted_query = true
+            [n, "[REDACTED]"]
+          else
+            [n, v]
+          end
+        end
+        if redacted_query
+          uri.query = URI.encode_www_form(params)
+          modified = true
         end
       end
 
-      if redacted
-        uri.query = URI.encode_www_form(params)
-        uri.to_s
-      else
-        url
-      end
+      modified ? uri.to_s : url
     rescue URI::InvalidURIError
       url
     end

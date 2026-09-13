@@ -287,6 +287,37 @@ RSpec.describe Coolhand::LoggerService do
           end)
       end
 
+      it "redacts sensitive response_headers instead of forwarding them raw" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          response_headers: { "Authorization" => "Bearer upstream_secret", "Content-Type" => "application/json" }
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            body = JSON.parse(req.body)
+            response_headers = body.dig("llm_request_log", "raw_request", "response_headers")
+            expect(response_headers).not_to be_nil
+            expect(response_headers.values).not_to include(a_string_including("upstream_secret"))
+            expect(response_headers["authorization"]).to eq("[REDACTED]")
+          end)
+      end
+
+      it "does not send a response_headers key at all when none is provided" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs"
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            body = JSON.parse(req.body)
+            raw_request = body.dig("llm_request_log", "raw_request")
+            expect(raw_request["response_headers"]).to be_nil
+          end)
+      end
+
       it "includes custom fields in webhook data" do
         service.forward_webhook(
           webhook_body: webhook_body,
