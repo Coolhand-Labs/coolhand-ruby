@@ -88,15 +88,24 @@ never on `main` directly.
 ### Docs, changelog, version
 
 1. Find the last release tag: `git describe --tags --abbrev=0`.
-2. Diff everything since that tag on the now-updated `main`:
-   `git log <last-tag>..HEAD --oneline` and `git diff <last-tag>..HEAD -- lib/`.
-   Cross-reference against the list of PRs merged in Phase 2 so every
-   changelog entry can be attributed to the PR that introduced it.
+2. Diff **everything since that tag** on the now-updated `main` —
+   `git log <last-tag>..HEAD --oneline` and `git diff <last-tag>..HEAD -- lib/`
+   — not just the PRs this run merged in Phase 2. `main` can carry
+   unreleased changes Phase 2 never touched (a hotfix committed directly,
+   a PR merged manually outside this skill, or a prior `/prep-release` run
+   that merged PRs but was interrupted before finishing this phase); all
+   of those still need a changelog entry, so treat this diff, not Phase
+   2's merge list, as the source of truth for what's covered.
 3. For each change, check it's reflected in:
-   - `CHANGELOG.md` — one entry per merged PR under `[Unreleased]` (or a
-     new version heading), in Keep a Changelog format matching this repo's
+   - `CHANGELOG.md` — one entry per change under `[Unreleased]` (or a new
+     version heading), in Keep a Changelog format matching this repo's
      existing entries — plain-English migration notes for anything
-     behavior-affecting, tagged with the PR number.
+     behavior-affecting. Attribute each entry to its PR number where one
+     exists: check Phase 2's merge list first, then fall back to the
+     squash-merge commit message (`git log --grep`, which carries the PR
+     number in its title) for anything not merged in this run. If a
+     change genuinely has no discoverable PR (a direct commit to `main`),
+     write the entry without one rather than skipping it.
    - `README.md` / `docs/*.md` — any new config option, public method, or
      behavior change needs the relevant section updated. Follow this
      repo's docs philosophy from `CLAUDE.md`: the README stays a scannable
