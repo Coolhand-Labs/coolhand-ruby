@@ -107,7 +107,15 @@ node <workspaceRoot>/coolhand/harness/harness.mjs wait --run <RUN_DIR> --channel
 
 Name the rule number (`R1`–`R5`). Do not guess. Do not stub. Do not work around it.
 
-## 5. Open your PR — then STOP
+## 5. Run your review skill
+
+**Mandatory, before you push.** Follow `<workspaceRoot>/coolhand/harness/RESIST_RULES.md`
+→ "Before you push: run your repo's review skill" (R8) — load
+`.claude/skills/loop-review/SKILL.md` off disk and run it for real against your diff. Do
+not approximate its steps manually; if you cannot spawn the reviewer subagent it calls
+for, escalate to node (R8) and STOP rather than substitute a self-review.
+
+## 6. Open your PR — then STOP
 
 **If `dryRun` is true, stop here.** Commit locally, report what you built, and push nothing.
 
@@ -115,13 +123,17 @@ Name the rule number (`R1`–`R5`). Do not guess. Do not stub. Do not work aroun
 2. Body must reference your issue with `Closes #N` so it auto-closes on merge, and must
    say: **depends on the server PR — deploy that first.**
 3. Record it: `node <workspaceRoot>/coolhand/harness/harness.mjs pr --run <RUN_DIR> --repo ruby --url <url>`
-4. **Stop.** You launch no one. The tree ends with you on this branch.
+4. Post your review skill's Iteration Breakdown table (section 5) as a comment on this PR
+   — see `RESIST_RULES.md` → "After the loop exits."
+5. **Stop.** You launch no one. The tree ends with you on this branch.
 
-## 6. Done means
+## 7. Done means
 
 - [ ] Method exists, matches the API definition exactly
 - [ ] `bundle exec rake` passes (RSpec + RuboCop)
 - [ ] At least one spec hit the real local server, not a mock
 - [ ] PR opened, recorded, references its issue, states its dependency on the server PR
+- [ ] Your review skill ran for real (not approximated) and its Iteration Breakdown table
+      is posted as a comment on your PR
 - [ ] Every field and status code came from the definition, not from node's code
 - [ ] You launched no child agents
