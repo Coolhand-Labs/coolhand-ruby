@@ -44,7 +44,7 @@ module Coolhand
         headers: sanitize_headers(headers),
         request_body: clean_webhook_body(webhook_body, source),
         response_body: options[:response_body],
-        response_headers: options[:response_headers],
+        response_headers: options[:response_headers] && sanitize_headers(options[:response_headers]),
         status_code: options[:status_code] || 200,
         source: "#{source}_webhook"
       }.merge(options.slice(:metadata, :conversation_id, :agent_id))

@@ -98,7 +98,7 @@ module Coolhand
             id: request_id,
             timestamp: timestamp,
             method: method.to_s.downcase,
-            url: url,
+            url: BaseInterceptor.sanitize_url(url),
             headers: {},
             request_body: request_body,
             response_headers: {},
