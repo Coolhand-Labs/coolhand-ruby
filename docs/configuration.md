@@ -78,13 +78,17 @@ Each entry is matched against the request's parsed host (optionally with a port 
 
 An entry can also pin a port (`host:port`) and/or a path (`host/path`, or `host:port/path`), and then a request must match all of them. Cohere, TypeSafe and Ollama are defaulted this way: `api.cohere.com/v2/chat`, `api.typesafe.ai/v1/systemone`, and `*:11434/api/chat` (plus `/api/generate`, `/api/embed`, `/api/embeddings`, also for `127.0.0.1`). Ollama has no fixed host, so its defaults require Ollama's default port *and* an Ollama path — an app's own unrelated `/api/chat` on another host or port is not captured. To capture an Ollama server on a dotted host or IP, or a non-default port, add entries such as `192.168.1.5:11434/api/chat` or `ollama.internal:8080/api/chat`. An IPv6 loopback server (`[::1]:11434`) is already covered by the defaults.
 
+Path-anchoring is also how the Azure defaults work: multi-service hosts like `cognitiveservices.azure.com/openai/` (Azure AI Services, where Speech, Vision, Language and Content Safety share a domain with LLM inference) only match paths under the given prefix, after the host itself has matched.
+
+**Note on Azure ML managed online endpoints:** `inference.ml.azure.com` and `inference.ml.azure.us` are intentionally captured *without* a path anchor. Every Azure ML managed online endpoint scores at `/score` regardless of what model sits behind it, so there's no path that distinguishes an LLM deployment from a tabular or vision one — this gem chooses to capture broadly rather than silently miss LLM deployments. If that over-captures for your setup, override `intercept_addresses` to a custom list omitting these two entries.
+
 A small number of Google API endpoints use a colon-suffixed path (e.g. `.../gemini-pro:generateContent`) with no host of their own. Those live in the separate `intercept_path_patterns` setting (default: `Coolhand::Configuration::DEFAULT_INTERCEPT_PATH_PATTERNS`) and, unlike `intercept_addresses`, are only checked against the path of requests whose host is already `googleapis.com` or a subdomain of it — and only when `intercept_addresses` still includes at least one `googleapis.com` host. If you override `intercept_addresses` to a list with no Google hosts, `intercept_path_patterns` has no effect and Google API traffic is not captured at all.
 
 `intercept_addresses` is a required allow-list — nothing is captured unless its host matches an entry here. Because of that, `config.intercept_addresses = []` is **not** a supported way to disable capture (it's ignored, with a warning logged, and the previous value is kept). To disable capture entirely, use `config.enabled = false` or `config.capture = false` instead — see [Capture Control](#capture-control) below.
 
 ## Excluding API Patterns
 
-`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match against the request's path is skipped and never forwarded as an `llm_request_log`. It defaults to `["/batchPredictionJobs/"]`, to suppress Vertex AI batch job management noise.
+`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match against the request's path is skipped and never forwarded as an `llm_request_log`. It defaults to a small built-in list (see `Coolhand::Configuration::DEFAULT_EXCLUDE_API_PATTERNS`) that suppresses Vertex AI batch job management noise (`/batchPredictionJobs/`) and Azure OpenAI control-plane paths (file, batch, and fine-tuning management under `/openai/` and `/openai/v1/`) that aren't inference traffic.
 
 ```ruby
 Coolhand.configure do |config|

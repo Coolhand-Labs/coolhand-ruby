@@ -262,8 +262,9 @@ module Coolhand
 
     # An intercept_addresses entry may optionally pin a port ("host:port") and/or anchor to a
     # path prefix by embedding a "/" — e.g. "api.cohere.com/v2/chat" only matches requests to
-    # that host whose path starts with "/v2/chat", so other endpoints on a shared host aren't
-    # swept in alongside the ones we mean to capture.
+    # that host whose path starts with "/v2/chat", and "cognitiveservices.azure.com/openai/" only
+    # matches that multi-service Azure host's OpenAI paths, so unrelated endpoints on a shared
+    # host aren't swept in alongside the ones we mean to capture.
     # The match is on a path *segment* boundary (trailing "/" on the pattern is optional and
     # stripped before comparing), so "host.com/openai" matches "/openai" and "/openai/x" but not
     # a same-prefix-but-different-segment path like "/openaiz".

@@ -113,6 +113,37 @@ module Coolhand
       url
     end
 
+    # Key names inside an Azure OpenAI "On Your Data" data_sources/dataSources entry that carry
+    # live datastore credentials in the request body, where header/query-param sanitization never
+    # looks. Matched against a separator-stripped, lowercased key name so both `connection_string`
+    # and `connectionString` (Cosmos/Mongo, embeds `AccountKey=...`) and `encoded_api_key`
+    # (Elasticsearch) are caught — not just exact or snake_case-only names.
+    SENSITIVE_BODY_KEY_PATTERN = /key|token|secret|password|credential|connectionstring|signature/i
+
+    def sanitize_body(body)
+      return body unless body.is_a?(Hash)
+
+      sanitized = body.dup
+      %w[data_sources dataSources].each do |key|
+        sanitized[key] = redact_sensitive_body_values(sanitized[key]) if sanitized.key?(key)
+      end
+      sanitized
+    end
+
+    def redact_sensitive_body_values(node)
+      case node
+      when Hash
+        node.each_with_object({}) do |(k, v), acc|
+          normalized = k.to_s.gsub(/[_\-\s]/, "").downcase
+          acc[k] = normalized.match?(SENSITIVE_BODY_KEY_PATTERN) ? "[REDACTED]" : redact_sensitive_body_values(v)
+        end
+      when Array
+        node.map { |v| redact_sensitive_body_values(v) }
+      else
+        node
+      end
+    end
+
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
       response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:, source_api: nil, model: nil)
       raw_request = {
@@ -121,7 +152,7 @@ module Coolhand
         method: method.to_s.downcase,
         url: sanitize_url(url),
         headers: sanitize_headers(request_headers),
-        request_body: request_body,
+        request_body: sanitize_body(request_body),
         response_headers: sanitize_headers(response_headers),
         response_body: response_body,
         status_code: status_code,
