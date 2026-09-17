@@ -337,6 +337,7 @@ The monitor works with multiple transport layers and Ruby libraries:
 **Other providers monitored out of the box:**
 - Google Gemini (`generativelanguage.googleapis.com`)
 - Google Vertex AI (`aiplatform.googleapis.com`) — see the [Vertex AI batch result logging guide](docs/vertex.md) for async batch jobs
+- Azure OpenAI Service, Azure AI Foundry, and Azure Machine Learning managed online endpoints (dedicated hosts, multi-service Azure AI Services hosts, and serverless/MaaS deployments) — see [Configuration](docs/configuration.md) for the full list of covered hosts
 - AWS Bedrock (OpenAI-compatible endpoint)
 - Cloudflare AI Gateway
 - OpenRouter

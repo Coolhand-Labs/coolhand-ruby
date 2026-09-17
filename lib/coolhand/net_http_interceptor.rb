@@ -227,13 +227,13 @@ module Coolhand
       return false if excluded_by_pattern?(uri)
 
       host = uri.host.downcase
+      path = uri.path.to_s
       addresses = Coolhand.configuration.intercept_addresses
-      return true if addresses.any? { |a| host_matches?(host, a) }
+      return true if addresses.any? { |a| address_matches?(host, path, a) }
 
       return false unless google_api_host_configured?(addresses)
       return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
 
-      path = uri.path.to_s
       Coolhand.configuration.intercept_path_patterns.any? { |p| path.include?(p) }
     end
 
@@ -257,6 +257,25 @@ module Coolhand
         a = a.to_s.downcase
         a == "googleapis.com" || a.end_with?(".googleapis.com")
       end
+    end
+
+    # An intercept_addresses entry may optionally anchor to a path prefix by embedding a "/" —
+    # e.g. "cognitiveservices.azure.com/openai/" only matches requests to that host whose path
+    # also starts with "/openai/", so Azure AI Services traffic for Speech/Vision/Language/
+    # Content Safety on the same multi-service host isn't swept in alongside OpenAI calls.
+    # The match is on a path *segment* boundary (trailing "/" on the pattern is optional and
+    # stripped before comparing), so "host.com/openai" matches "/openai" and "/openai/x" but not
+    # a same-prefix-but-different-segment path like "/openaiz".
+    def address_matches?(host, path, pattern)
+      host_pattern, sep, path_pattern = pattern.to_s.partition("/")
+      return host_matches?(host, host_pattern) if sep.empty?
+      return false unless host_matches?(host, host_pattern)
+
+      path_pattern = path_pattern.delete_suffix("/")
+      return true if path_pattern.empty?
+
+      prefix = "/#{path_pattern}"
+      path == prefix || path.start_with?("#{prefix}/")
     end
 
     # Host-boundary match: exact, or a dot-delimited suffix (case-insensitive).

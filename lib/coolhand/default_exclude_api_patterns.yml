@@ -8,3 +8,14 @@
 # Users can disable:           c.exclude_api_patterns = []
 
 - "/batchPredictionJobs/"
+# Azure OpenAI control-plane paths (not inference) — both spellings are needed
+# since substring matching is contiguous: "/openai/files" does not match
+# "/openai/v1/files".
+- "/openai/files"
+- "/openai/batches"
+- "/openai/fine_tuning"
+- "/openai/models"
+- "/openai/v1/files"
+- "/openai/v1/batches"
+- "/openai/v1/fine_tuning"
+- "/openai/v1/models"
