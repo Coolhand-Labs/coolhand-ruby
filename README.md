@@ -120,7 +120,7 @@ Coolhand.configure do |config|
   config.silent = Rails.env.production?
 
   # Specify which LLM endpoints to intercept (array of strings)
-  # Optional - defaults to OpenAI, Anthropic, ElevenLabs, Google Gemini, and GitHub Models
+  # Optional - defaults to every provider listed under "Supported Libraries" below
   # config.intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.cohere.com/v2/chat"]
 end
 ```
@@ -178,7 +178,7 @@ end
 | `enabled` | Boolean | `true` | Set to `false` to disable all patching and validation (e.g. `Rails.env.production?`) |
 | `capture` | Boolean | `true` | Whether to capture and forward intercepted requests. Set to `false` to monitor without forwarding, then use [`Coolhand.with_capture`](#selective-capture) to re-enable selectively |
 | `silent` | Boolean | `false` | Whether to suppress console output |
-| `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API hosts to monitor (matched by host, optionally pinned to a port and/or path prefix). This is a required allow-list — `[]` is ignored (a warning is logged) rather than disabling capture; use `enabled` or `capture` for that. See [Configuration](docs/configuration.md) |
+| `intercept_addresses` | Array | All [supported providers](#supported-libraries) (`DEFAULT_INTERCEPT_ADDRESSES`) | Array of API hosts to monitor (matched by host, optionally pinned to a port and/or path prefix). This is a required allow-list — `[]` is ignored (a warning is logged) rather than disabling capture; use `enabled` or `capture` for that. See [Configuration](docs/configuration.md) |
 | `intercept_path_patterns` | Array | `[":generateContent", ":streamGenerateContent"]` | Path patterns to additionally monitor on Google API hosts — see [Configuration](docs/configuration.md) |
 | `exclude_api_patterns` | Array | `["/batchPredictionJobs/"]` | Deny-list checked after `intercept_addresses`; matching paths are skipped. Unlike `intercept_addresses`, `exclude_api_patterns = []` genuinely disables exclusion. See [Configuration](docs/configuration.md) |
 | `max_captured_body_bytes` | Integer | `1_000_000` | Maximum size of a captured JSON request body — oversized bodies are replaced with a placeholder. Non-JSON bodies (e.g. file/audio uploads) are always skipped regardless of size — see [Advanced Configuration](docs/configuration.md) |
