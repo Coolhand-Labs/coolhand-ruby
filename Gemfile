@@ -20,12 +20,7 @@ group :development, :test do
   gem "test-prof", "~> 1.4.4"
   gem "webmock", "~> 3.19"
 
+  # No Ruby-version-conditional gems here: the committed Gemfile.lock is installed in frozen
+  # mode on every Ruby in the CI matrix, so the Gemfile must resolve identically everywhere.
   gem "pry"
-
-  # byebug doesn't support Ruby 4 yet - use built-in debug gem instead
-  if RUBY_VERSION < "4.0"
-    gem "pry-byebug"
-  else
-    gem "debug"
-  end
 end
