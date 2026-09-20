@@ -341,6 +341,13 @@ The monitor works with multiple transport layers and Ruby libraries:
 - Cloudflare AI Gateway
 - OpenRouter
 - OpenCode Zen (`opencode.ai`)
+- DeepSeek (`api.deepseek.com`)
+- Mistral (`api.mistral.ai`)
+- Perplexity (`api.perplexity.ai`)
+- xAI (`api.x.ai`)
+- Cohere (chat and embed endpoints only, on `api.cohere.com` and `api.cohere.ai`)
+- TypeSafe Jev / System One (`api.typesafe.ai/v1/systemone`)
+- Ollama (self-hosted, default port 11434 — chat, generate and embed endpoints) — see [Configuration](docs/configuration.md) for non-default hosts
 
 **Universal Coverage**: Since most Ruby HTTP libraries use Net::HTTP under the hood, Coolhand's single interceptor provides comprehensive monitoring without needing library-specific integrations.
 

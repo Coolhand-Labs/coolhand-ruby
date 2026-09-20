@@ -20,5 +20,33 @@
 - "aiplatform.googleapis.com"
 - "gateway.ai.cloudflare.com"
 - "bedrock-runtime.*.amazonaws.com"
+- "api.deepseek.com"
+- "api.mistral.ai"
+- "api.perplexity.ai"
+- "api.x.ai"
+# Cohere is path-scoped, never host-wide: the server only ingests v2 chat and
+# v1/v2 embed, and its other endpoints (v1 chat, rerank, tokenize, classify...)
+# have different envelopes that would be recorded as empty "successes".
+- "api.cohere.com/v2/chat"
+- "api.cohere.com/v1/embed"
+- "api.cohere.com/v2/embed"
+- "api.cohere.ai/v2/chat"
+- "api.cohere.ai/v1/embed"
+- "api.cohere.ai/v2/embed"
+# TypeSafe Jev (a "System One" model, not an LLM) — only /v1/systemone is ingested.
+- "api.typesafe.ai/v1/systemone"
+# Ollama (self-hosted) has no fixed host, so an entry must pin BOTH the default
+# port (11434) and the path — a bare "/api/chat" would capture any app's own
+# unrelated chat endpoint. "*" matches one host label (localhost, an "ollama"
+# compose service, a bare hostname); a LAN IP or dotted host needs its own
+# entry, e.g. "192.168.1.5:11434/api/chat".
+- "*:11434/api/chat"
+- "*:11434/api/generate"
+- "*:11434/api/embed"
+- "*:11434/api/embeddings"
+- "127.0.0.1:11434/api/chat"
+- "127.0.0.1:11434/api/generate"
+- "127.0.0.1:11434/api/embed"
+- "127.0.0.1:11434/api/embeddings"
 - "openrouter.ai"
 - "opencode.ai"
