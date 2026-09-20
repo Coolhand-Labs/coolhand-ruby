@@ -98,7 +98,8 @@ module Coolhand
         signed_payload = "#{webhook_id}.#{webhook_timestamp}.#{@payload}"
         expected_signature = calculate_expected_signature(secret_bytes, signed_payload)
 
-        signature_valid = webhook_signature.start_with?("v1,") &&
+        # An empty key (a bare "whsec_" secret) makes the HMAC forgeable by anyone, so never accept it.
+        signature_valid = !secret_bytes.empty? && webhook_signature.start_with?("v1,") &&
                           secure_compare(webhook_signature[3..], expected_signature)
 
         unless signature_valid

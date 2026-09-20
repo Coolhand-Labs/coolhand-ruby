@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **Azure OpenAI "On Your Data" datastore credentials are now redacted from captured request bodies** ([#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — a request's `data_sources`/`dataSources` entries can carry live credentials (Azure AI Search API keys, Cosmos/Mongo connection strings, Elasticsearch encoded keys) that header and URL sanitization never looked at. `BaseInterceptor.sanitize_body` now replaces any value under those entries whose key name contains `key`, `token`, `secret`, `password`, `credential`, `connectionstring` or `signature` (separators and case ignored) with `[REDACTED]` before the log is forwarded. Message content and tool definitions outside `data_sources` are untouched.
+- **Release-time hardening from a whole-package security review:**
+  - `Coolhand.log` no longer raises when stdout is unwritable. Previously a failing `puts` inside the interceptor's `ensure` block could replace the host application's own LLM response with an `IOError`.
+  - A bad `intercept_addresses`/`exclude_api_patterns` value (e.g. a String or Symbol instead of an array of Strings) now degrades to "don't capture" instead of raising into every intercepted request.
+  - `BaseInterceptor.sanitize_url` now fails closed on an unparseable URL, dropping userinfo, query and fragment rather than returning the raw URL with credentials intact.
+  - Header redaction now also matches names containing `auth`, `passw`, `credential`, `bearer`, `jwt` or `session` (e.g. `X-Auth`, `X-Session-Id`, `X-Jwt`). **Migration note:** headers such as `x-session-id` now appear as `[REDACTED]` in Coolhand.
+  - `sanitize_body` matches the `data_sources` key case- and separator-insensitively, and also redacts `pwd`, `passw*`, `bearer` and `jwt` credential keys.
+  - Hosts with a trailing dot (`api.openai.com.`) are now matched like their dotless form.
+  - `OpenAi::WebhookValidator` rejects a bare `whsec_` secret, which decodes to an empty HMAC key and would make signatures forgeable.
 
 ### Documentation
 - Clarified that Google's "Gemini Enterprise Agent Platform" is the new marketing name for Vertex AI and does not change `aiplatform.googleapis.com` or `Coolhand::Vertex` ([#118](https://github.com/Coolhand-Labs/coolhand-ruby/pull/118)).

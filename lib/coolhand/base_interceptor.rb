@@ -11,7 +11,7 @@ module Coolhand
     # (cookie, set-cookie), and future/unknown providers using a
     # similarly-named header. Shared with LoggerService so the two logging
     # paths (interceptor + webhook forwarding) stay consistent.
-    SENSITIVE_HEADER_PATTERN = /key|token|secret|signature|authorization|cookie/i
+    SENSITIVE_HEADER_PATTERN = /key|token|secret|signature|auth|passw|credential|bearer|jwt|session|cookie/i
 
     def sanitize_headers(headers)
       return {} if headers.nil?
@@ -110,7 +110,9 @@ module Coolhand
 
       modified ? uri.to_s : url
     rescue URI::InvalidURIError
-      url
+      # Fail closed: an unparseable URL can't be checked param-by-param, so drop everything
+      # that could carry a credential (userinfo, query, fragment) rather than pass it through.
+      url.to_s.sub(%r{//[^/?#]*@}, "//REDACTED@").split(/[?#]/, 2).first
     end
 
     # Key names inside an Azure OpenAI "On Your Data" data_sources/dataSources entry that carry
@@ -118,14 +120,16 @@ module Coolhand
     # looks. Matched against a separator-stripped, lowercased key name so both `connection_string`
     # and `connectionString` (Cosmos/Mongo, embeds `AccountKey=...`) and `encoded_api_key`
     # (Elasticsearch) are caught — not just exact or snake_case-only names.
-    SENSITIVE_BODY_KEY_PATTERN = /key|token|secret|password|credential|connectionstring|signature/i
+    SENSITIVE_BODY_KEY_PATTERN = /key|token|secret|passw|pwd|credential|bearer|jwt|connectionstring|signature/i
 
     def sanitize_body(body)
       return body unless body.is_a?(Hash)
 
       sanitized = body.dup
-      %w[data_sources dataSources].each do |key|
-        sanitized[key] = redact_sensitive_body_values(sanitized[key]) if sanitized.key?(key)
+      sanitized.each_key do |key|
+        next unless key.to_s.delete("_-").casecmp?("datasources")
+
+        sanitized[key] = redact_sensitive_body_values(sanitized[key])
       end
       sanitized
     end

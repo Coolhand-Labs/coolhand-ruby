@@ -93,9 +93,8 @@ module Coolhand
       active = (Thread.current[:coolhand_active_requests] ||= {}.compare_by_identity)
       return super if active.key?(self)
 
-      url = build_url_for_request(self, req)
-      return super unless intercept?(url)
-      return super unless should_capture?
+      url = capturable_url(req)
+      return super unless url
 
       # Capture body before setting the guard — if this raises we skip logging cleanly
       # and the guard is never set, so there is no leak. A failure here (e.g. an
@@ -226,7 +225,7 @@ module Coolhand
 
       return false if excluded_by_pattern?(uri)
 
-      host = uri.host.downcase
+      host = uri.host.downcase.chomp(".")
       path = uri.path.to_s
       addresses = Coolhand.configuration.intercept_addresses
       authorities = [host, "#{host}:#{uri.port}"]
@@ -236,6 +235,16 @@ module Coolhand
       return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
 
       Coolhand.configuration.intercept_path_patterns.any? { |p| path.include?(p) }
+    end
+
+    # The capture decision runs before the host's real request, so a bad config value (e.g. a
+    # non-array exclude_api_patterns) must degrade to "don't capture", never raise into the host.
+    def capturable_url(req)
+      url = build_url_for_request(self, req)
+      url if intercept?(url) && should_capture?
+    rescue StandardError => e
+      Coolhand.log "⚠️ Skipping capture, could not evaluate intercept rules: #{e.class}"
+      nil
     end
 
     def excluded_by_pattern?(uri)

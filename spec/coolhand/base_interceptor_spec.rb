@@ -225,4 +225,41 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(described_class.sanitize_body(body)).to eq(body)
     end
   end
+
+  describe "red-team hardening" do
+    it "redacts auth-style header names the old pattern missed" do
+      headers = { "X-Auth" => "s1", "X-Authentication" => "s2", "Password" => "s3", "X-Credential" => "s4",
+                  "X-Session-Id" => "s5", "X-Bearer" => "s6", "X-Jwt" => "s7", "Content-Type" => "application/json" }
+
+      sanitized = described_class.sanitize_headers(headers)
+
+      expect(sanitized.values_at("X-Auth", "X-Authentication", "Password", "X-Credential", "X-Session-Id",
+        "X-Bearer", "X-Jwt")).to all(eq("[REDACTED]"))
+      expect(sanitized["Content-Type"]).to eq("application/json")
+    end
+
+    it "fails closed on an unparseable URL by dropping userinfo, query and fragment" do
+      sanitized = described_class.sanitize_url("https://user:pw@host.example.com/p?a=%zz&key=SECRET#frag")
+
+      expect(sanitized).to eq("https://REDACTED@host.example.com/p")
+    end
+
+    it "redacts data_sources regardless of the key's case or separator style" do
+      %w[Data_Sources dataSources DATA-SOURCES].each do |outer|
+        sanitized = described_class.sanitize_body(outer => [{ "parameters" => { "key" => "secret" } }])
+
+        expect(sanitized[outer][0]["parameters"]["key"]).to eq("[REDACTED]")
+      end
+    end
+
+    it "redacts pwd/passwd/bearer/jwt credential keys inside data_sources" do
+      params = { "pwd" => "a", "passwd" => "b", "bearer_value" => "c", "jwt" => "d", "index_name" => "docs" }
+
+      sanitized = described_class.sanitize_body("data_sources" => [{ "parameters" => params }])
+
+      expect(sanitized["data_sources"][0]["parameters"])
+        .to eq("pwd" => "[REDACTED]", "passwd" => "[REDACTED]", "bearer_value" => "[REDACTED]",
+          "jwt" => "[REDACTED]", "index_name" => "docs")
+    end
+  end
 end
