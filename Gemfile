@@ -22,10 +22,7 @@ group :development, :test do
 
   gem "pry"
 
-  # byebug doesn't support Ruby 4 yet - use built-in debug gem instead
-  if RUBY_VERSION < "4.0"
-    gem "pry-byebug"
-  else
-    gem "debug"
-  end
+  # debug (not pry-byebug) so one Gemfile.lock is valid on every Ruby in the CI matrix,
+  # including 4.0, which byebug doesn't support yet.
+  gem "debug"
 end
