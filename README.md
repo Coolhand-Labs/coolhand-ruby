@@ -121,7 +121,7 @@ Coolhand.configure do |config|
 
   # Specify which LLM endpoints to intercept (array of strings)
   # Optional - defaults to OpenAI, Anthropic, ElevenLabs, Google Gemini, and GitHub Models
-  # config.intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.cohere.ai"]
+  # config.intercept_addresses = ["api.openai.com", "api.anthropic.com", "api.cohere.com/v2/chat"]
 end
 ```
 
@@ -178,7 +178,7 @@ end
 | `enabled` | Boolean | `true` | Set to `false` to disable all patching and validation (e.g. `Rails.env.production?`) |
 | `capture` | Boolean | `true` | Whether to capture and forward intercepted requests. Set to `false` to monitor without forwarding, then use [`Coolhand.with_capture`](#selective-capture) to re-enable selectively |
 | `silent` | Boolean | `false` | Whether to suppress console output |
-| `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API hosts to monitor (matched by host, not full URL). This is a required allow-list — `[]` is ignored (a warning is logged) rather than disabling capture; use `enabled` or `capture` for that. See [Configuration](docs/configuration.md) |
+| `intercept_addresses` | Array | `["api.openai.com", "api.anthropic.com"]` | Array of API hosts to monitor (matched by host, optionally pinned to a port and/or path prefix). This is a required allow-list — `[]` is ignored (a warning is logged) rather than disabling capture; use `enabled` or `capture` for that. See [Configuration](docs/configuration.md) |
 | `intercept_path_patterns` | Array | `[":generateContent", ":streamGenerateContent"]` | Path patterns to additionally monitor on Google API hosts — see [Configuration](docs/configuration.md) |
 | `exclude_api_patterns` | Array | `["/batchPredictionJobs/"]` | Deny-list checked after `intercept_addresses`; matching paths are skipped. Unlike `intercept_addresses`, `exclude_api_patterns = []` genuinely disables exclusion. See [Configuration](docs/configuration.md) |
 | `max_captured_body_bytes` | Integer | `1_000_000` | Maximum size of a captured JSON request body — oversized bodies are replaced with a placeholder. Non-JSON bodies (e.g. file/audio uploads) are always skipped regardless of size — see [Advanced Configuration](docs/configuration.md) |
@@ -341,6 +341,13 @@ The monitor works with multiple transport layers and Ruby libraries:
 - Cloudflare AI Gateway
 - OpenRouter
 - OpenCode Zen (`opencode.ai`)
+- DeepSeek (`api.deepseek.com`)
+- Mistral (`api.mistral.ai`)
+- Perplexity (`api.perplexity.ai`)
+- xAI (`api.x.ai`)
+- Cohere (chat and embed endpoints only, on `api.cohere.com` and `api.cohere.ai`)
+- TypeSafe Jev / System One (`api.typesafe.ai/v1/systemone`)
+- Ollama (self-hosted, default port 11434 — chat, generate and embed endpoints) — see [Configuration](docs/configuration.md) for non-default hosts
 
 **Universal Coverage**: Since most Ruby HTTP libraries use Net::HTTP under the hood, Coolhand's single interceptor provides comprehensive monitoring without needing library-specific integrations.
 
