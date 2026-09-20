@@ -151,4 +151,115 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized).not_to include("abc123")
     end
   end
+
+  describe ".sanitize_body" do
+    it "redacts an Azure OpenAI On Your Data api_key credential under data_sources" do
+      body = {
+        "messages" => [{ "role" => "user", "content" => "hi" }],
+        "data_sources" => [
+          { "type" => "azure_search",
+            "parameters" => { "authentication" => { "type" => "api_key", "key" => "top-secret-admin-key" } } }
+        ]
+      }
+
+      sanitized = described_class.sanitize_body(body)
+      auth = sanitized["data_sources"][0]["parameters"]["authentication"]
+
+      expect(auth["key"]).to eq("[REDACTED]")
+      expect(auth["type"]).to eq("api_key")
+      expect(sanitized["data_sources"][0]["type"]).to eq("azure_search")
+    end
+
+    it "redacts under the camelCase dataSources spelling too" do
+      body = { "dataSources" => [{ "parameters" => { "authentication" => { "key" => "secret" } } }] }
+
+      sanitized = described_class.sanitize_body(body)
+
+      expect(sanitized["dataSources"][0]["parameters"]["authentication"]["key"]).to eq("[REDACTED]")
+    end
+
+    it "redacts connection_string and connectionString regardless of separator style" do
+      body = {
+        "data_sources" => [
+          { "parameters" => { "connection_string" => "AccountEndpoint=...;AccountKey=deadbeef" } },
+          { "parameters" => { "connectionString" => "AccountEndpoint=...;AccountKey=deadbeef" } }
+        ]
+      }
+
+      sanitized = described_class.sanitize_body(body)
+
+      expect(sanitized["data_sources"][0]["parameters"]["connection_string"]).to eq("[REDACTED]")
+      expect(sanitized["data_sources"][1]["parameters"]["connectionString"]).to eq("[REDACTED]")
+    end
+
+    it "redacts encoded_api_key by substring, not just an exact api_key match" do
+      body = { "data_sources" => [{ "parameters" => { "encoded_api_key" => "es-live-key-abc123" } }] }
+
+      sanitized = described_class.sanitize_body(body)
+
+      expect(sanitized["data_sources"][0]["parameters"]["encoded_api_key"]).to eq("[REDACTED]")
+    end
+
+    it "leaves message content and tool schemas outside data_sources untouched" do
+      body = {
+        "messages" => [{ "role" => "user", "content" => "my api key is not a secret to redact" }],
+        "tools" => [{ "type" => "function", "function" => { "name" => "my_secret_tool" } }],
+        "data_sources" => [{ "parameters" => { "key" => "redact-me" } }]
+      }
+
+      sanitized = described_class.sanitize_body(body)
+
+      expect(sanitized["messages"]).to eq(body["messages"])
+      expect(sanitized["tools"]).to eq(body["tools"])
+      expect(sanitized["data_sources"][0]["parameters"]["key"]).to eq("[REDACTED]")
+    end
+
+    it "passes non-Hash bodies through unchanged" do
+      expect(described_class.sanitize_body(nil)).to be_nil
+      expect(described_class.sanitize_body("raw string body")).to eq("raw string body")
+    end
+
+    it "passes a body with no data_sources/dataSources key through unchanged" do
+      body = { "messages" => [{ "role" => "user", "content" => "hi" }] }
+
+      expect(described_class.sanitize_body(body)).to eq(body)
+    end
+  end
+
+  describe "red-team hardening" do
+    it "redacts auth-style header names the old pattern missed" do
+      headers = { "X-Auth" => "s1", "X-Authentication" => "s2", "Password" => "s3", "X-Credential" => "s4",
+                  "X-Session-Id" => "s5", "X-Bearer" => "s6", "X-Jwt" => "s7", "Content-Type" => "application/json" }
+
+      sanitized = described_class.sanitize_headers(headers)
+
+      expect(sanitized.values_at("X-Auth", "X-Authentication", "Password", "X-Credential", "X-Session-Id",
+        "X-Bearer", "X-Jwt")).to all(eq("[REDACTED]"))
+      expect(sanitized["Content-Type"]).to eq("application/json")
+    end
+
+    it "fails closed on an unparseable URL by dropping userinfo, query and fragment" do
+      sanitized = described_class.sanitize_url("https://user:pw@host.example.com/p?a=%zz&key=SECRET#frag")
+
+      expect(sanitized).to eq("https://REDACTED@host.example.com/p")
+    end
+
+    it "redacts data_sources regardless of the key's case or separator style" do
+      %w[Data_Sources dataSources DATA-SOURCES].each do |outer|
+        sanitized = described_class.sanitize_body(outer => [{ "parameters" => { "key" => "secret" } }])
+
+        expect(sanitized[outer][0]["parameters"]["key"]).to eq("[REDACTED]")
+      end
+    end
+
+    it "redacts pwd/passwd/bearer/jwt credential keys inside data_sources" do
+      params = { "pwd" => "a", "passwd" => "b", "bearer_value" => "c", "jwt" => "d", "index_name" => "docs" }
+
+      sanitized = described_class.sanitize_body("data_sources" => [{ "parameters" => params }])
+
+      expect(sanitized["data_sources"][0]["parameters"])
+        .to eq("pwd" => "[REDACTED]", "passwd" => "[REDACTED]", "bearer_value" => "[REDACTED]",
+          "jwt" => "[REDACTED]", "index_name" => "docs")
+    end
+  end
 end

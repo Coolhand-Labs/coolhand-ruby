@@ -451,4 +451,14 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       end
     end
   end
+
+  describe "#valid? with a degenerate secret" do
+    let(:webhook_secret) { "whsec_" }
+    let(:secret_bytes) { "" }
+
+    it "rejects a request signed with the empty key a bare whsec_ secret decodes to" do
+      expect(validator.valid?).to be false
+      expect(validator.errors).not_to be_empty
+    end
+  end
 end

@@ -141,4 +141,33 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(intercepted?("https://api.openai.com/v1/chat/completions")).to be true
     expect(intercepted?("https://bedrock-runtime.us-east-1.amazonaws.com/model/x/converse")).to be true
   end
+
+  it "matches a fully-qualified trailing-dot host" do
+    expect(intercepted?("https://api.openai.com./v1/chat/completions")).to be true
+    expect(intercepted?("https://api.openai.com.evil.net./v1/chat/completions")).to be false
+  end
+
+  describe "misconfigured rules never break the host request" do
+    let(:http) { Net::HTTP.new("api.openai.com", 443).tap { |h| h.use_ssl = true } }
+
+    before do
+      stub_request(:post, "https://api.openai.com/v1/chat/completions").to_return(status: 200, body: "{}")
+    end
+
+    it "still performs the real request when exclude_api_patterns is not an array" do
+      Coolhand.configuration.exclude_api_patterns = "/foo"
+
+      response = http.post("/v1/chat/completions", "{}", "Content-Type" => "application/json")
+
+      expect(response.code).to eq("200")
+    end
+
+    it "still performs the real request when exclude_api_patterns holds a non-string" do
+      Coolhand.configuration.exclude_api_patterns = [:sym]
+
+      response = http.post("/v1/chat/completions", "{}", "Content-Type" => "application/json")
+
+      expect(response.code).to eq("200")
+    end
+  end
 end

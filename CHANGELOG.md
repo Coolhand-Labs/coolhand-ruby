@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-20
+
+### Added
+- **Seven more providers are monitored out of the box** ([#117](https://github.com/Coolhand-Labs/coolhand-ruby/pull/117)) — DeepSeek (`api.deepseek.com`), Mistral (`api.mistral.ai`), Perplexity (`api.perplexity.ai`) and xAI (`api.x.ai`) are captured host-wide. Cohere is captured only on its chat and embed endpoints (`/v2/chat`, `/v1/embed`, `/v2/embed`, on `api.cohere.com` and `api.cohere.ai`), TypeSafe Jev only on `api.typesafe.ai/v1/systemone`, and Ollama only on port 11434 for `/api/chat`, `/api/generate`, `/api/embed` and `/api/embeddings` (`localhost`, `127.0.0.1`, or a bare single-label host such as a Docker Compose service). No configuration required. **Migration note:** if your app already calls any of these, those calls will now start being logged to Coolhand after upgrading. To opt out, override `config.intercept_addresses` with your own list.
+- **Azure inference endpoints are monitored out of the box** ([#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — Azure OpenAI dedicated hosts (`openai.azure.com`/`.us`/`.cn`), Azure AI Services / Foundry multi-service hosts (`cognitiveservices.azure.*`, `services.ai.azure.*`, captured only on their `/openai/` and `/models/` paths), serverless/MaaS hosts (`inference.ai.azure.com`, `models.ai.azure.com`) and Azure ML managed online endpoints (`inference.ml.azure.com`/`.us`). The Azure ML entries are deliberately not path-anchored, because every managed online endpoint scores at `/score`, so non-LLM deployments there will also be captured. Remove those two entries from `intercept_addresses` if that over-captures for you. Default `exclude_api_patterns` now also skips Azure OpenAI control-plane paths (`/openai/files`, `/batches`, `/fine_tuning`, `/models`, and their `/openai/v1/` spellings). **Migration note:** anyone who set `exclude_api_patterns` explicitly keeps their own list and will not get the new Azure exclusions.
+- **`intercept_addresses` entries can pin a port and/or a path prefix** ([#117](https://github.com/Coolhand-Labs/coolhand-ruby/pull/117), [#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — `host:port`, `host/path` and `host:port/path` are all accepted. A request must match every part, and the path matches on a segment boundary (`host/openai` matches `/openai` and `/openai/x`, not `/openaiz`). Plain-host entries behave exactly as before. See [Configuration](docs/configuration.md#custom-intercept-addresses).
+
+### Changed
+- Ruby 4.0 was added to the CI matrix ([#113](https://github.com/Coolhand-Labs/coolhand-ruby/pull/113)) and then removed again before release: its job could not `bundle install` against the locked dependencies (`BUNDLED WITH 2.3.6`, the conditional `pry-byebug`/`debug` Gemfile entry and `unicode-emoji 4.1.0`). CI covers Ruby 3.1–3.4 until the lock can support 4.0.
+
+### Fixed
+- `examples/anthropic_example.rb` could not run against the pinned `anthropic` 0.4.x gem: it relied on the client reading `ANTHROPIC_API_KEY` from the environment and on object-style response access, and it targeted a retired model. It now passes `access_token:` explicitly, reads the response as a Hash, and uses `claude-haiku-4-5-20251001`. Found by running it against a live key during release validation.
+
+### Security
+- **Azure OpenAI "On Your Data" datastore credentials are now redacted from captured request bodies** ([#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — a request's `data_sources`/`dataSources` entries can carry live credentials (Azure AI Search API keys, Cosmos/Mongo connection strings, Elasticsearch encoded keys) that header and URL sanitization never looked at. `BaseInterceptor.sanitize_body` now replaces any value under those entries whose key name contains `key`, `token`, `secret`, `password`, `credential`, `connectionstring` or `signature` (separators and case ignored) with `[REDACTED]` before the log is forwarded. Message content and tool definitions outside `data_sources` are untouched.
+- **Release-time hardening from a whole-package security review:**
+  - `Coolhand.log` no longer raises when stdout is unwritable. Previously a failing `puts` inside the interceptor's `ensure` block could replace the host application's own LLM response with an `IOError`.
+  - A bad `intercept_addresses`/`exclude_api_patterns` value (e.g. a String or Symbol instead of an array of Strings) now degrades to "don't capture" instead of raising into every intercepted request.
+  - `BaseInterceptor.sanitize_url` now fails closed on an unparseable URL, dropping userinfo, query and fragment rather than returning the raw URL with credentials intact.
+  - Header redaction now also matches names containing `auth`, `passw`, `credential`, `bearer`, `jwt` or `session` (e.g. `X-Auth`, `X-Session-Id`, `X-Jwt`). **Migration note:** headers such as `x-session-id` now appear as `[REDACTED]` in Coolhand.
+  - `sanitize_body` matches the `data_sources` key case- and separator-insensitively, and also redacts `pwd`, `passw*`, `bearer` and `jwt` credential keys.
+  - Hosts with a trailing dot (`api.openai.com.`) are now matched like their dotless form.
+  - `OpenAi::WebhookValidator` rejects a bare `whsec_` secret, which decodes to an empty HMAC key and would make signatures forgeable.
+
+### Documentation
+- Clarified that Google's "Gemini Enterprise Agent Platform" is the new marketing name for Vertex AI and does not change `aiplatform.googleapis.com` or `Coolhand::Vertex` ([#118](https://github.com/Coolhand-Labs/coolhand-ruby/pull/118)).
+
 ## [0.6.0] - 2026-09-12
 
 ### Added

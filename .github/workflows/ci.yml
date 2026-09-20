@@ -16,7 +16,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        ruby-version: ['3.1', '3.2', '3.3', '3.4', '4.0']
+        ruby-version: ['3.1', '3.2', '3.3', '3.4']
       fail-fast: false
 
     env:

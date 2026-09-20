@@ -28,17 +28,17 @@ Coolhand.configure do |config|
   config.silent = false
 end
 
-client = Anthropic::Client.new
+client = Anthropic::Client.new(access_token: ENV.fetch("ANTHROPIC_API_KEY"))
 
 response = client.messages(
   parameters: {
-    model: "claude-3-5-sonnet-latest",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 32,
     messages: [{ role: "user", content: "Reply with a single short word." }]
   }
 )
 
-text = response.content.first&.text
+text = response.dig("content", 0, "text")
 raise "No content in Anthropic response: #{response.inspect}" unless text
 
 puts "Claude replied: #{text.strip}"

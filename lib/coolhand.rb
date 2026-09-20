@@ -91,6 +91,10 @@ module Coolhand
       return if configuration.silent
 
       puts "COOLHAND: #{message}"
+    rescue StandardError
+      # Logging must never raise into the host app (e.g. a closed stdout) — least of all from
+      # the interceptor's ensure block, where it would replace the host's own response.
+      nil
     end
 
     # Creates a new FeedbackService instance

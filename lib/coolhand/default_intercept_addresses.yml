@@ -5,7 +5,9 @@
 # entry matches exactly one host label — e.g. "bedrock-runtime.*.amazonaws.com"
 # matches "bedrock-runtime.us-east-1.amazonaws.com" but nothing else.
 # An entry may also pin a port and/or a path prefix: "host:port", "host/path",
-# or "host:port/path" (the path match is on a segment boundary).
+# or "host:port/path" (the path match is on a segment boundary) — useful for
+# multi-service hosts where unrelated APIs (e.g. Azure Speech, Vision, Language)
+# share a domain with the LLM inference path.
 #
 # Users can extend defaults:   c.intercept_addresses << "my.custom.api.com"
 # Users can override entirely: c.intercept_addresses = ["only.this.com"]
@@ -52,3 +54,25 @@
 - "127.0.0.1:11434/api/embeddings"
 - "openrouter.ai"
 - "opencode.ai"
+# Azure OpenAI dedicated hosts (commercial, US Gov, China/21Vianet)
+- "openai.azure.com"
+- "openai.azure.us"
+- "openai.azure.cn"
+# Azure AI Services / Foundry multi-service hosts — path-anchored so Speech,
+# Vision, Language and Content Safety on the same host are NOT captured
+- "cognitiveservices.azure.com/openai/"
+- "cognitiveservices.azure.com/models/"
+- "cognitiveservices.azure.us/openai/"
+- "cognitiveservices.azure.us/models/"
+- "cognitiveservices.azure.cn/openai/"
+- "cognitiveservices.azure.cn/models/"
+- "services.ai.azure.com/openai/"
+- "services.ai.azure.com/models/"
+- "services.ai.azure.us/openai/"
+- "services.ai.azure.us/models/"
+# Serverless / MaaS + Azure ML managed online endpoints. inference.ml.azure.*
+# is deliberately unanchored — see docs/configuration.md for why.
+- "inference.ai.azure.com"
+- "models.ai.azure.com"
+- "inference.ml.azure.com"
+- "inference.ml.azure.us"
