@@ -163,6 +163,3 @@ DEPENDENCIES
   simplecov
   test-prof (~> 1.4.4)
   webmock (~> 3.19)
-
-BUNDLED WITH
-   2.3.6

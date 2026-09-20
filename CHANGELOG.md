@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`intercept_addresses` entries can pin a port and/or a path prefix** ([#117](https://github.com/Coolhand-Labs/coolhand-ruby/pull/117), [#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — `host:port`, `host/path` and `host:port/path` are all accepted. A request must match every part, and the path matches on a segment boundary (`host/openai` matches `/openai` and `/openai/x`, not `/openaiz`). Plain-host entries behave exactly as before. See [Configuration](docs/configuration.md#custom-intercept-addresses).
 
 ### Changed
-- CI now also runs the test suite on Ruby 4.0 ([#113](https://github.com/Coolhand-Labs/coolhand-ruby/pull/113)).
+- CI now also runs the test suite on Ruby 4.0 ([#113](https://github.com/Coolhand-Labs/coolhand-ruby/pull/113)). `Gemfile.lock` no longer pins `BUNDLED WITH 2.3.6`, which cannot install on Ruby 4.0 and was failing that CI job at `bundle install`.
 
 ### Security
 - **Azure OpenAI "On Your Data" datastore credentials are now redacted from captured request bodies** ([#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — a request's `data_sources`/`dataSources` entries can carry live credentials (Azure AI Search API keys, Cosmos/Mongo connection strings, Elasticsearch encoded keys) that header and URL sanitization never looked at. `BaseInterceptor.sanitize_body` now replaces any value under those entries whose key name contains `key`, `token`, `secret`, `password`, `credential`, `connectionstring` or `signature` (separators and case ignored) with `[REDACTED]` before the log is forwarded. Message content and tool definitions outside `data_sources` are untouched.
