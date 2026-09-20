@@ -6,6 +6,8 @@ For monitoring regular (non-batch) Vertex AI calls, no extra setup is required b
 
 Requires Rails — `Coolhand::Vertex::BatchResultProcessor` logs via `Rails.logger` internally. `config.capture = false` and `Coolhand.without_capture` do not suppress these logs: unlike the passive Net::HTTP interceptor, calling this processor is an explicit, deliberate act, so it always sends.
 
+> **Note:** As of May 2026, Google markets this product as "Gemini Enterprise Agent Platform" rather than "Vertex AI." The API endpoint (`aiplatform.googleapis.com`) and Ruby SDK are unchanged — it's a console/marketing rename, not an SDK rename — so `Coolhand::Vertex` naming stays accurate here. It's also still a distinct integration from the separate Gemini Developer API (`generativelanguage.googleapis.com`), which Coolhand intercepts independently.
+
 ## Usage
 
 ```ruby
