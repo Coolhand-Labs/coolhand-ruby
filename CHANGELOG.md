@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Ruby 4.0 was added to the CI matrix ([#113](https://github.com/Coolhand-Labs/coolhand-ruby/pull/113)) and then removed again before release: its job could not `bundle install` against the locked dependencies (`BUNDLED WITH 2.3.6`, the conditional `pry-byebug`/`debug` Gemfile entry and `unicode-emoji 4.1.0`). CI covers Ruby 3.1–3.4 until the lock can support 4.0.
 
+### Fixed
+- `examples/anthropic_example.rb` could not run against the pinned `anthropic` 0.4.x gem: it relied on the client reading `ANTHROPIC_API_KEY` from the environment and on object-style response access, and it targeted a retired model. It now passes `access_token:` explicitly, reads the response as a Hash, and uses `claude-haiku-4-5-20251001`. Found by running it against a live key during release validation.
+
 ### Security
 - **Azure OpenAI "On Your Data" datastore credentials are now redacted from captured request bodies** ([#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — a request's `data_sources`/`dataSources` entries can carry live credentials (Azure AI Search API keys, Cosmos/Mongo connection strings, Elasticsearch encoded keys) that header and URL sanitization never looked at. `BaseInterceptor.sanitize_body` now replaces any value under those entries whose key name contains `key`, `token`, `secret`, `password`, `credential`, `connectionstring` or `signature` (separators and case ignored) with `[REDACTED]` before the log is forwarded. Message content and tool definitions outside `data_sources` are untouched.
 - **Release-time hardening from a whole-package security review:**
