@@ -4,6 +4,8 @@
 # should be captured and forwarded as an llm_request_log. A single "*" in an
 # entry matches exactly one host label — e.g. "bedrock-runtime.*.amazonaws.com"
 # matches "bedrock-runtime.us-east-1.amazonaws.com" but nothing else.
+# An entry may also pin a port and/or a path prefix: "host:port", "host/path",
+# or "host:port/path" (the path match is on a segment boundary).
 #
 # Users can extend defaults:   c.intercept_addresses << "my.custom.api.com"
 # Users can override entirely: c.intercept_addresses = ["only.this.com"]

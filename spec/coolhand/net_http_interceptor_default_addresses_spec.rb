@@ -86,11 +86,55 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(intercepted?("http://localhost:11434/api/pull")).to be false
     end
 
+    it "intercepts the IPv6 loopback on 11434 by default" do
+      expect(intercepted?("http://[::1]:11434/api/chat")).to be true
+      expect(intercepted?("http://[::1]:11434/api/tags")).to be false
+    end
+
+    it "does not match a LAN IP until a user entry is added" do
+      expect(intercepted?("http://192.168.1.5:11434/api/chat")).to be false
+    end
+
     it "can be extended for a non-default host with a user entry" do
       Coolhand.configuration.intercept_addresses += ["192.168.1.5:11434/api/chat"]
       expect(intercepted?("http://192.168.1.5:11434/api/chat")).to be true
       expect(intercepted?("http://192.168.1.6:11434/api/chat")).to be false
     end
+  end
+
+  describe "user-supplied address entries" do
+    def with_addresses(*addresses)
+      Coolhand.configuration.intercept_addresses = addresses
+    end
+
+    it "tolerates a trailing slash on a path-scoped entry" do
+      with_addresses("host.example.com/openai/")
+      expect(intercepted?("https://host.example.com/openai")).to be true
+      expect(intercepted?("https://host.example.com/openai/v1/chat")).to be true
+      expect(intercepted?("https://host.example.com/openaiz")).to be false
+    end
+
+    it "matches a bare host:port entry regardless of path" do
+      with_addresses("localhost:8080")
+      expect(intercepted?("http://localhost:8080/anything")).to be true
+      expect(intercepted?("http://localhost:9090/anything")).to be false
+    end
+
+    it "matches hosts case-insensitively" do
+      with_addresses("Host.Example.com/openai")
+      expect(intercepted?("https://HOST.example.com/openai/x")).to be true
+    end
+
+    it "still lets exclude_api_patterns veto a path-scoped hit" do
+      with_addresses("host.example.com/openai")
+      Coolhand.configuration.exclude_api_patterns = ["/openai/batches"]
+      expect(intercepted?("https://host.example.com/openai/chat")).to be true
+      expect(intercepted?("https://host.example.com/openai/batches")).to be false
+    end
+  end
+
+  it "still matches a bare-host default on a non-default port" do
+    expect(intercepted?("https://api.openai.com:8443/v1/chat/completions")).to be true
   end
 
   it "keeps the existing defaults intercepted" do

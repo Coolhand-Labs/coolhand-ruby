@@ -229,8 +229,8 @@ module Coolhand
       host = uri.host.downcase
       path = uri.path.to_s
       addresses = Coolhand.configuration.intercept_addresses
-      return true if addresses.any? { |a| address_matches?(host, path, a) }
-      return true if addresses.any? { |a| address_matches?("#{host}:#{uri.port}", path, a) }
+      authorities = [host, "#{host}:#{uri.port}"]
+      return true if addresses.any? { |a| authorities.any? { |authority| address_matches?(authority, path, a) } }
 
       return false unless google_api_host_configured?(addresses)
       return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
@@ -260,10 +260,10 @@ module Coolhand
       end
     end
 
-    # An intercept_addresses entry may optionally anchor to a path prefix by embedding a "/" —
-    # e.g. "cognitiveservices.azure.com/openai/" only matches requests to that host whose path
-    # also starts with "/openai/", so Azure AI Services traffic for Speech/Vision/Language/
-    # Content Safety on the same multi-service host isn't swept in alongside OpenAI calls.
+    # An intercept_addresses entry may optionally pin a port ("host:port") and/or anchor to a
+    # path prefix by embedding a "/" — e.g. "api.cohere.com/v2/chat" only matches requests to
+    # that host whose path starts with "/v2/chat", so other endpoints on a shared host aren't
+    # swept in alongside the ones we mean to capture.
     # The match is on a path *segment* boundary (trailing "/" on the pattern is optional and
     # stripped before comparing), so "host.com/openai" matches "/openai" and "/openai/x" but not
     # a same-prefix-but-different-segment path like "/openaiz".
