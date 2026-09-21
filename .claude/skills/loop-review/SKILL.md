@@ -176,7 +176,7 @@ gitignored Conductor config file, not tracked in this repo — as the
 versioned and shared with the team rather than sitting on one person's
 machine; that Conductor setting has been cleared.)
 
-- **General CLAUDE.md conformance**: read `CLAUDE.md` and flag any
+- **General AGENTS.md conformance**: read `AGENTS.md` and flag any
   violation of it, not just the two rules called out explicitly below
   (optional-provider dependencies, docs philosophy) — those are the ones
   worth spelling out because they're easy to miss, not the full list.
@@ -226,7 +226,7 @@ machine; that Conductor setting has been cleared.)
   explain the migration path in plain English, so `/prep-release` has
   what it needs to pick the right version (consistent with this repo's
   own SemVer history) at the release boundary. Also check the
-  optional-provider-dependency rule from this repo's `CLAUDE.md`: provider
+  optional-provider-dependency rule from this repo's `AGENTS.md`: provider
   SDK `require`s (`openai`, `anthropic`, `google-generativeai`, etc.) must
   stay scoped to the file that uses them and lazy-loaded, never added to
   `lib/coolhand.rb` or the gemspec as a hard dependency. Confirm the gem
@@ -241,7 +241,7 @@ machine; that Conductor setting has been cleared.)
   the URL is fully-qualified (`scheme://host/path`) rather than a bare
   provider resource path — bare paths break backend `source_api`/`model`
   classification (see #76).
-- **Documentation**: per this repo's `CLAUDE.md` "README and docs
+- **Documentation**: per this repo's `AGENTS.md` "README and docs
   philosophy" — config beyond the basic `Coolhand.configure` snippet
   belongs in `docs/configuration.md`, feedback beyond the basic
   `create_feedback` snippet belongs in `docs/feedback.md`, each
