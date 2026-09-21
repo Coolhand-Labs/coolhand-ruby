@@ -39,8 +39,8 @@ node <workspaceRoot>/coolhand/harness/harness.mjs my-issue --run <RUN_DIR> --rep
 2. `<workspaceRoot>/coolhand/harness/RESIST_RULES.md` — the refuse list.
 3. The API definition at `specPath`. It is your only source of truth **for the endpoint's
    contract** — paths, params, response fields, status codes.
-4. `coolhand-ruby/CLAUDE.md` — this repo's own rulebook. **It is authoritative.** Where it
-   disagrees with this harness file, CLAUDE.md wins — follow it and say so in your PR.
+4. `coolhand-ruby/AGENTS.md` — this repo's own rulebook. **It is authoritative.** Where it
+   disagrees with this harness file, AGENTS.md wins — follow it and say so in your PR.
 
 **Your issue links node's PR as the reference implementation. Use it for structure, not
 for facts.** Node went first so you do not have to rediscover how a REST method fits into
@@ -70,7 +70,7 @@ inside the current architecture, escalate and STOP.
 Require it inside the file that actually uses it, executed only when that provider's
 functionality is accessed. Clients may not use every provider and must not be forced to
 install gems they do not need — apps consuming this as a path gem break on missing optional
-dependencies. See `coolhand-ruby/CLAUDE.md`.
+dependencies. See `coolhand-ruby/AGENTS.md`.
 
 ## 3. Prove it against the real server
 

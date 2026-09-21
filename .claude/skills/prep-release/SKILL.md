@@ -22,7 +22,7 @@ everything merged since the last tag, not just one diff. For an iterative
 diff-scoped review during normal development, use `/loop-review` instead;
 this skill is for the release event itself.
 
-Per `CLAUDE.md`, feature/fix branches never touch `CHANGELOG.md` or
+Per `AGENTS.md`, feature/fix branches never touch `CHANGELOG.md` or
 `lib/coolhand/version.rb` — this skill is the only place those get written.
 If a chosen PR's diff does touch either file, treat it as a normal part of
 that PR's diff (don't strip it), but don't let it change how Phase 3 writes
@@ -108,14 +108,14 @@ never on `main` directly.
      write the entry without one rather than skipping it.
    - `README.md` / `docs/*.md` — any new config option, public method, or
      behavior change needs the relevant section updated. Follow this
-     repo's docs philosophy from `CLAUDE.md`: the README stays a scannable
+     repo's docs philosophy from `AGENTS.md`: the README stays a scannable
      landing page (basic config/feedback snippets only); anything needing
      more than one code block belongs in `docs/`.
 4. **Clean, don't just append.** Look for docs that are now stale,
    contradictory, or redundant given the accumulated changes since the
    last tag — consolidate/rewrite rather than layering a new paragraph on
    top of an outdated one. Remove docs for anything removed from the gem.
-5. **Bump the version.** Since `CLAUDE.md` now forbids per-PR bumps, this
+5. **Bump the version.** Since `AGENTS.md` now forbids per-PR bumps, this
    should always be needed — but check `lib/coolhand/version.rb` against
    the last tag first as a defensive sanity check in case something bumped
    it out of band. Determine the SemVer bump this repo's convention
