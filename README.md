@@ -103,6 +103,20 @@ Search is a parameter on the list endpoint, not a route of its own, and the `Unm
 
 For the full filter reference, pagination, and error handling, see [Reading Templates →](docs/template-search.md).
 
+## Linking Feedback to an Optimization
+
+Attach feedback to an optimization as evidence, one at a time or in bulk. These require your **private** API key and **raise** `Coolhand::HttpError` on failure.
+
+```ruby
+links = Coolhand.optimization_feedback_link_service
+
+link = links.link_feedback('optimizationHashid', 'feedbackHashid', note: 'why')
+links.bulk_link_feedback('optimizationHashid', %w[fb1 fb2 fb3]) # => { linked:, already_linked:, errored:, not_found: }
+links.unlink_feedback('optimizationHashid', link[:id])
+```
+
+For batching, error semantics, and details, see [Linking Feedback →](docs/feedback-links.md).
+
 ## Rails Integration
 
 ### Configuration
@@ -434,13 +448,14 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`) are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md)
+- The read methods (`search_templates`, `get_template`) and the feedback-link methods are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md) and [Linking Feedback →](docs/feedback-links.md)
 
 ## Documentation
 
 - **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
 - **[Reading Templates](docs/template-search.md)** — Search LLM request templates and fetch a single one, prompt patterns included, using the private API key
+- **[Linking Feedback](docs/feedback-links.md)** — Link feedback to an optimization as evidence, singly or in bulk, using the private API key
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 - **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception
