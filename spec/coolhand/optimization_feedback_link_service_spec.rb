@@ -169,7 +169,8 @@ RSpec.describe Coolhand::OptimizationFeedbackLinkService do
 
   # Mutates data, so it only runs against a loopback server, never a remote one.
   live_local = ENV.fetch("COOLHAND_LIVE_BASE_URL", "").match?(%r{\Ahttp://(127\.0\.0\.1|localhost)[:/]}) &&
-    !ENV.fetch("COOLHAND_LIVE_API_KEY", "").empty?
+               %w[COOLHAND_LIVE_API_KEY COOLHAND_LIVE_OPTIMIZATION_ID COOLHAND_LIVE_FEEDBACK_IDS]
+                 .none? { |name| ENV.fetch(name, "").empty? }
 
   describe "against the live local server", if: live_local do
     let(:live_config) do
@@ -178,8 +179,8 @@ RSpec.describe Coolhand::OptimizationFeedbackLinkService do
         base_url: "#{ENV.fetch('COOLHAND_LIVE_BASE_URL')}/api",
         silent: true, environment: "test", debug_mode: false)
     end
-    let(:optimization_id) { ENV.fetch("COOLHAND_LIVE_OPTIMIZATION_ID", "2g17o0crr2q8") }
-    let(:feedback_ids) { ENV.fetch("COOLHAND_LIVE_FEEDBACK_IDS", "p56dxwcvd2gm qj6ordcwyr6x 3l6249cqnxgq").split }
+    let(:optimization_id) { ENV.fetch("COOLHAND_LIVE_OPTIMIZATION_ID") }
+    let(:feedback_ids) { ENV.fetch("COOLHAND_LIVE_FEEDBACK_IDS").split }
 
     before do
       WebMock.allow_net_connect!
