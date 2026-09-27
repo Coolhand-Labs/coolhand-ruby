@@ -123,12 +123,18 @@ to confirm by trying; go straight to the request below.
      --from ruby --to node --kind escalation \
      --text "R8: ready for review. repo=<workspaceRoot>/coolhand-ruby branch=<branch> sha=<sha>"
    ```
-3. `wait` for node's reply. A timeout is silence, not permission — call `wait` again rather
-   than pushing (`RESIST_RULES.md` → "What escalate and stop means, mechanically").
-4. Node replies with a `resolution` carrying `CLEAN` or a fixed-and-remaining list, from a
-   review it ran against your actual repo (`RESIST_RULES.md` → R8 → "Serving a review for a
-   child"). That reply is what tells you the review happened — not your own read of the
-   diff.
+3. `wait` for node's reply. A timeout is silence, not permission — call `wait` again
+   rather than pushing (`RESIST_RULES.md` → "What escalate and stop means, mechanically").
+4. **The first reply is an `ack`, not the answer** — it means node has started, not that it
+   is done. `wait` again, `--after` that ack's `messageId`, for the `resolution` that
+   actually follows. Only that `resolution`, carrying `CLEAN` or a fixed-and-remaining list
+   from a review node ran against your actual repo, tells you the review happened
+   (`RESIST_RULES.md` → R8 → "Serving a review for a child") — not your own read of the
+   diff, and not the ack.
+5. **Then move on to section 6 (Open your PR).** If node's review applied fixes,
+   it already committed them directly into your checkout while you waited — whatever is at
+   `HEAD` when you push there already includes them, and you do not need to reproduce or
+   look for them separately.
 
 ## 6. Open your PR — then STOP
 
@@ -140,10 +146,10 @@ to confirm by trying; go straight to the request below.
 3. Record it: `node <workspaceRoot>/coolhand/harness/harness.mjs pr --run <RUN_DIR> --repo ruby --url <url>`
 4. Post node's Iteration Breakdown table (section 5) as a comment on this PR — see
    `RESIST_RULES.md` → "After the loop exits" — and add one line the table itself does not
-   carry: `Reviewed by node against <sha>`, since you did not run it yourself.
-5. Record that the review happened, whether or not node already did:
-   `node <workspaceRoot>/coolhand/harness/harness.mjs loop-review --run <RUN_DIR> --repo ruby --sha <sha> --by node --result clean|capped`
-6. **Stop.** You launch no one. The tree ends with you on this branch.
+   carry: `Reviewed by node against <sha>`, since you did not run it yourself. **Do not call
+   `harness.mjs loop-review` here — node already recorded it**, against the sha that
+   resulted from its own fix commits, not the one you originally escalated with.
+5. **Stop.** You launch no one. The tree ends with you on this branch.
 
 ## 7. Done means
 
