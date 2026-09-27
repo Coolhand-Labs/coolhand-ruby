@@ -127,10 +127,11 @@ to confirm by trying; go straight to the request below.
    rather than pushing (`RESIST_RULES.md` → "What escalate and stop means, mechanically").
 4. **The first reply is an `ack`, not the answer** — it means node has started, not that it
    is done. `wait` again, `--after` that ack's `messageId`, for the `resolution` that
-   actually follows. Only that `resolution`, carrying `CLEAN` or a fixed-and-remaining list
-   from a review node ran against your actual repo, tells you the review happened
-   (`RESIST_RULES.md` → R8 → "Serving a review for a child") — not your own read of the
-   diff, and not the ack.
+   actually follows. **That `resolution` always carries the full Iteration Breakdown table
+   plus an explicit `CLEAN`/`capped` verdict** from a review node ran against your actual
+   repo (`RESIST_RULES.md` → R8 → "Serving a review for a child") — not just one or the
+   other, not your own read of the diff, and not the ack. This is what you post as your own
+   PR comment below, unedited plus the "Reviewed by node against `<sha>`" line.
 5. **Then move on to section 6 (Open your PR).** If node's review applied fixes,
    it already committed them directly into your checkout while you waited — whatever is at
    `HEAD` when you push there already includes them, and you do not need to reproduce or
