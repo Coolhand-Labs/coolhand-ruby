@@ -123,8 +123,10 @@ to confirm by trying; go straight to the request below.
      --from ruby --to node --kind escalation \
      --text "R8: ready for review. repo=<workspaceRoot>/coolhand-ruby branch=<branch> sha=<sha>"
    ```
-3. `wait` for node's reply. A timeout is silence, not permission — call `wait` again
-   rather than pushing (`RESIST_RULES.md` → "What escalate and stop means, mechanically").
+3. `wait --after` the `messageId` your `send` in step 2 just printed. A timeout is silence,
+   not permission — call `wait` again, `--after` that same id, rather than pushing
+   (`RESIST_RULES.md` → "What escalate and stop means, mechanically"). If you loop back here
+   from step 5, use the fresh escalation's `messageId` instead.
 4. **The first reply is an `ack`, not the answer** — it means node has started, not that it
    is done. `wait` again, `--after` that ack's `messageId`, for the `resolution` that
    actually follows.
@@ -134,8 +136,9 @@ to confirm by trying; go straight to the request below.
    send a fresh R8 escalation with your current `HEAD` sha (it may have changed) and go back
    to step 3. Do not just `wait` again — nothing arrives until you re-escalate.
 6. **The `resolution` that eventually arrives always carries the full Iteration Breakdown
-   table plus an explicit `CLEAN`/`capped` verdict** from a review node ran against your
-   actual repo — not just one or the other, not your own read of the diff, and not an ack.
+   table plus an explicit `CLEAN`/`capped` verdict** — the same `result` value node has
+   already recorded (it records before it replies) — from a review node ran against your
+   actual repo. Not just one or the other, not your own read of the diff, and not an ack.
    This is what you post as your own PR comment below, unedited plus the "Reviewed by node
    against `<sha>`" line.
 7. **Then move on to section 6 (Open your PR).** If node's review applied fixes,
