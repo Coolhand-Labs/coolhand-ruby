@@ -16,6 +16,7 @@ require_relative "coolhand/api_service"
 require_relative "coolhand/logger_service"
 require_relative "coolhand/feedback_service"
 require_relative "coolhand/template_service"
+require_relative "coolhand/optimization_feedback_link_service"
 require_relative "coolhand/webhook_interceptor"
 
 # The main module for the Coolhand gem.
@@ -111,6 +112,12 @@ module Coolhand
     # Coolhand. Needs the private API key - the public key is write-only on this API.
     def template_service
       TemplateService.new
+    end
+
+    # Creates a new OptimizationFeedbackLinkService instance, for linking feedback to an
+    # optimization as evidence. Needs the private API key.
+    def optimization_feedback_link_service
+      OptimizationFeedbackLinkService.new
     end
 
     def required_field?(value)

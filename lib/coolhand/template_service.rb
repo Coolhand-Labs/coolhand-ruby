@@ -67,10 +67,5 @@ module Coolhand
 
       URI.parse("#{api_endpoint}/#{escape_path_segment(trimmed)}")
     end
-
-    # Escapes to RFC 3986 unreserved, so an id carrying `/`, `?` or `#` cannot retarget the request.
-    def escape_path_segment(value)
-      URI::DEFAULT_PARSER.escape(value, /[^A-Za-z0-9\-._~]/)
-    end
   end
 end

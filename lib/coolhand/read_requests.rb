@@ -6,9 +6,10 @@ require "json"
 require_relative "errors"
 
 module Coolhand
-  # The GET half of {ApiService}, split out to keep that class inside this repo's 200-line budget.
+  # The GET half of {ApiService}, plus the HTTP helpers {WriteRequests} shares, split out to keep
+  # that class inside this repo's 200-line budget.
   #
-  # Reads raise where writes log-and-return-nil, on purpose: a write is instrumentation inline in
+  # Reads raise where the logging writes log-and-return-nil, on purpose: a write is instrumentation inline in
   # the host app's request, while a read's caller must tell a 404 from a timeout from an empty result.
   module ReadRequests
     # 60s is deliberate, not a slip: writes allow 5, but the server bounds each *statement* at 10s
@@ -32,13 +33,7 @@ module Coolhand
 
       response = perform_get(url, noun)
 
-      unless response.is_a?(Net::HTTPSuccess)
-        raise HttpError.new(
-          "#{noun} request failed (#{response.code}): #{format_error_body(response.body)}",
-          status: response.code.to_i,
-          body: retained_error_body(response.body)
-        )
-      end
+      raise_http_error(response, noun) unless response.is_a?(Net::HTTPSuccess)
 
       [parse_json_body(response.body, noun), response]
     end
@@ -47,10 +42,7 @@ module Coolhand
 
     def perform_get(url, noun)
       uri = url.is_a?(URI::Generic) ? url : URI.parse(url.to_s)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == "https")
-      http.open_timeout = READ_OPEN_TIMEOUT
-      http.read_timeout = READ_TIMEOUT
+      http = build_http(uri)
 
       request = Net::HTTP::Get.new(uri.request_uri)
       apply_headers(request, "Accept" => "application/json", "X-API-Key" => api_key)
@@ -60,6 +52,27 @@ module Coolhand
       Coolhand.without_capture { http.request(request) }
     rescue StandardError => e
       raise Error, "#{noun} request failed: #{e.message}"
+    end
+
+    def build_http(uri)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = (uri.scheme == "https")
+      http.open_timeout = READ_OPEN_TIMEOUT
+      http.read_timeout = READ_TIMEOUT
+      http
+    end
+
+    def raise_http_error(response, noun)
+      raise HttpError.new(
+        "#{noun} request failed (#{response.code}): #{format_error_body(response.body)}",
+        status: response.code.to_i,
+        body: retained_error_body(response.body)
+      )
+    end
+
+    # Escapes to RFC 3986 unreserved, so an id carrying `/`, `?` or `#` cannot retarget the request.
+    def escape_path_segment(value)
+      URI::DEFAULT_PARSER.escape(value, /[^A-Za-z0-9\-._~]/)
     end
 
     def retained_error_body(body)
