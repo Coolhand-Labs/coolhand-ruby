@@ -9,7 +9,9 @@ require_relative "read_requests"
 module Coolhand
   # POST/DELETE counterpart of {ReadRequests} for callers that act on the response: raises on any
   # failure where {ApiService#send_request} logs and returns nil. Timeouts are the read ones, for
-  # the same server-side statement-bound reason.
+  # the same server-side statement-bound reason. Mix into an {ApiService} subclass: it relies on
+  # `api_key`, `apply_headers` and `format_error_body` from there and the shared HTTP helpers from
+  # {ReadRequests}.
   module WriteRequests
     protected
 
@@ -19,13 +21,7 @@ module Coolhand
 
       response = perform_write(verb, url, noun, body)
 
-      unless response.is_a?(Net::HTTPSuccess)
-        raise HttpError.new(
-          "#{noun} request failed (#{response.code}): #{format_error_body(response.body)}",
-          status: response.code.to_i,
-          body: retained_error_body(response.body)
-        )
-      end
+      raise_http_error(response, noun) unless response.is_a?(Net::HTTPSuccess)
 
       response.body.to_s.strip.empty? ? nil : parse_json_body(response.body, noun)
     end
@@ -34,10 +30,7 @@ module Coolhand
 
     def perform_write(verb, url, noun, body)
       uri = url.is_a?(URI::Generic) ? url : URI.parse(url.to_s)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == "https")
-      http.open_timeout = ReadRequests::READ_OPEN_TIMEOUT
-      http.read_timeout = ReadRequests::READ_TIMEOUT
+      http = build_http(uri)
 
       request = Net::HTTP.const_get(verb.to_s.capitalize).new(uri.request_uri)
       apply_headers(request, "Accept" => "application/json", "X-API-Key" => api_key)

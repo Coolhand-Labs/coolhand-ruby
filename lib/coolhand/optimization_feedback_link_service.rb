@@ -22,7 +22,7 @@ module Coolhand
     def link_feedback(optimization_id, feedback_id, note: nil)
       validate_id!("link_feedback", "feedback_id", feedback_id)
       url = links_url("link_feedback", optimization_id)
-      request_json(:post, url, ERROR_NOUN, body: { feedback_id: feedback_id, note: note }.compact)
+      ensure_object!(request_json(:post, url, ERROR_NOUN, body: { feedback_id: feedback_id.strip, note: note }.compact))
     end
 
     # Lists over 100 ids are sent in batches; a failing batch raises and earlier ones stay applied,
@@ -34,6 +34,7 @@ module Coolhand
       end
 
       feedback_ids.each { |id| validate_id!("bulk_link_feedback", "feedback_ids entries", id) }
+      feedback_ids = feedback_ids.map(&:strip)
       url = links_url("bulk_link_feedback", optimization_id)
 
       totals = { linked: 0, already_linked: 0, errored: 0, not_found: [] }
@@ -55,10 +56,16 @@ module Coolhand
     private
 
     def merge_bulk_result!(totals, result)
-      raise Error, "#{ERROR_NOUN} response was not a JSON object" unless result.is_a?(Hash)
+      ensure_object!(result)
 
       %i[linked already_linked errored].each { |key| totals[key] += result[key].to_i }
       totals[:not_found].concat(Array(result[:not_found]))
+    end
+
+    def ensure_object!(result)
+      raise Error, "#{ERROR_NOUN} response was not a JSON object" unless result.is_a?(Hash)
+
+      result
     end
 
     def links_url(method_name, optimization_id)
@@ -73,10 +80,6 @@ module Coolhand
       return unless trimmed.empty? || [".", ".."].include?(trimmed)
 
       raise Error, "#{method_name}: #{label} must be a non-empty hashid"
-    end
-
-    def escape_path_segment(value)
-      URI::DEFAULT_PARSER.escape(value, /[^A-Za-z0-9\-._~]/)
     end
   end
 end

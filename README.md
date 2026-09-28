@@ -105,7 +105,7 @@ For the full filter reference, pagination, and error handling, see [Reading Temp
 
 ## Linking Feedback to an Optimization
 
-Attach feedback to an optimization as evidence, one at a time or in bulk. These require your **private** API key and **raise** `Coolhand::HttpError` on failure.
+Attach feedback to an optimization as evidence, one at a time or in bulk. These require your **private** API key and **raise** `Coolhand::Error` on failure (`Coolhand::HttpError` for non-2xx responses).
 
 ```ruby
 links = Coolhand.optimization_feedback_link_service
@@ -448,7 +448,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`) and the feedback-link methods are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md) and [Linking Feedback →](docs/feedback-links.md)
+- The read methods (`search_templates`, `get_template`) and the feedback-link methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md) and [Linking Feedback →](docs/feedback-links.md)
 
 ## Documentation
 

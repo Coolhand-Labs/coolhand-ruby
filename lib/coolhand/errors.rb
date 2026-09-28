@@ -3,7 +3,8 @@
 module Coolhand
   class Error < StandardError; end
 
-  # Raised by the gem's read methods when the Coolhand API answers with a non-2xx status.
+  # Raised by the gem's raising API methods (template reads, feedback links) when the Coolhand API
+  # answers with a non-2xx status.
   #
   # `status` is carried so callers can branch on it (404 vs retryable 504) without matching the
   # message text.

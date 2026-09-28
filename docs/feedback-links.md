@@ -33,8 +33,10 @@ links.unlink_feedback("optimizationHashid", link[:id])
 - Already-linked ids count as `already_linked`, not errors. Unknown, malformed and other-client ids
   are all reported in `not_found`.
 - If a batch fails, the call raises and earlier batches stay applied. Repeating the call is safe.
+- `link_feedback` is not retry-safe: after a transport error, a `422` "already linked" on retry may mean
+  the first attempt succeeded. Use `bulk_link_feedback` with a single id for retry-safe semantics.
 - An empty list or a blank id raises `Coolhand::Error` before any request is made.
-- Ids are not de-duplicated client-side.
+- Ids are trimmed of surrounding whitespace but not de-duplicated client-side.
 
 ## Errors
 
@@ -42,3 +44,5 @@ Unlike the logging writes, all three methods raise. A non-2xx response raises `C
 whose `status` is the HTTP code: `401` missing or public key, `404` unknown optimization, feedback or
 link, `422` invalid input, an already-linked feedback (single mode) or a `note` that is too long.
 Client-side validation and transport failures raise `Coolhand::Error`.
+
+`config.debug_mode` does not suppress these calls: they change server state, so they are always sent.

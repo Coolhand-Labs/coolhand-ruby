@@ -86,6 +86,63 @@ RSpec.describe Coolhand::OptimizationFeedbackLinkService do
     end
   end
 
+  describe "transport and response edge cases" do
+    it "wraps a transport failure in Coolhand::Error" do
+      stub_request(:post, links_url).to_timeout
+
+      expect { service.link_feedback("opt1", "fb1") }.to raise_error(Coolhand::Error, /Feedback link request failed/)
+    end
+
+    it "raises on a 2xx response that is not valid JSON" do
+      stub_request(:post, links_url).to_return(status: 201, body: "<html>oops</html>")
+
+      expect { service.link_feedback("opt1", "fb1") }.to raise_error(Coolhand::Error, /not valid JSON/)
+    end
+
+    it "raises on an empty or non-object 2xx body" do
+      stub_request(:post, links_url).to_return({ status: 201, body: "" }, { status: 201, body: "[]" })
+
+      2.times do
+        expect { service.link_feedback("opt1", "fb1") }.to raise_error(Coolhand::Error, /not a JSON object/)
+      end
+    end
+
+    it "raises on a redirect rather than following it" do
+      stub_request(:post, links_url).to_return(status: 302, headers: { "Location" => "https://evil.example/" })
+
+      expect { service.link_feedback("opt1", "fb1") }.to raise_error(Coolhand::HttpError) { |e|
+        expect(e.status).to eq(302)
+      }
+      expect(a_request(:any, /evil\.example/)).not_to have_been_made
+    end
+
+    it "rejects a non-String id" do
+      expect { service.link_feedback("opt1", 42) }.to raise_error(Coolhand::Error, /feedback_id/)
+      expect { service.bulk_link_feedback("opt1", [1]) }.to raise_error(Coolhand::Error, /feedback_ids/)
+    end
+
+    it "sends requests outside capture" do
+      stub_request(:post, links_url).to_return(status: 201, body: "{}")
+      expect(Coolhand).to receive(:without_capture).and_call_original
+
+      service.link_feedback("opt1", "fb1")
+    end
+
+    it "trims surrounding whitespace from ids" do
+      stub = stub_request(:post, links_url).with(body: { feedback_ids: %w[a b] }.to_json)
+        .to_return(status: 200, body: { linked: 2 }.to_json)
+
+      service.bulk_link_feedback("opt1", [" a", "b "])
+      expect(stub).to have_been_requested
+    end
+
+    it "raises when a bulk response is not a JSON object" do
+      stub_request(:post, links_url).to_return(status: 200, body: "[]")
+
+      expect { service.bulk_link_feedback("opt1", ["a"]) }.to raise_error(Coolhand::Error, /not a JSON object/)
+    end
+  end
+
   describe "#bulk_link_feedback" do
     def result(linked: 0, already_linked: 0, errored: 0, not_found: [])
       { linked: linked, already_linked: already_linked, errored: errored, not_found: not_found }.to_json
@@ -161,8 +218,16 @@ RSpec.describe Coolhand::OptimizationFeedbackLinkService do
       }
     end
 
-    it "rejects a blank link id before any request" do
+    it "encodes the link id as a single path segment" do
+      stub = stub_request(:delete, "#{links_url}/a%2Fb%3F").to_return(status: 204, body: "")
+
+      service.unlink_feedback("opt1", "a/b?")
+      expect(stub).to have_been_requested
+    end
+
+    it "rejects a blank or dot-segment link id before any request" do
       expect { service.unlink_feedback("opt1", "") }.to raise_error(Coolhand::Error, /link_id/)
+      expect { service.unlink_feedback("opt1", "..") }.to raise_error(Coolhand::Error, /link_id/)
       expect(a_request(:any, /coolhandlabs/)).not_to have_been_made
     end
   end
