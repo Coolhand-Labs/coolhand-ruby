@@ -41,7 +41,7 @@ This is **not** a port of the `search_templates` MCP tool, and the two do not ag
 Template *creation, update and deprecation* stay on the MCP surface. This REST surface is
 read-only, and there is no version-history sub-resource.
 
-## `search_templates(search: nil, workload_id: nil, status: nil, include_deprecated: nil, include_system: nil, page: nil, per: nil)`
+## `search_templates(search: nil, workload_id: nil, status: nil, include_deprecated: nil, include_system: nil, include_metrics: nil, days_back: nil, since: nil, until: nil, page: nil, per: nil)`
 
 Search is a *parameter* on the list endpoint rather than a route of its own, so this is one method
 rather than a list/search pair.
@@ -56,6 +56,10 @@ and this API's already agree, so there is no second spelling to translate throug
 | `status` | String | `"draft"`, `"published"` or `"failure"`. Any other non-empty value is a `422` from the server; empty is treated as no filter. |
 | `include_deprecated` | Boolean | Include templates with a non-null `deprecated_at`. Defaults to `false` server-side. |
 | `include_system` | Boolean | Include the `Unmatched` / `Ignored API Calls` buckets. Defaults to `false` server-side. |
+| `include_metrics` | Boolean | Adds a `:metrics` Hash to every row. See [Metrics](#metrics). |
+| `days_back` | Integer | Rolling metrics window in days (server default 28, max 365). Ignored unless metrics are requested, and when `since` is given. |
+| `since` | Time, DateTime, Date or String | Metrics window start, inclusive. Overrides `days_back`. |
+| `until` | Time, DateTime, Date or String | Metrics window end, exclusive. Defaults to now. |
 | `page` | Integer | 1-based. |
 | `per` | Integer | Default 25, max 100, both enforced server-side. |
 
@@ -138,11 +142,14 @@ unmatched = Coolhand.template_service
 puts unmatched[:log_count]
 ```
 
-## `get_template(id)`
+## `get_template(id, days_back: nil, since: nil, until: nil)`
 
 `id` is the template hashid — the `:id` field from `search_templates`.
 
-Returns a Hash with every list field above, **plus** the full untruncated regexes the list omits:
+Returns a Hash with every list field above, **plus** the full untruncated regexes the list omits, and
+always a `:metrics` Hash (there is no `include_metrics` here). `days_back`, `since` and `until` set its
+window exactly as they do on the list; an invalid one is a `422` here even though the list only checks
+it when metrics are requested.
 
 | field | type |
 |---|---|
@@ -152,6 +159,41 @@ Returns a Hash with every list field above, **plus** the full untruncated regexe
 Unlike the list, this filters on nothing but client ownership: a deprecated or system template is
 reachable by id with **no opt-in flag**, because inspecting one of those is the usual reason to
 fetch a template directly.
+
+## Metrics
+
+With `include_metrics: true` every row (and always the `get_template` result) carries `:metrics`,
+computed by the same SQL as the dashboard, so tiered pricing, cached-token discounts and reasoning tokens
+are applied. `Coolhand.workload_service` returns the same object per workload, rolled up across its
+templates ([Reading Workloads](workload-search.md)).
+
+Averages and counters cover non-failed, directly-collected client logs inside the window. Keys are the
+wire names, as Symbols.
+
+| field | type | notes |
+|---|---|---|
+| `:days_back` | Integer or nil | `nil` when `since` defined the window. |
+| `:since`, `:until` | String | The resolved window, ISO-8601 UTC. |
+| `:request_count` | Integer | |
+| `:failure_count` | Integer | Failed logs. |
+| `:error_rate` | Float or nil | `nil` when `failure_count` is 0. |
+| `:error_rate_change` | Float or nil | Against the window of the same length immediately before. |
+| `:avg_cost_per_request` | Float or nil | `nil` when no log in the window could be priced. |
+| `:total_cost` | Float or nil | |
+| `:priced_request_count` | Integer | The logs `total_cost` covers: non-failed, with tokens, model has pricing. |
+| `:long_context_request_count` | Integer | Priced logs that crossed their model's input-token pricing tier. |
+| `:total_input_tokens`, `:total_output_tokens` | Integer | Raw token columns summed over non-failed logs, not cache-adjusted. |
+| `:avg_input_tokens`, `:avg_output_tokens` | Integer or nil | |
+| `:avg_latency_ms` | Float or nil | |
+| `:correctness_score`, `:sentiment_score`, `:revision_score` | Float or nil | `sentiment_score` and `revision_score` are all-time, not windowed. |
+| `:first_request_at`, `:last_request_at` | String or nil | Lifetime, not windowed. |
+
+Summing the per-log `cost` from [Reading Logs](log-search.md) can exceed `total_cost`, because the log
+`cost` is also computed for failed logs and logs with a zero token count.
+
+Windows follow the rules in [Reading Workloads](workload-search.md#windows-since-and-until). A window
+error is a `422` on the `since` or `until` key. Metrics add aggregate statements, so expect a slower
+response, and a `504` on a large page.
 
 ## Errors
 
@@ -186,7 +228,7 @@ end
 |---|---|
 | `401` | Missing, invalid, or public API key. |
 | `404` | `get_template` only. Unknown id, **or** one belonging to another client — existence is not disclosed, so this is never a `403`. |
-| `422` | Unrecognised `status`, or a `workload_id` that does not decode or belongs to another client. |
+| `422` | Unrecognised `status`, a `workload_id` that does not decode or belongs to another client, or a bad `days_back`, `since` or `until` when metrics are requested. |
 | `504` | See below. |
 
 ### `504` is expected, and retryable

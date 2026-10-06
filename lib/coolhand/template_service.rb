@@ -3,6 +3,7 @@
 require "uri"
 require_relative "api_service"
 require_relative "pagination"
+require_relative "read_query"
 
 module Coolhand
   # Rows stay plain Symbol-keyed Hashes so a field the server adds later is not dropped in transit.
@@ -14,6 +15,8 @@ module Coolhand
   # Not a port of the MCP `search_templates` tool and does not agree with its `log_count`.
   # See docs/template-search.md.
   class TemplateService < ApiService
+    include ReadQuery
+
     ERROR_NOUN = "Template"
     BLANK_ID_MESSAGE = "get_template: id must be a non-empty template hashid"
 
@@ -23,13 +26,16 @@ module Coolhand
 
     # Filters, error semantics and server behaviour: docs/template-search.md.
     def search_templates(search: nil, workload_id: nil, status: nil, include_deprecated: nil,
-      include_system: nil, page: nil, per: nil)
+      include_system: nil, include_metrics: nil, days_back: nil, since: nil, until: nil, page: nil, per: nil)
       query = {
         search: search,
         workload_id: workload_id,
         status: status,
         include_deprecated: include_deprecated,
         include_system: include_system,
+        include_metrics: include_metrics,
+        days_back: days_back,
+        **window_params(since, binding.local_variable_get(:until)),
         page: page,
         per: per
       }.compact
@@ -44,33 +50,11 @@ module Coolhand
     end
 
     # Adds `user_prompt_pattern` / `system_prompt_pattern`, which the list omits, and unlike the
-    # list reaches deprecated and system templates by id with no opt-in flag.
-    def get_template(id)
-      get_json(resource_url(id), ERROR_NOUN)
-    end
-
-    private
-
-    def list_url(query)
-      uri = URI.parse(api_endpoint)
-      uri.query = URI.encode_www_form(query) unless query.empty?
-      uri
-    end
-
-    def resource_url(id)
-      raise Error, BLANK_ID_MESSAGE unless id.is_a?(String)
-
-      trimmed = id.strip
-      # A blank id resolves to the index route (bare array, not one template); a bare dot segment
-      # retargets the request at another path. Neither would 404, so both are rejected here.
-      raise Error, BLANK_ID_MESSAGE if trimmed.empty? || [".", ".."].include?(trimmed)
-
-      URI.parse("#{api_endpoint}/#{escape_path_segment(trimmed)}")
-    end
-
-    # Escapes to RFC 3986 unreserved, so an id carrying `/`, `?` or `#` cannot retarget the request.
-    def escape_path_segment(value)
-      URI::DEFAULT_PARSER.escape(value, /[^A-Za-z0-9\-._~]/)
+    # list reaches deprecated and system templates by id with no opt-in flag. Always carries
+    # `metrics`, so there is no `include_metrics`.
+    def get_template(id, days_back: nil, since: nil, until: nil)
+      query = { days_back: days_back, **window_params(since, binding.local_variable_get(:until)) }.compact
+      get_json(resource_url(id, BLANK_ID_MESSAGE, query), ERROR_NOUN)
     end
   end
 end
