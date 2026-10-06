@@ -69,6 +69,14 @@ RSpec.describe Coolhand, if: LIVE do
       expect(detail[:metrics]).to include(:total_input_tokens, days_back: nil)
     end
 
+    it "omits metrics on show with include_metrics: false, even for a bad window" do
+      id = Coolhand.template_service.search_templates(per: 1).templates.first[:id]
+
+      detail = Coolhand.template_service.get_template(id, include_metrics: false, since: "bad")
+
+      expect(detail).not_to have_key(:metrics)
+    end
+
     it "raises 422 on a bad window for show" do
       id = Coolhand.template_service.search_templates(per: 1).templates.first[:id]
 

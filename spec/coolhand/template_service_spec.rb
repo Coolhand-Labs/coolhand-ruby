@@ -410,7 +410,7 @@ RSpec.describe Coolhand::TemplateService do
       end)
     end
 
-    it "sends the window params, and never include_metrics, which show does not declare" do
+    it "sends the window params" do
       stub_request(:get, %r{llm_request_templates/kp9}).to_return(status: 200, body: "{}")
 
       service.get_template("kp9npvc8qq2q", days_back: 7, since: Time.utc(2026, 9, 1), until: "2026-10-01")
@@ -418,7 +418,17 @@ RSpec.describe Coolhand::TemplateService do
       expect(WebMock).to have_requested(:get, "#{endpoint}/kp9npvc8qq2q").with(query: {
         "days_back" => "7", "since" => "2026-09-01T00:00:00Z", "until" => "2026-10-01"
       })
-      expect { service.get_template("kp9npvc8qq2q", include_metrics: true) }.to raise_error(ArgumentError)
+    end
+
+    it "sends include_metrics=false rather than dropping an explicit false, and sends nothing when unset" do
+      stub_request(:get, %r{llm_request_templates/kp9}).to_return(status: 200, body: "{}")
+
+      service.get_template("kp9npvc8qq2q", include_metrics: false)
+      expect(WebMock).to have_requested(:get, "#{endpoint}/kp9npvc8qq2q").with(query: { "include_metrics" => "false" })
+
+      WebMock.reset_executed_requests!
+      service.get_template("kp9npvc8qq2q")
+      expect(WebMock).to(have_requested(:get, "#{endpoint}/kp9npvc8qq2q").with { |req| req.uri.query.nil? })
     end
 
     it "carries 422 for a bad window" do

@@ -142,14 +142,14 @@ unmatched = Coolhand.template_service
 puts unmatched[:log_count]
 ```
 
-## `get_template(id, days_back: nil, since: nil, until: nil)`
+## `get_template(id, include_metrics: nil, days_back: nil, since: nil, until: nil)`
 
 `id` is the template hashid — the `:id` field from `search_templates`.
 
 Returns a Hash with every list field above, **plus** the full untruncated regexes the list omits, and
-always a `:metrics` Hash (there is no `include_metrics` here). `days_back`, `since` and `until` set its
-window exactly as they do on the list; an invalid one is a `422` here even though the list only checks
-it when metrics are requested.
+a `:metrics` Hash. Unlike the list, metrics are **on by default** here: pass `include_metrics: false` to
+omit them, which also skips the window validation. `days_back`, `since` and `until` set the window
+exactly as they do on the list, and an invalid one is a `422` unless metrics are off.
 
 | field | type |
 |---|---|
@@ -162,7 +162,7 @@ fetch a template directly.
 
 ## Metrics
 
-With `include_metrics: true` every row (and always the `get_template` result) carries `:metrics`,
+With `include_metrics: true` every row (and by default the `get_template` result) carries `:metrics`,
 computed by the same SQL as the dashboard, so tiered pricing, cached-token discounts and reasoning tokens
 are applied. `Coolhand.workload_service` returns the same object per workload, rolled up across its
 templates ([Reading Workloads](workload-search.md)).

@@ -50,10 +50,11 @@ module Coolhand
     end
 
     # Adds `user_prompt_pattern` / `system_prompt_pattern`, which the list omits, and unlike the
-    # list reaches deprecated and system templates by id with no opt-in flag. Always carries
-    # `metrics`, so there is no `include_metrics`.
-    def get_template(id, days_back: nil, since: nil, until: nil)
-      query = { days_back: days_back, **window_params(since, binding.local_variable_get(:until)) }.compact
+    # list reaches deprecated and system templates by id with no opt-in flag. Carries `metrics`
+    # unless `include_metrics: false`, which also skips the window validation.
+    def get_template(id, include_metrics: nil, days_back: nil, since: nil, until: nil)
+      query = { include_metrics: include_metrics, days_back: days_back,
+                **window_params(since, binding.local_variable_get(:until)) }.compact
       get_json(resource_url(id, BLANK_ID_MESSAGE, query), ERROR_NOUN)
     end
   end
