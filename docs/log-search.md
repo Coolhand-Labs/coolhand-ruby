@@ -76,7 +76,7 @@ came back full. Pass `include_total: true` when you need real totals.
 
 | field | type |
 |---|---|
-| `:url` | String: the request URL the log captured |
+| `:url` | String: the log's dashboard path (`/c/<client>/llm_request_logs/<id>`) |
 | `:cost` | Float or nil |
 | `:cost_breakdown` | Hash or nil: `:total_cost`, `:input_cost`, `:output_cost`, `:cached_input_cost`, `:cache_creation_input_cost`, `:reasoning_output_cost` |
 
