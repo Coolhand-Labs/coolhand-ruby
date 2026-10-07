@@ -110,6 +110,16 @@ RSpec.describe Coolhand::LogService do
           .with(query: { "since" => "2026-09-01T00:00:00Z", "until" => "2026-10-01T00:00:00Z" })
       end
 
+      it "keeps fractional seconds on Time and DateTime windows" do
+        service.search_logs(
+          since: Time.utc(2026, 9, 1, 0, 0, 0, 123_456),
+          until: DateTime.new(2026, 10, 1, 0, 0, Rational(1, 2))
+        )
+
+        expect(WebMock).to have_requested(:get, endpoint)
+          .with(query: { "since" => "2026-09-01T00:00:00.123456Z", "until" => "2026-10-01T00:00:00.500000Z" })
+      end
+
       it "raises ArgumentError before any request for an invalid window value" do
         expect { service.search_logs(until: 12) }.to raise_error(ArgumentError, /until/)
         expect(WebMock).not_to have_requested(:get, /llm_request_logs/)

@@ -30,7 +30,9 @@ detail[:cost_breakdown][:input_cost]
 
 ## `search_logs`
 
-All keywords are optional, and named exactly like the wire parameters.
+All keywords are optional, and named after the wire parameters (`sort` maps to `q[s]`). Two wire
+parameters are not exposed: the `q[source_api_in][]` array filter, so use the single-value `source_api`
+keyword, and the `per_page` alias, since this gem only sends `per`.
 
 | keyword | type | notes |
 |---|---|---|
@@ -78,7 +80,8 @@ came back full. Pass `include_total: true` when you need real totals.
 | `:cost_breakdown` | Hash or nil: `:total_cost`, `:input_cost`, `:output_cost`, `:cached_input_cost`, `:cache_creation_input_cost`, `:reasoning_output_cost` |
 
 `section` (`"full"`, `"beginning"`, `"end"`), `max_chars` and `search_query` bound or search the content;
-`include_thinking` adds `:thinking_response`. Only directly-collected logs are fetchable; internally
+`include_thinking` adds `:thinking_response`. Truncation and search are reported back as `:truncated`,
+`:total_chars`, `:search_query` and `:matches`. Only directly-collected logs are fetchable; internally
 generated records are a `404`.
 
 ## Errors

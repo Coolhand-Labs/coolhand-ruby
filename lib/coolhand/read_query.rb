@@ -41,8 +41,8 @@ module Coolhand
     def time_param(name, value)
       case value
       when nil, String then value
-      when DateTime then value.to_time.getutc.iso8601
-      when Time then value.getutc.iso8601
+      when DateTime then utc_iso8601(value.to_time)
+      when Time then utc_iso8601(value)
       when Date then value.iso8601
       else
         raise ArgumentError, "#{name} must be a Time, DateTime, Date or ISO8601 String, got #{value.class}"
@@ -50,6 +50,13 @@ module Coolhand
     end
 
     private
+
+    # Whole seconds keep the plain form; a fractional instant keeps its microseconds so a window bound
+    # is not silently truncated.
+    def utc_iso8601(time)
+      utc = time.getutc
+      utc.subsec.zero? ? utc.iso8601 : utc.iso8601(6)
+    end
 
     # Escapes to RFC 3986 unreserved, so an id carrying `/`, `?` or `#` cannot retarget the request.
     def escape_path_segment(value)
