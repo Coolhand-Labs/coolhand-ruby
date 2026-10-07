@@ -41,7 +41,7 @@ keyword, and the `per_page` alias, since this gem only sends `per`.
 | `model`, `source_api`, `source_api_result`, `source_application` | String | Exact match. `source_api_result` is `success`, `failed`, `operational` or `unmatched`. |
 | `project_path` | String | Exact match against `metadata.project_path`. |
 | `unmatched_only` | Boolean | Only logs with no template. |
-| `days_back` | Integer | Last N days. Unset means unrestricted. Ignored when `since` or `until` is given. |
+| `days_back` | Integer | Last N days. Unset means unrestricted. Ignored when `since` is given; with only `until`, the window is `days_back` long ending at `until`. |
 | `since`, `until` | Time, DateTime, Date or String | Bounds on `created_at`: `since` inclusive, `until` exclusive. See [Windows](workload-search.md#windows-since-and-until). |
 | `min_cost` | Numeric | Only logs whose `cost` (USD) is at least this. `0` is sent. |
 | `order` | String | `"cost_desc"` sorts by `cost`, highest first, replacing `sort`. Any other value is a `422` from the server. |
@@ -76,6 +76,7 @@ came back full. Pass `include_total: true` when you need real totals.
 
 | field | type |
 |---|---|
+| `:url` | String: the request URL the log captured |
 | `:cost` | Float or nil |
 | `:cost_breakdown` | Hash or nil: `:total_cost`, `:input_cost`, `:output_cost`, `:cached_input_cost`, `:cache_creation_input_cost`, `:reasoning_output_cost` |
 

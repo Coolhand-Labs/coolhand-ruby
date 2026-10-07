@@ -107,7 +107,7 @@ RSpec.describe Coolhand, if: LIVE do
         .to raise_error(Coolhand::HttpError) { |e| expect(e.status).to eq(422) }
     end
 
-    it "omits the total headers unless include_total is set, and reports them when it is" do
+    it "returns page info by default and a total_count of at least 1 with include_total" do
       expect(Coolhand.log_service.search_logs(per: 1).pagination).to have_attributes(current_page: 1, per_page: 1)
       expect(Coolhand.log_service.search_logs(per: 1, include_total: true).pagination.total_count).to be >= 1
     end

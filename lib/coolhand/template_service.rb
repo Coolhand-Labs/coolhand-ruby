@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "uri"
 require_relative "api_service"
 require_relative "pagination"
 require_relative "read_query"
