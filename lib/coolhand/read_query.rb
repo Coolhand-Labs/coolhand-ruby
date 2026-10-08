@@ -57,10 +57,5 @@ module Coolhand
       utc = time.getutc
       utc.subsec.zero? ? utc.iso8601 : utc.iso8601(6)
     end
-
-    # Escapes to RFC 3986 unreserved, so an id carrying `/`, `?` or `#` cannot retarget the request.
-    def escape_path_segment(value)
-      URI::DEFAULT_PARSER.escape(value, /[^A-Za-z0-9\-._~]/)
-    end
   end
 end
