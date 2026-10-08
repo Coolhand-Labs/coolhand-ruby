@@ -103,6 +103,21 @@ Search is a parameter on the list endpoint, not a route of its own, and the `Unm
 
 For the full filter reference, pagination, and error handling, see [Reading Templates →](docs/template-search.md).
 
+### Cost and performance metrics
+
+Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it.
+
+```ruby
+window = { since: Time.utc(2026, 9, 1), until: Time.utc(2026, 10, 1) }
+
+Coolhand.workload_service.search_workloads(include_metrics: true, **window).workloads
+  .map { |w| [w[:name], w[:metrics][:total_cost]] }
+
+Coolhand.log_service.search_logs(order: 'cost_desc', min_cost: 1.0, per: 10, **window).logs
+```
+
+See [Reading Workloads →](docs/workload-search.md) and [Reading Logs →](docs/log-search.md).
+
 ## Rails Integration
 
 ### Configuration
@@ -434,13 +449,15 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`) are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md)
+- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`) are the exception — they raise `Coolhand::HttpError`; see [Reading Templates →](docs/template-search.md)
 
 ## Documentation
 
 - **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
 - **[Reading Templates](docs/template-search.md)** — Search LLM request templates and fetch a single one, prompt patterns included, using the private API key
+- **[Reading Workloads](docs/workload-search.md)** — List workloads with optional cost and performance metrics over a rolling or explicit time window
+- **[Reading Logs](docs/log-search.md)** — Search logs with per-log cost, filter and sort by cost, and fetch one log with its cost breakdown
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 - **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception
