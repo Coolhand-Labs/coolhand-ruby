@@ -27,67 +27,83 @@ RSpec.describe Coolhand::BaseInterceptor do
       }
     end
 
-    it "includes source_api and model when both are present" do
-      api_service = instance_double(Coolhand::ApiService)
+    let(:api_service) { instance_double(Coolhand::ApiService) }
+    let(:sent) { [] }
+
+    before do
       allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
+      allow(api_service).to receive(:send_llm_request_log) { |arg| sent << arg }
+    end
 
-      expect(api_service).to receive(:send_llm_request_log).with(
-        hash_including(raw_request: hash_including(source_api: "vertex", model: "gemini-2.0-flash"))
+    def raw_request
+      sent.first.fetch(:raw_request)
+    end
+
+    it "sends the full request/response payload, normalized and sanitized" do
+      described_class.send_complete_request_log(**base_args, status_code: 201)
+
+      expect(sent.size).to eq(1)
+      expect(raw_request).to eq(
+        id: "req-1",
+        timestamp: "2026-01-04T20:16:56Z",
+        method: "post",
+        url: "https://api.example.com/v1/things",
+        headers: {},
+        request_body: { "input" => "foo" },
+        response_headers: {},
+        response_body: { "output" => "bar" },
+        status_code: 201,
+        duration_ms: 1000,
+        completed_at: "2026-01-04T20:16:57Z",
+        is_streaming: false
       )
+    end
 
+    it "includes source_api and model when both are present" do
       described_class.send_complete_request_log(**base_args, source_api: "vertex", model: "gemini-2.0-flash")
+
+      expect(raw_request).to include(source_api: "vertex", model: "gemini-2.0-flash")
     end
 
     it "omits source_api and model entirely when both are blank or absent" do
-      api_service = instance_double(Coolhand::ApiService)
-      allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
-
-      expect(api_service).to receive(:send_llm_request_log).with(
-        hash_including(raw_request: hash_excluding(:source_api, :model))
-      )
-
       described_class.send_complete_request_log(**base_args, source_api: "   ", model: nil)
+
+      expect(raw_request.keys).not_to include(:source_api, :model)
     end
 
     it "sanitizes sensitive query parameters in the url" do
-      api_service = instance_double(Coolhand::ApiService)
-      allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
-
-      expect(api_service).to receive(:send_llm_request_log).with(
-        hash_including(
-          raw_request: hash_including(url: "https://api.example.com/v1/things?key=%5BREDACTED%5D")
-        )
-      )
-
       described_class.send_complete_request_log(**base_args, url: "https://api.example.com/v1/things?key=secret")
+
+      expect(raw_request[:url]).to eq("https://api.example.com/v1/things?key=%5BREDACTED%5D")
     end
 
     it "sanitizes sensitive request and response headers, even for a caller that didn't pre-sanitize" do
-      api_service = instance_double(Coolhand::ApiService)
-      allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
-
-      expect(api_service).to receive(:send_llm_request_log).with(
-        hash_including(
-          raw_request: hash_including(
-            headers: { "Authorization" => "[REDACTED]" },
-            response_headers: { "X-Api-Key" => "[REDACTED]" }
-          )
-        )
-      )
-
       described_class.send_complete_request_log(
         **base_args,
-        request_headers: { "Authorization" => "some-token" },
+        request_headers: { "Authorization" => "some-token", "Content-Type" => "application/json" },
         response_headers: { "X-Api-Key" => "some-key" }
+      )
+
+      expect(raw_request[:headers]).to eq("Authorization" => "[REDACTED]", "Content-Type" => "application/json")
+      expect(raw_request[:response_headers]).to eq("X-Api-Key" => "[REDACTED]")
+    end
+
+    it "redacts Azure data_sources credentials in the request body that is sent" do
+      body = { "data_sources" => [{ "parameters" => { "key" => "top-secret", "index_name" => "docs" } }] }
+
+      described_class.send_complete_request_log(**base_args, request_body: body)
+
+      expect(raw_request[:request_body]).to eq(
+        "data_sources" => [{ "parameters" => { "key" => "[REDACTED]", "index_name" => "docs" } }]
       )
     end
 
-    it "rescues and swallows an error from the API service without raising" do
-      api_service = instance_double(Coolhand::ApiService)
-      allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
+    it "rescues an error from the API service, logs it, and does not raise" do
       allow(api_service).to receive(:send_llm_request_log).and_raise("network error")
+      allow(Coolhand).to receive(:log)
 
       expect { described_class.send_complete_request_log(**base_args) }.not_to raise_error
+      expect(Coolhand).to have_received(:log).with(/Error sending complete request log: network error/)
     end
   end
 
@@ -111,6 +127,82 @@ RSpec.describe Coolhand::BaseInterceptor do
       end
 
       expect(described_class.sanitize_headers(headers)).to eq({})
+    end
+
+    it "returns an empty hash for nil" do
+      expect(described_class.sanitize_headers(nil)).to eq({})
+    end
+
+    it "stringifies symbol keys and joins Array values on a plain Hash" do
+      sanitized = described_class.sanitize_headers(
+        Accept: %w[text/html application/json], "X-Api-Key": "k", "Content-Type" => "application/json"
+      )
+
+      expect(sanitized).to eq(
+        "Accept" => "text/html, application/json",
+        "X-Api-Key" => "[REDACTED]",
+        "Content-Type" => "application/json"
+      )
+    end
+
+    it "redacts a Net::HTTP request's Authorization header (the to_hash path real Net::HTTPHeader objects take)" do
+      req = Net::HTTP::Get.new(URI("https://api.example.com/v1"))
+      req["Authorization"] = "Bearer sk-live-secret"
+      req["Accept"] = "application/json"
+
+      sanitized = described_class.sanitize_headers(req)
+
+      expect(sanitized["authorization"]).to eq("Bearer [REDACTED]")
+      expect(sanitized["accept"]).to eq("application/json")
+    end
+
+    it "enumerates a header-like object that only responds to each_header, redacting sensitive values" do
+      headers = Class.new do
+        def each_header
+          yield "Authorization", "Bearer sk-live-secret"
+          yield "X-Api-Key", "k"
+          yield :"Set-Cookie", "_session=abc"
+          yield "Accept", %w[a b]
+        end
+      end.new
+
+      expect(described_class.sanitize_headers(headers)).to eq(
+        "Authorization" => "Bearer [REDACTED]",
+        "X-Api-Key" => "[REDACTED]",
+        "Set-Cookie" => "[REDACTED]",
+        "Accept" => "a, b"
+      )
+    end
+
+    it "enumerates a header-like object that only responds to each, redacting sensitive values" do
+      headers = Class.new do
+        def each
+          yield :Authorization, "raw-token-without-bearer"
+          yield "X-Goog-Api-Key", "k"
+          yield "Content-Type", "application/json"
+        end
+      end.new
+
+      expect(described_class.sanitize_headers(headers)).to eq(
+        "Authorization" => "[REDACTED]",
+        "X-Goog-Api-Key" => "[REDACTED]",
+        "Content-Type" => "application/json"
+      )
+    end
+
+    it "redacts an Array of header pairs (each branch)" do
+      sanitized = described_class.sanitize_headers([["Cookie", "_session=abc"], ["Accept", "*/*"]])
+
+      expect(sanitized).to eq("Cookie" => "[REDACTED]", "Accept" => "*/*")
+    end
+
+    it "falls back to a raw string for an object that supports no header enumeration" do
+      headers = Object.new
+      def headers.to_s
+        "opaque-headers"
+      end
+
+      expect(described_class.sanitize_headers(headers)).to eq("raw" => "opaque-headers")
     end
   end
 

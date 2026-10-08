@@ -168,6 +168,16 @@ RSpec.describe Coolhand::LoggerService do
             .to output(/captured_data: \(unavailable\)/).to_stdout
         end
 
+        it "logs a placeholder, without raising, when summarizing a Hash's request_body itself raises" do
+          unserializable = Object.new
+          def unserializable.to_json(*)
+            raise "boom"
+          end
+          bad_data = captured_data.merge(request_body: unserializable)
+
+          expect(verbose_service.send(:request_body_summary, bad_data)).to eq("captured_data: (unavailable)")
+        end
+
         it "falls back to defaults when captured_data is missing id/request_body keys" do
           stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
