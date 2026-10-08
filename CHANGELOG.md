@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-08
+
+### Added
+- **Read workloads and logs, with cost and performance metrics** ([#138](https://github.com/Coolhand-Labs/coolhand-ruby/pull/138)) — `Coolhand.workload_service.search_workloads` lists workloads (`GET /api/v2/workloads`) and `Coolhand.log_service` reads logs back out: `search_logs` (filters including `since`, `until`, `min_cost`, `order`, `project_path`, `source_application`, `include_total`, `sort`) and `get_log`, which returns `cost` and `cost_breakdown`. `search_templates` and `get_template` gain `include_metrics`, `days_back`, `since` and `until`. `since:`/`until:` accept a `Time`, `DateTime`, `Date` or ISO8601 String; anything else raises `ArgumentError` before a request is made. These need your **private** API key and raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses) rather than logging and returning `nil`. **Deploy note:** requires the matching Coolhand server release (Coolhand-Labs/coolhand#1753). See [Reading Workloads](docs/workload-search.md) and [Reading Logs](docs/log-search.md).
+- **Link feedback to an optimization** ([#133](https://github.com/Coolhand-Labs/coolhand-ruby/pull/133)) — `Coolhand.optimization_feedback_link_service` provides `link_feedback`, `bulk_link_feedback` (sent in batches of 100, results summed) and `unlink_feedback` for `/api/v2/optimizations/:id/feedback_links`. Private API key required; failures raise `Coolhand::Error` / `Coolhand::HttpError`. See [Linking Feedback](docs/feedback-links.md).
+
+### Changed
+- Repo guidance moved from `CLAUDE.md` to `AGENTS.md` ([#130](https://github.com/Coolhand-Labs/coolhand-ruby/pull/130)), and the agent-harness review handshake in `AGENTS.harness.md` was rewritten ([#134](https://github.com/Coolhand-Labs/coolhand-ruby/pull/134)). Neither ships in the gem, and `AGENTS.md` is excluded from the gem package in place of `CLAUDE.md`.
+- CI now uses `ruby/setup-ruby` 1.327.0 ([#135](https://github.com/Coolhand-Labs/coolhand-ruby/pull/135)).
+- Shared read-URL building moved into `Coolhand::ReadQuery`, and POST/DELETE helpers that raise on failure into `Coolhand::WriteRequests`; `TemplateService` now uses `ReadQuery`. Internal refactor with no behavior change to `search_templates`/`get_template` beyond the new options.
+
+### Fixed
+- Disabling the Net::HTTP interceptor logged a stale "Faraday monitoring disabled" message; it now says "Net::HTTP interceptor disabled".
+
+### Security
+- **Release-time hardening from a whole-package security review:**
+  - Requests forwarded by the OpenAI batch webhook handler now go through the same request-body redaction as live interception, so Azure OpenAI "On Your Data" datastore credentials in a batch request body are replaced with `[REDACTED]` before being sent to Coolhand.
+  - The OpenAI batch handler now matches requests to results with a one-pass index instead of a scan per result, so a large batch no longer takes quadratic time. When a `custom_id` is duplicated the first request still wins, as before.
+
 ## [0.7.0] - 2026-09-20
 
 ### Added
