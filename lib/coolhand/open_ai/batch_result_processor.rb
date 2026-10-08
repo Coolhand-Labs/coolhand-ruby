@@ -43,8 +43,13 @@ module Coolhand
         # Download and process results
         batch_response_items = download_batch_results(output_file_id)
 
+        # Indexed once so matching is linear in batch size, not quadratic (first item wins on a duplicate id).
+        request_items_by_id = batch_request_items.each_with_object({}) do |item, index|
+          index[item["custom_id"]] ||= item
+        end
+
         batch_response_items.each do |response_item|
-          request_item = batch_request_items.detect { |item| item["custom_id"] == response_item["custom_id"] }
+          request_item = request_items_by_id[response_item["custom_id"]]
 
           next unless request_item
 
@@ -100,7 +105,7 @@ module Coolhand
             method: method.to_s.downcase,
             url: BaseInterceptor.sanitize_url(url),
             headers: {},
-            request_body: request_body,
+            request_body: BaseInterceptor.sanitize_body(request_body),
             response_headers: {},
             response_body: response_body,
             status_code: status_code,

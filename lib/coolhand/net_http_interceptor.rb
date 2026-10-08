@@ -70,7 +70,7 @@ module Coolhand
         next if @patch_count.positive? || !@patched
 
         @patched = false
-        Coolhand.log "🔌 Faraday monitoring disabled ..."
+        Coolhand.log "🔌 Net::HTTP interceptor disabled"
       end
     end
 
