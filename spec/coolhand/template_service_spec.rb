@@ -142,6 +142,47 @@ RSpec.describe Coolhand::TemplateService do
       end
     end
 
+    context "with metrics and a window" do
+      before { stub_list(body: []) }
+
+      it "maps include_metrics, days_back, since and until onto their wire parameters" do
+        service.search_templates(include_metrics: true, days_back: 7, since: "2026-09-01", until: "2026-10-01")
+
+        expect(WebMock).to have_requested(:get, endpoint).with(query: {
+          "include_metrics" => "true", "days_back" => "7", "since" => "2026-09-01", "until" => "2026-10-01"
+        })
+      end
+
+      it "serialises Time and DateTime as UTC ISO8601" do
+        service.search_templates(since: Time.new(2026, 9, 1, 12, 0, 0, "+02:00"), until: DateTime.new(2026, 10, 1))
+
+        expect(WebMock).to have_requested(:get, endpoint)
+          .with(query: { "since" => "2026-09-01T10:00:00Z", "until" => "2026-10-01T00:00:00Z" })
+      end
+
+      it "encodes a + offset in a String as %2B" do
+        service.search_templates(since: "2026-09-01T12:00:00+02:00")
+
+        expect(WebMock).to have_requested(:get, /\?since=2026-09-01T12:00:00%2B02:00\z/)
+      end
+
+      it "raises ArgumentError before any request for an invalid window value" do
+        expect { service.search_templates(since: 5) }.to raise_error(ArgumentError, /since/)
+        expect(WebMock).not_to have_requested(:get, /llm_request_templates/)
+      end
+
+      it "returns the metrics counters as Symbol-keyed values, days_back nil when since sets the window" do
+        row = summary.merge(metrics: { days_back: nil, failure_count: 1, priced_request_count: 4,
+                                       long_context_request_count: 0, total_input_tokens: 10,
+                                       total_output_tokens: 5, total_cost: nil })
+        stub_list(body: [row])
+
+        metrics = service.search_templates(include_metrics: true, since: "2026-09-01").templates.first[:metrics]
+
+        expect(metrics).to include(days_back: nil, failure_count: 1, total_cost: nil, total_output_tokens: 5)
+      end
+    end
+
     context "with a successful response" do
       before { stub_list(body: [summary]) }
 
@@ -367,6 +408,35 @@ RSpec.describe Coolhand::TemplateService do
       expect(WebMock).to(have_requested(:get, %r{llm_request_templates/}).with do |req|
         expect(req.uri.path).to eq("/api/v2/llm_request_templates/..%2Fllm_request_logs")
       end)
+    end
+
+    it "sends the window params" do
+      stub_request(:get, %r{llm_request_templates/kp9}).to_return(status: 200, body: "{}")
+
+      service.get_template("kp9npvc8qq2q", days_back: 7, since: Time.utc(2026, 9, 1), until: "2026-10-01")
+
+      expect(WebMock).to have_requested(:get, "#{endpoint}/kp9npvc8qq2q").with(query: {
+        "days_back" => "7", "since" => "2026-09-01T00:00:00Z", "until" => "2026-10-01"
+      })
+    end
+
+    it "sends include_metrics=false rather than dropping an explicit false, and sends nothing when unset" do
+      stub_request(:get, %r{llm_request_templates/kp9}).to_return(status: 200, body: "{}")
+
+      service.get_template("kp9npvc8qq2q", include_metrics: false)
+      expect(WebMock).to have_requested(:get, "#{endpoint}/kp9npvc8qq2q").with(query: { "include_metrics" => "false" })
+
+      WebMock.reset_executed_requests!
+      service.get_template("kp9npvc8qq2q")
+      expect(WebMock).to(have_requested(:get, "#{endpoint}/kp9npvc8qq2q").with { |req| req.uri.query.nil? })
+    end
+
+    it "carries 422 for a bad window" do
+      stub_request(:get, %r{llm_request_templates/kp9})
+        .to_return(status: 422, body: JSON.generate({ errors: { since: ["is invalid"] } }))
+
+      expect { service.get_template("kp9npvc8qq2q", since: "bad") }
+        .to raise_error(an_object_having_attributes(status: 422))
     end
 
     [nil, 42, "", "   ", ".", ".."].each do |bad_id|

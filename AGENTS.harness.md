@@ -39,8 +39,8 @@ node <workspaceRoot>/coolhand/harness/harness.mjs my-issue --run <RUN_DIR> --rep
 2. `<workspaceRoot>/coolhand/harness/RESIST_RULES.md` — the refuse list.
 3. The API definition at `specPath`. It is your only source of truth **for the endpoint's
    contract** — paths, params, response fields, status codes.
-4. `coolhand-ruby/CLAUDE.md` — this repo's own rulebook. **It is authoritative.** Where it
-   disagrees with this harness file, CLAUDE.md wins — follow it and say so in your PR.
+4. `coolhand-ruby/AGENTS.md` — this repo's own rulebook. **It is authoritative.** Where it
+   disagrees with this harness file, AGENTS.md wins — follow it and say so in your PR.
 
 **Your issue links node's PR as the reference implementation. Use it for structure, not
 for facts.** Node went first so you do not have to rediscover how a REST method fits into
@@ -70,7 +70,7 @@ inside the current architecture, escalate and STOP.
 Require it inside the file that actually uses it, executed only when that provider's
 functionality is accessed. Clients may not use every provider and must not be forced to
 install gems they do not need — apps consuming this as a path gem break on missing optional
-dependencies. See `coolhand-ruby/CLAUDE.md`.
+dependencies. See `coolhand-ruby/AGENTS.md`.
 
 ## 3. Prove it against the real server
 
@@ -107,13 +107,44 @@ node <workspaceRoot>/coolhand/harness/harness.mjs wait --run <RUN_DIR> --channel
 
 Name the rule number (`R1`–`R5`). Do not guess. Do not stub. Do not work around it.
 
-## 5. Run your review skill
+## 5. Get your review — you cannot run it yourself
 
-**Mandatory, before you push.** Follow `<workspaceRoot>/coolhand/harness/RESIST_RULES.md`
-→ "Before you push: run your repo's review skill" (R8) — load
-`.claude/skills/loop-review/SKILL.md` off disk and run it for real against your diff. Do
-not approximate its steps manually; if you cannot spawn the reviewer subagent it calls
-for, escalate to node (R8) and STOP rather than substitute a self-review.
+**Mandatory, before you push. You do not run this section yourself.** You are three
+levels deep in this tree (server → node → you), and the platform does not let an agent at
+this depth spawn the reviewer subagent the review skill needs — see
+`<workspaceRoot>/coolhand/harness/RESIST_RULES.md` → R8's depth table. This is not something
+to confirm by trying; go straight to the request below.
+
+1. Commit locally first — build, prove it against the local server, run `bundle exec rake`,
+   all of section 3, all done before this step.
+2. Send an R8 escalation to node naming your repo path, branch, and `HEAD` sha:
+   ```
+   node <workspaceRoot>/coolhand/harness/harness.mjs send --run <RUN_DIR> --channel ruby \
+     --from ruby --to node --kind escalation \
+     --text "R8: ready for review. repo=<workspaceRoot>/coolhand-ruby branch=<branch> sha=<sha>"
+   ```
+3. `wait --after` the `messageId` your `send` in step 2 just printed. A timeout is silence,
+   not permission — call `wait` again, `--after` that same id, rather than pushing
+   (`RESIST_RULES.md` → "What escalate and stop means, mechanically"). If you loop back here
+   from step 5, use the fresh escalation's `messageId` instead.
+4. **The first reply is an `ack`, not the answer** — it means node has started, not that it
+   is done. `wait` again, `--after` that ack's `messageId`, for the `resolution` that
+   actually follows.
+5. **If what follows is a second `ack` instead of a `resolution`, node is asking you to do
+   something before it can start — most often that your checkout is not clean** (see
+   `RESIST_RULES.md` → R8 → "Serving a review for a child" step 2). Do what it asks, then
+   send a fresh R8 escalation with your current `HEAD` sha (it may have changed) and go back
+   to step 3. Do not just `wait` again — nothing arrives until you re-escalate.
+6. **The `resolution` that eventually arrives always carries the full Iteration Breakdown
+   table plus an explicit `CLEAN`/`capped` verdict** — the same `result` value node has
+   already recorded (it records before it replies) — from a review node ran against your
+   actual repo. Not just one or the other, not your own read of the diff, and not an ack.
+   This is what you post as your own PR comment below, unedited plus the "Reviewed by node
+   against `<sha>`" line.
+7. **Then move on to section 6 (Open your PR).** If node's review applied fixes,
+   it already committed them directly into your checkout while you waited — whatever is at
+   `HEAD` when you push there already includes them, and you do not need to reproduce or
+   look for them separately.
 
 ## 6. Open your PR — then STOP
 
@@ -123,8 +154,11 @@ for, escalate to node (R8) and STOP rather than substitute a self-review.
 2. Body must reference your issue with `Closes #N` so it auto-closes on merge, and must
    say: **depends on the server PR — deploy that first.**
 3. Record it: `node <workspaceRoot>/coolhand/harness/harness.mjs pr --run <RUN_DIR> --repo ruby --url <url>`
-4. Post your review skill's Iteration Breakdown table (section 5) as a comment on this PR
-   — see `RESIST_RULES.md` → "After the loop exits."
+4. Post node's Iteration Breakdown table (section 5) as a comment on this PR — see
+   `RESIST_RULES.md` → "After the loop exits" — and add one line the table itself does not
+   carry: `Reviewed by node against <sha>`, since you did not run it yourself. **Do not call
+   `harness.mjs loop-review` here — node already recorded it**, against the sha that
+   resulted from its own fix commits, not the one you originally escalated with.
 5. **Stop.** You launch no one. The tree ends with you on this branch.
 
 ## 7. Done means
@@ -133,7 +167,8 @@ for, escalate to node (R8) and STOP rather than substitute a self-review.
 - [ ] `bundle exec rake` passes (RSpec + RuboCop)
 - [ ] At least one spec hit the real local server, not a mock
 - [ ] PR opened, recorded, references its issue, states its dependency on the server PR
-- [ ] Your review skill ran for real (not approximated) and its Iteration Breakdown table
-      is posted as a comment on your PR
+- [ ] Node ran your review for real (not approximated by you) and its Iteration Breakdown
+      table is posted as a comment on your PR, naming node and the reviewed sha, and
+      recorded with `harness.mjs loop-review`
 - [ ] Every field and status code came from the definition, not from node's code
 - [ ] You launched no child agents

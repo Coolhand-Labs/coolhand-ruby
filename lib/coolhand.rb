@@ -17,6 +17,8 @@ require_relative "coolhand/logger_service"
 require_relative "coolhand/feedback_service"
 require_relative "coolhand/template_service"
 require_relative "coolhand/optimization_feedback_link_service"
+require_relative "coolhand/workload_service"
+require_relative "coolhand/log_service"
 require_relative "coolhand/webhook_interceptor"
 
 # The main module for the Coolhand gem.
@@ -112,6 +114,18 @@ module Coolhand
     # Coolhand. Needs the private API key - the public key is write-only on this API.
     def template_service
       TemplateService.new
+    end
+
+    # Creates a new WorkloadService instance, for listing workloads (with optional cost and
+    # performance metrics). Needs the private API key.
+    def workload_service
+      WorkloadService.new
+    end
+
+    # Creates a new LogService instance, for reading logs back out of Coolhand. Distinct from
+    # {logger_service}, which writes them. Needs the private API key.
+    def log_service
+      LogService.new
     end
 
     # Creates a new OptimizationFeedbackLinkService instance, for linking feedback to an
