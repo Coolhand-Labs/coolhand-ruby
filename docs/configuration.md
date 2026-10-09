@@ -39,6 +39,25 @@ end
 
 Because it forces capture unconditionally and prints full request/response bodies to the console, only enable `debug_mode` in development — never in production or in an environment handling real user data.
 
+## Asynchronous Logging
+
+By default Coolhand ships each captured request to its API from background worker threads (one for per-request logs, a separate one for batch jobs), so a slow or unreachable Coolhand backend never adds latency to your own LLM calls. The request-path work is limited to capturing and sanitizing the payload.
+
+```ruby
+Coolhand.configure do |config|
+  config.async_logging = false # default: true — send inline, in the intercepted call's request path
+end
+```
+
+**How it behaves:**
+- The queue is bounded at 1,000 pending logs. If Coolhand is down long enough to fill it, the *oldest* pending log is dropped (with a log line) rather than blocking your app or growing memory.
+- The bound is on the *number* of pending logs, not their size: each holds its captured response body in memory until sent, so a long Coolhand outage under heavy traffic with large responses can hold a lot of memory. Batch jobs use their own lane, so a long-running batch never delays or evicts per-request logs.
+- A forked process (Puma/Unicorn workers, Spring) starts its own worker automatically.
+- Pending logs are flushed at process exit (up to 5 seconds in total, so a batch job still running at exit may be only partly logged). In a short-lived script, or to wait explicitly, call `Coolhand.flush(timeout: 5)` — it returns `true` once everything has been sent.
+- OpenAI and Vertex batch results are processed as a single background job per batch.
+- `config.debug_mode` always runs inline so printed payloads appear in order.
+- Logs queued but not yet sent are lost if the process is killed hard (`kill -9`, OOM). Set `async_logging = false` if you need delivery before each call returns.
+
 ## Request Body Capture Limits
 
 To avoid holding large uploads (batch JSONL files, fine-tune corpora, audio for transcription) in memory and shipping them to Coolhand in full, `config.max_captured_body_bytes` caps how much of a request body gets captured:

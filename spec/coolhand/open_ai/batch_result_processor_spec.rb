@@ -111,6 +111,57 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
         described_class.new(event_data: { "id" => "batch-3" }).call
       end
 
+      it "pairs each response with its request via a custom_id index, keeping the first of duplicate ids" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        parsed_input = [
+          { "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/first", "body" => { "n" => 1 } },
+          { "custom_id" => "c2", "method" => "POST", "url" => "https://api.example/second", "body" => { "n" => 2 } },
+          { "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/dupe", "body" => { "n" => 3 } }
+        ]
+        parsed_output = %w[c2 c1].map do |id|
+          { "custom_id" => id, "response" => { "request_id" => "req-#{id}", "body" => {}, "status_code" => 200 } }
+        end
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(parsed_input)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-1").and_return(parsed_output)
+
+        expect(api_service).to receive(:send_llm_request_log)
+          .with(hash_including(raw_request: hash_including(id: "req-c2", url: "https://api.example/second")))
+          .ordered
+        expect(api_service).to receive(:send_llm_request_log)
+          .with(hash_including(raw_request: hash_including(id: "req-c1", url: "https://api.example/first")))
+          .ordered
+
+        described_class.new(event_data: { "id" => "batch-3" }).call
+      end
+
+      it "processes the completed batch on the background log queue when async_logging is on" do
+        Coolhand.configuration.async_logging = true
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(input_items_jsonl)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-1").and_return(output_items_jsonl)
+        sending_thread = nil
+        allow(api_service).to receive(:send_llm_request_log) { sending_thread = Thread.current }
+
+        described_class.new(event_data: { "id" => "batch-3" }).call
+        Coolhand.flush(timeout: 2)
+
+        expect(sending_thread).not_to be_nil
+        expect(sending_thread).not_to eq(Thread.current)
+      end
+
+      it "logs an error raised while processing in the background instead of letting it escape" do
+        Coolhand.configuration.async_logging = true
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        processor = described_class.new(event_data: { "id" => "batch-3" })
+        allow(processor).to receive(:download_batch_results).and_raise(StandardError, "kaboom")
+
+        expect { processor.call }.not_to raise_error
+        Coolhand.flush(timeout: 2)
+
+        expect(logger).to have_received(:error)
+          .with(a_string_including("Failed to process OpenAI batch").and(a_string_including("kaboom")))
+      end
+
       it "skips a response item with no matching request custom_id and sends nothing for it" do
         allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
         allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(input_items_jsonl)

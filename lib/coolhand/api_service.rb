@@ -80,9 +80,10 @@ module Coolhand
       uri = URI.parse(@api_endpoint)
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = (uri.scheme == "https")
-      # Bound worst-case latency: this call happens inline in the intercepted
-      # request's path, so a slow/unreachable Coolhand backend must not hang
-      # the host app's real LLM call for Ruby's ~60s Net::HTTP defaults.
+      # Bound worst-case latency: with async_logging off this call happens inline in
+      # the intercepted request's path (otherwise it ties up the background log
+      # worker), so a slow/unreachable Coolhand backend must not hang for Ruby's
+      # ~60s Net::HTTP defaults.
       http.open_timeout = 5
       http.read_timeout = 5
 

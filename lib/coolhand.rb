@@ -10,6 +10,7 @@ require_relative "coolhand/errors"
 require_relative "coolhand/version"
 require_relative "coolhand/configuration"
 require_relative "coolhand/collector"
+require_relative "coolhand/log_queue"
 require_relative "coolhand/base_interceptor"
 require_relative "coolhand/net_http_interceptor"
 require_relative "coolhand/api_service"
@@ -87,6 +88,13 @@ module Coolhand
       yield
     ensure
       Thread.current[:coolhand_capture_override] = previous
+    end
+
+    # Blocks until log requests queued by async logging have been sent, or the timeout (in
+    # seconds) elapses. Returns true if everything was sent. Pending logs are also flushed
+    # automatically at process exit.
+    def flush(timeout: LogQueue::DEFAULT_FLUSH_TIMEOUT)
+      LogQueue.flush(timeout)
     end
 
     # A simple logger that respects the 'silent' configuration option.

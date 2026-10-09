@@ -37,6 +37,30 @@ bundle exec ruby examples/anthropic_example.rb
 bundle exec ruby examples/elevenlabs_example.rb
 ```
 
+## Benchmark: `benchmark_async_logging.rb`
+
+Unlike the scripts above, this one is a pass/fail performance check for async logging
+(`config.async_logging`): it measures how much latency Coolhand adds to an intercepted call and
+whether a slow Coolhand backend leaks into it. It exits non-zero if an assertion fails, so
+`/prep-release` picks it up when it runs every script in this directory. With no keys set it runs
+only the local scenario and exits 0; the live scenario is skipped.
+
+```bash
+bundle exec ruby examples/benchmark_async_logging.rb          # N=8 calls per mode
+N=20 bundle exec ruby examples/benchmark_async_logging.rb     # tighter numbers
+```
+
+| Scenario | Needs | What it checks |
+|---|---|---|
+| Local | nothing (fake LLM + fake Coolhand that takes 2s to reply) | sync mode pays the full 2s per call; async adds <= 250ms (median) vs. capture off; the queue drains; every log is delivered |
+| Live | `COOLHAND_API_KEY` plus `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` | per provider: async adds <= 200ms vs. capture off (fastest call, since provider latency is too noisy to compare medians); all logs delivered with no failed POSTs |
+
+Each mode (`capture off`, `async_logging = false`, `async_logging = true`) is run `N` times,
+interleaved per iteration so provider drift hits all three equally. The live scenario sends
+`2N + 1` small real logs per provider to your Coolhand account and costs a negligible amount of
+provider usage. A last check confirms the interceptor adds no generically named helper methods to
+`Net::HTTP`.
+
 ## Why no Vertex example
 
 Vertex AI interception (`aiplatform.googleapis.com`) is fully passive —
