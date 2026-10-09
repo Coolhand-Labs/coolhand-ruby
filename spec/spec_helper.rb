@@ -18,6 +18,12 @@ RSpec.configure do |config|
   # Reset configuration before each test to avoid state pollution
   config.before(:each) do
     Coolhand.reset_configuration!
+    # Most specs stub ApiService and assert on the call inline; log_queue_spec opts back in.
+    Coolhand.configuration.async_logging = false
     Coolhand::NetHttpInterceptor.reset!
+  end
+
+  config.after(:each) do
+    Coolhand::LogQueue.reset!
   end
 end

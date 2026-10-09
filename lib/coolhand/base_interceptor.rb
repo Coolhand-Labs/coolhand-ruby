@@ -169,10 +169,10 @@ module Coolhand
 
       request_data = { raw_request: raw_request }
 
-      api_service = Coolhand::ApiService.new
-      api_service.send_llm_request_log(request_data)
-
-      Coolhand.log "📤 Sent complete request/response log for #{request_id} (duration: #{duration_ms}ms)"
+      LogQueue.submit do
+        Coolhand::ApiService.new.send_llm_request_log(request_data)
+        Coolhand.log "📤 Sent complete request/response log for #{request_id} (duration: #{duration_ms}ms)"
+      end
     rescue StandardError => e
       Coolhand.log "❌ Error sending complete request log: #{e.message}"
     end

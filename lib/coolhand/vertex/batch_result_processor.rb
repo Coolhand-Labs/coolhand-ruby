@@ -31,7 +31,7 @@ module Coolhand
         when "JOB_STATE_PENDING", "JOB_STATE_RUNNING", "JOB_STATE_QUEUED"
           Rails.logger.info("[Interceptor] Vertex batch #{batch_info} still processing")
         when "JOB_STATE_SUCCEEDED"
-          process_completed_batch(batch_results)
+          LogQueue.submit(lane: :batch) { process_completed_batch_logging_errors(batch_results) }
         when "JOB_STATE_FAILED"
           handle_failed_batch
         else
@@ -42,6 +42,14 @@ module Coolhand
       end
 
       private
+
+      # Runs on the batch lane's worker thread, where an escaping error would only reach
+      # Coolhand.log (silenceable) rather than the Rails log `call` reports to.
+      def process_completed_batch_logging_errors(batch_results)
+        process_completed_batch(batch_results)
+      rescue StandardError => e
+        Rails.logger.error("[Interceptor] Failed to process Vertex batch results for #{batch_info}: #{e.message}")
+      end
 
       def process_completed_batch(batch_results)
         name = batch_info["name"].to_s.sub(%r{\A/+}, "")

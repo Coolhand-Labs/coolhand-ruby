@@ -52,6 +52,23 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw).not_to have_key(:model)
   end
 
+  describe "Net::HTTP method pollution" do
+    it "adds nothing but #request to Net::HTTP" do
+      expect(described_class.public_instance_methods(false)).to eq([:request])
+      expect(described_class.private_instance_methods(false)).to be_empty
+      expect(Net::HTTP.ancestors).not_to include(Coolhand::BaseInterceptor)
+    end
+
+    it "keeps the generically named helpers off Net::HTTP instances" do
+      described_class.patch!
+      http = Net::HTTP.new("api.test.com", 443)
+
+      %i[parse_json sanitize_url sanitize_headers intercept? send_complete_request_log].each do |name|
+        expect(http.respond_to?(name, true)).to be(false), "expected Net::HTTP not to respond to #{name}"
+      end
+    end
+  end
+
   describe "re-entry guard" do
     before(:each) do
       stub_request(:get, "https://api.test.com/hello")
@@ -465,7 +482,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     allow(stream).to receive(:read).and_call_original
     req.body_stream = stream
 
-    captured = http.send(:capture_request_body, req, nil)
+    captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
 
     expect(stream).not_to have_received(:read)
     expect(req.body_stream).to equal(stream)
@@ -827,7 +844,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
   end
 
   describe "issue #85 — host-boundary matching" do
-    let(:interceptor) { Class.new { include Coolhand::NetHttpInterceptor }.new }
+    let(:interceptor) { Coolhand::NetHttpInterceptor::Helpers }
 
     before do
       Coolhand.configure do |c|
@@ -838,31 +855,31 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
 
     it "does not intercept a redirect URL that merely mentions a real host in its query string" do
-      expect(interceptor.send(:intercept?, "https://evil.com/redirect?to=api.openai.com")).to be false
+      expect(interceptor.intercept?("https://evil.com/redirect?to=api.openai.com")).to be false
     end
 
     it "does not intercept a host that merely has a real host as a prefix (suffix confusion)" do
-      expect(interceptor.send(:intercept?, "https://api.openai.com.attacker.net/v1/chat/completions")).to be false
+      expect(interceptor.intercept?("https://api.openai.com.attacker.net/v1/chat/completions")).to be false
     end
 
     it "does not intercept an unrelated host just because a bare Gemini path token appears in its path" do
-      expect(interceptor.send(:intercept?, "https://attacker.tld/:generateContent")).to be false
+      expect(interceptor.intercept?("https://attacker.tld/:generateContent")).to be false
     end
 
     it "intercepts the real host regardless of case" do
-      expect(interceptor.send(:intercept?, "https://API.OPENAI.COM/v1/chat/completions")).to be true
+      expect(interceptor.intercept?("https://API.OPENAI.COM/v1/chat/completions")).to be true
     end
 
     it "fails closed (does not intercept, does not raise) for an unparseable URL" do
-      expect(interceptor.send(:intercept?, "https://api.openai.com:notaport/v1/chat/completions")).to be false
+      expect(interceptor.intercept?("https://api.openai.com:notaport/v1/chat/completions")).to be false
     end
 
     it "matches a wildcard host entry against exactly one label" do
-      expect(interceptor.send(:host_matches?, "bedrock-runtime.us-east-1.amazonaws.com",
+      expect(interceptor.host_matches?("bedrock-runtime.us-east-1.amazonaws.com",
         "bedrock-runtime.*.amazonaws.com")).to be true
-      expect(interceptor.send(:host_matches?, "bedrock-runtime.amazonaws.com",
+      expect(interceptor.host_matches?("bedrock-runtime.amazonaws.com",
         "bedrock-runtime.*.amazonaws.com")).to be false
-      expect(interceptor.send(:host_matches?, "bedrock-runtime.us-east-1.evil.com",
+      expect(interceptor.host_matches?("bedrock-runtime.us-east-1.evil.com",
         "bedrock-runtime.*.amazonaws.com")).to be false
     end
 
@@ -870,21 +887,24 @@ RSpec.describe Coolhand::NetHttpInterceptor do
        "has been overridden to exclude all Google hosts" do
       Coolhand.configuration.intercept_addresses = ["only.mycompany.internal"]
 
-      expect(interceptor.send(:intercept?,
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")).to be false
+      expect(interceptor.intercept?(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+      )).to be false
     end
 
     it "falls back to intercept_path_patterns for a googleapis.com host not explicitly listed, as long as " \
        "intercept_addresses still includes a Google host" do
-      expect(interceptor.send(:intercept?,
-        "https://some-other-service.googleapis.com/v1/models/gemini-pro:generateContent")).to be true
+      expect(interceptor.intercept?(
+        "https://some-other-service.googleapis.com/v1/models/gemini-pro:generateContent"
+      )).to be true
     end
 
     it "does not treat a lookalike host (e.g. evilgoogleapis.com) as a configured Google host" do
       Coolhand.configuration.intercept_addresses = ["evilgoogleapis.com"]
 
-      expect(interceptor.send(:intercept?,
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")).to be false
+      expect(interceptor.intercept?(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+      )).to be false
     end
 
     it "exposes DEFAULT_INTERCEPT_PATH_PATTERNS as a frozen constant" do
@@ -895,7 +915,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
   end
 
   describe "issue #114 — Azure host+path-anchored intercept addresses" do
-    let(:interceptor) { Class.new { include Coolhand::NetHttpInterceptor }.new }
+    let(:interceptor) { Coolhand::NetHttpInterceptor::Helpers }
 
     before do
       Coolhand.configure do |c|
@@ -906,58 +926,59 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
 
     it "intercepts a path-anchored Azure AI Services host on its /openai/ path" do
-      expect(interceptor.send(:intercept?,
-        "https://myresource.cognitiveservices.azure.com/openai/deployments/x/chat/completions")).to be true
+      expect(interceptor.intercept?(
+        "https://myresource.cognitiveservices.azure.com/openai/deployments/x/chat/completions"
+      )).to be true
     end
 
     it "does not intercept the same Azure AI Services host on an unrelated (Speech/Vision/Language) path" do
-      expect(interceptor.send(:intercept?,
-        "https://myresource.cognitiveservices.azure.com/language/analyze-text")).to be false
+      expect(interceptor.intercept?(
+        "https://myresource.cognitiveservices.azure.com/language/analyze-text"
+      )).to be false
     end
 
     it "intercepts a path-anchored Azure AI Foundry host on its /models/ path" do
-      expect(interceptor.send(:intercept?,
-        "https://myresource.services.ai.azure.com/models/chat/completions")).to be true
+      expect(interceptor.intercept?(
+        "https://myresource.services.ai.azure.com/models/chat/completions"
+      )).to be true
     end
 
     it "intercepts the unanchored inference.ml.azure.com host regardless of path" do
-      expect(interceptor.send(:intercept?,
-        "https://myendpoint.inference.ml.azure.com/score")).to be true
-      expect(interceptor.send(:intercept?,
-        "https://myendpoint.inference.ml.azure.com/anything-else")).to be true
+      expect(interceptor.intercept?("https://myendpoint.inference.ml.azure.com/score")).to be true
+      expect(interceptor.intercept?("https://myendpoint.inference.ml.azure.com/anything-else")).to be true
     end
 
     it "matches address_matches? for a bare host pattern the same way host_matches? would" do
-      expect(interceptor.send(:address_matches?, "openai.azure.com", "/openai/deployments/x",
+      expect(interceptor.address_matches?("openai.azure.com", "/openai/deployments/x",
         "openai.azure.com")).to be true
-      expect(interceptor.send(:address_matches?, "evil.com", "/openai/deployments/x",
+      expect(interceptor.address_matches?("evil.com", "/openai/deployments/x",
         "openai.azure.com")).to be false
     end
 
     it "requires both host and path prefix to match for a path-anchored pattern" do
-      expect(interceptor.send(:address_matches?, "myresource.cognitiveservices.azure.com", "/openai/chat",
+      expect(interceptor.address_matches?("myresource.cognitiveservices.azure.com", "/openai/chat",
         "cognitiveservices.azure.com/openai/")).to be true
-      expect(interceptor.send(:address_matches?, "myresource.cognitiveservices.azure.com", "/vision/analyze",
+      expect(interceptor.address_matches?("myresource.cognitiveservices.azure.com", "/vision/analyze",
         "cognitiveservices.azure.com/openai/")).to be false
-      expect(interceptor.send(:address_matches?, "evil.com", "/openai/chat",
+      expect(interceptor.address_matches?("evil.com", "/openai/chat",
         "cognitiveservices.azure.com/openai/")).to be false
     end
 
     it "matches on a path-segment boundary even when the pattern has no trailing slash" do
       # A custom entry without a trailing slash must not prefix-collide with an unrelated
       # same-prefix segment (e.g. "/openai" vs "/openaiz").
-      expect(interceptor.send(:address_matches?, "host.com", "/openai", "host.com/openai")).to be true
-      expect(interceptor.send(:address_matches?, "host.com", "/openai/chat", "host.com/openai")).to be true
-      expect(interceptor.send(:address_matches?, "host.com", "/openaiz/chat", "host.com/openai")).to be false
+      expect(interceptor.address_matches?("host.com", "/openai", "host.com/openai")).to be true
+      expect(interceptor.address_matches?("host.com", "/openai/chat", "host.com/openai")).to be true
+      expect(interceptor.address_matches?("host.com", "/openaiz/chat", "host.com/openai")).to be false
     end
 
     it "matches every path under the host when the pattern's path segment is empty" do
-      expect(interceptor.send(:address_matches?, "host.com", "/anything", "host.com/")).to be true
-      expect(interceptor.send(:address_matches?, "host.com", "/", "host.com/")).to be true
+      expect(interceptor.address_matches?("host.com", "/anything", "host.com/")).to be true
+      expect(interceptor.address_matches?("host.com", "/", "host.com/")).to be true
     end
 
     it "treats the path anchor as case-sensitive" do
-      expect(interceptor.send(:address_matches?, "host.com", "/OpenAI/chat", "host.com/openai/")).to be false
+      expect(interceptor.address_matches?("host.com", "/OpenAI/chat", "host.com/openai/")).to be false
     end
   end
 
