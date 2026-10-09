@@ -7,22 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-10-08
+## [0.8.0] - 2026-10-09
 
 ### Added
 - **Read workloads and logs, with cost and performance metrics** ([#138](https://github.com/Coolhand-Labs/coolhand-ruby/pull/138)) — `Coolhand.workload_service.search_workloads` lists workloads (`GET /api/v2/workloads`) and `Coolhand.log_service` reads logs back out: `search_logs` (filters including `since`, `until`, `min_cost`, `order`, `project_path`, `source_application`, `include_total`, `sort`) and `get_log`, which returns `cost` and `cost_breakdown`. `search_templates` and `get_template` gain `include_metrics`, `days_back`, `since` and `until`. `since:`/`until:` accept a `Time`, `DateTime`, `Date` or ISO8601 String; anything else raises `ArgumentError` before a request is made. These need your **private** API key and raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses) rather than logging and returning `nil`. **Deploy note:** requires the matching Coolhand server release (Coolhand-Labs/coolhand#1753). See [Reading Workloads](docs/workload-search.md) and [Reading Logs](docs/log-search.md).
 - **Link feedback to an optimization** ([#133](https://github.com/Coolhand-Labs/coolhand-ruby/pull/133)) — `Coolhand.optimization_feedback_link_service` provides `link_feedback`, `bulk_link_feedback` (sent in batches of 100, results summed) and `unlink_feedback` for `/api/v2/optimizations/:id/feedback_links`. Private API key required; failures raise `Coolhand::Error` / `Coolhand::HttpError`. See [Linking Feedback](docs/feedback-links.md).
+- **Logs are sent from a background queue by default** ([#148](https://github.com/Coolhand-Labs/coolhand-ruby/pull/148)) — the Coolhand POST no longer runs inline in the intercepted LLM call, so a slow or unreachable Coolhand backend can no longer add up to about 10s to each call. `Coolhand::LogQueue` holds up to 1,000 jobs per lane and drops the oldest when full, restarts itself in forked processes, and flushes at exit (waiting up to 5s). OpenAI and Vertex batch results are processed as one background job per batch, on their own lane so a long batch cannot delay or evict per-request logs. New `config.async_logging` (default `true`) and `Coolhand.flush(timeout: 5)`; `examples/benchmark_async_logging.rb` is a pass/fail benchmark. See [Asynchronous Logging](docs/configuration.md). **Migration note:** anything that relied on the log POST finishing before the intercepted call returned (tests asserting on a stubbed `ApiService` inline, scripts that end with `exit!`, a process killed by `kill -9` or the OOM killer, which loses queued logs) should set `config.async_logging = false` or call `Coolhand.flush`. `debug_mode` always runs inline.
 
 ### Changed
 - Repo guidance moved from `CLAUDE.md` to `AGENTS.md` ([#130](https://github.com/Coolhand-Labs/coolhand-ruby/pull/130)), and the agent-harness review handshake in `AGENTS.harness.md` was rewritten ([#134](https://github.com/Coolhand-Labs/coolhand-ruby/pull/134)). Neither ships in the gem, and `AGENTS.md` is excluded from the gem package in place of `CLAUDE.md`.
 - CI now uses `ruby/setup-ruby` 1.327.0 ([#135](https://github.com/Coolhand-Labs/coolhand-ruby/pull/135)).
 - Shared read-URL building moved into `Coolhand::ReadQuery`, and POST/DELETE helpers that raise on failure into `Coolhand::WriteRequests`; `TemplateService` now uses `ReadQuery`. Internal refactor with no behavior change to `search_templates`/`get_template` beyond the new options.
+- `Coolhand::NetHttpInterceptor` no longer includes `BaseInterceptor` ([#148](https://github.com/Coolhand-Labs/coolhand-ruby/pull/148)); its helpers moved to `Coolhand::NetHttpInterceptor::Helpers`, so `Net::HTTP` gains only `#request` instead of about 15 generically named private methods (`intercept?`, `parse_json`, `sanitize_url`, ...). **Migration note:** internal API, but if you called those helpers on a `Net::HTTP` instance, use `Coolhand::NetHttpInterceptor::Helpers` or `Coolhand::BaseInterceptor`.
 
 ### Fixed
-- Disabling the Net::HTTP interceptor logged a stale "Faraday monitoring disabled" message; it now says "Net::HTTP interceptor disabled".
+- Disabling the Net::HTTP interceptor logged a stale "Faraday monitoring disabled" message ([#148](https://github.com/Coolhand-Labs/coolhand-ruby/pull/148)); it now says "Net::HTTP interceptor unpatched (capture stopped)".
 
 ### Security
-- **Release-time hardening from a whole-package security review:**
+- **Release-time hardening from a whole-package security review** ([#148](https://github.com/Coolhand-Labs/coolhand-ruby/pull/148), plus fixes made on the release branch):
   - Requests forwarded by the OpenAI batch webhook handler now go through the same request-body redaction as live interception, so Azure OpenAI "On Your Data" datastore credentials in a batch request body are replaced with `[REDACTED]` before being sent to Coolhand.
   - The OpenAI batch handler now matches requests to results with a one-pass index instead of a scan per result, so a large batch no longer takes quadratic time. When a `custom_id` is duplicated the first request still wins, as before.
 
@@ -41,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **Azure OpenAI "On Your Data" datastore credentials are now redacted from captured request bodies** ([#115](https://github.com/Coolhand-Labs/coolhand-ruby/pull/115)) — a request's `data_sources`/`dataSources` entries can carry live credentials (Azure AI Search API keys, Cosmos/Mongo connection strings, Elasticsearch encoded keys) that header and URL sanitization never looked at. `BaseInterceptor.sanitize_body` now replaces any value under those entries whose key name contains `key`, `token`, `secret`, `password`, `credential`, `connectionstring` or `signature` (separators and case ignored) with `[REDACTED]` before the log is forwarded. Message content and tool definitions outside `data_sources` are untouched.
-- **Release-time hardening from a whole-package security review:**
+- **Release-time hardening from a whole-package security review** ([#148](https://github.com/Coolhand-Labs/coolhand-ruby/pull/148), plus fixes made on the release branch):
   - `Coolhand.log` no longer raises when stdout is unwritable. Previously a failing `puts` inside the interceptor's `ensure` block could replace the host application's own LLM response with an `IOError`.
   - A bad `intercept_addresses`/`exclude_api_patterns` value (e.g. a String or Symbol instead of an array of Strings) now degrades to "don't capture" instead of raising into every intercepted request.
   - `BaseInterceptor.sanitize_url` now fails closed on an unparseable URL, dropping userinfo, query and fragment rather than returning the raw URL with credentials intact.
