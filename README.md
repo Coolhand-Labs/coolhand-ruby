@@ -211,6 +211,7 @@ end
 | `intercept_path_patterns` | Array | `[":generateContent", ":streamGenerateContent"]` | Path patterns to additionally monitor on Google API hosts — see [Configuration](docs/configuration.md) |
 | `exclude_api_patterns` | Array | `["/batchPredictionJobs/"]` | Deny-list checked after `intercept_addresses`; matching paths are skipped. Unlike `intercept_addresses`, `exclude_api_patterns = []` genuinely disables exclusion. See [Configuration](docs/configuration.md) |
 | `max_captured_body_bytes` | Integer | `1_000_000` | Maximum size of a captured JSON request body — oversized bodies are replaced with a placeholder. Non-JSON bodies (e.g. file/audio uploads) are always skipped regardless of size — see [Advanced Configuration](docs/configuration.md) |
+| `async_logging` | Boolean | `true` | Send logs to Coolhand from a background thread so a slow Coolhand API never delays your LLM calls. Set to `false` to send inline — see [Advanced Configuration](docs/configuration.md#asynchronous-logging) |
 
 ## Usage Examples
 

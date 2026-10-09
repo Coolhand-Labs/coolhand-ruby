@@ -29,7 +29,7 @@ module Coolhand
     DEFAULT_MAX_CAPTURED_BODY_BYTES = 1_000_000
 
     attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled,
-      :max_captured_body_bytes, :webhook_replay_tolerance_seconds, :webhook_id_store
+      :max_captured_body_bytes, :webhook_replay_tolerance_seconds, :webhook_id_store, :async_logging
     attr_reader :intercept_addresses, :intercept_path_patterns, :base_url
 
     def initialize
@@ -44,6 +44,7 @@ module Coolhand
       @capture = true
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
       @enabled = true
+      @async_logging = true
       @max_captured_body_bytes = DEFAULT_MAX_CAPTURED_BODY_BYTES
       @webhook_replay_tolerance_seconds = 300
       @webhook_id_store = Coolhand::OpenAi::WebhookIdStore.new

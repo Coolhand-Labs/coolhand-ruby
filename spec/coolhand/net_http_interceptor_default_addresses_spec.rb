@@ -3,7 +3,7 @@
 require "spec_helper"
 
 RSpec.describe Coolhand::NetHttpInterceptor do
-  let(:interceptor) { Class.new { include Coolhand::NetHttpInterceptor }.new }
+  let(:interceptor) { Coolhand::NetHttpInterceptor::Helpers }
 
   before do
     Coolhand.configure do |c|
@@ -14,7 +14,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
   end
 
   def intercepted?(url)
-    interceptor.send(:intercept?, url)
+    interceptor.intercept?(url)
   end
 
   describe "host-wide providers" do

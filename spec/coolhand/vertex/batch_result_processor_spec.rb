@@ -42,6 +42,32 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
         }
       end
 
+      it "sends the request logs from the background log queue when async_logging is on" do
+        Coolhand.configuration.async_logging = true
+        sending_thread = nil
+        api_service = instance_double(Coolhand::ApiService)
+        allow(Coolhand::ApiService).to receive(:new).and_return(api_service)
+        allow(api_service).to receive(:send_llm_request_log) { sending_thread = Thread.current }
+
+        described_class.new(batch_info: batch_info).call([batch_item])
+        Coolhand.flush(timeout: 2)
+
+        expect(sending_thread).not_to be_nil
+        expect(sending_thread).not_to eq(Thread.current)
+      end
+
+      it "logs an error raised while processing in the background instead of letting it escape" do
+        Coolhand.configuration.async_logging = true
+        processor = described_class.new(batch_info: batch_info)
+        allow(processor).to receive(:process_completed_batch).and_raise(StandardError, "kaboom")
+
+        expect { processor.call([batch_item]) }.not_to raise_error
+        Coolhand.flush(timeout: 2)
+
+        expect(logger).to have_received(:error)
+          .with(a_string_including("Failed to process Vertex").and(a_string_including("kaboom")))
+      end
+
       it "sends a request log to the API with expected payload shape" do
         fixed_id = "fixed_request_id"
         allow(SecureRandom).to receive(:hex).and_return(fixed_id)

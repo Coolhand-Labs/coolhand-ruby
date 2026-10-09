@@ -16,7 +16,9 @@ module Coolhand
 
         case batch_info["status"]
         when "completed"
-          process_completed_batch
+          # Downloads two files and POSTs one log per item — run it on the background log queue so
+          # the webhook response isn't held up for the whole batch.
+          LogQueue.submit(lane: :batch) { process_completed_batch_logging_errors }
         when "failed", "expired", "cancelled"
           handle_failed_batch
         when "in_progress", "validating", "finalizing"
@@ -29,6 +31,14 @@ module Coolhand
       end
 
       private
+
+      # Runs on the batch lane's worker thread, where an escaping error would only reach
+      # Coolhand.log (silenceable) rather than the Rails log `call` reports to.
+      def process_completed_batch_logging_errors
+        process_completed_batch
+      rescue StandardError => e
+        Rails.logger.error("[Interceptor] Failed to process OpenAI batch results for #{event_data}: #{e.message}")
+      end
 
       def process_completed_batch
         input_file_id = batch_info["input_file_id"]
@@ -43,8 +53,12 @@ module Coolhand
         # Download and process results
         batch_response_items = download_batch_results(output_file_id)
 
+        request_items_by_id = batch_request_items.each_with_object({}) do |item, index|
+          index[item["custom_id"]] ||= item
+        end
+
         batch_response_items.each do |response_item|
-          request_item = batch_request_items.detect { |item| item["custom_id"] == response_item["custom_id"] }
+          request_item = request_items_by_id[response_item["custom_id"]]
 
           next unless request_item
 
@@ -89,33 +103,20 @@ module Coolhand
 
       def send_complete_request_log(request_id:, method:, url:, request_body:, response_body:, status_code:,
         start_time:, end_time:)
-        timestamp = Time.at(start_time).iso8601
-        completed_at = Time.at(end_time).iso8601
-        duration_ms = ((end_time - start_time) * 1000).to_i
-
-        request_data = {
-          raw_request: {
-            id: request_id,
-            timestamp: timestamp,
-            method: method.to_s.downcase,
-            url: BaseInterceptor.sanitize_url(url),
-            headers: {},
-            request_body: request_body,
-            response_headers: {},
-            response_body: response_body,
-            status_code: status_code,
-            duration_ms: duration_ms,
-            completed_at: completed_at,
-            is_streaming: false
-          }
-        }
-
-        api_service = Coolhand::ApiService.new
-        api_service.send_llm_request_log(request_data)
-
-        Coolhand.log "📤 Sent complete request/response log for #{request_id} (duration: #{duration_ms}ms)"
-      rescue StandardError => e
-        Coolhand.log "❌ Error sending complete request log: #{e.message}"
+        BaseInterceptor.send_complete_request_log(
+          request_id: request_id,
+          method: method,
+          url: url,
+          request_headers: {},
+          request_body: request_body,
+          response_headers: {},
+          response_body: response_body,
+          status_code: status_code,
+          start_time: Time.at(start_time),
+          end_time: Time.at(end_time),
+          duration_ms: ((end_time - start_time) * 1000).to_i,
+          is_streaming: false
+        )
       end
 
       def batch_info

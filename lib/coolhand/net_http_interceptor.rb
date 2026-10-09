@@ -4,8 +4,6 @@ require "stringio"
 
 module Coolhand
   module NetHttpInterceptor
-    include BaseInterceptor
-
     # Response streaming interceptor nested under NetHttpInterceptor
     module ResponseInterceptor
       def read_body(dest = nil, &block)
@@ -70,7 +68,7 @@ module Coolhand
         next if @patch_count.positive? || !@patched
 
         @patched = false
-        Coolhand.log "🔌 Faraday monitoring disabled ..."
+        Coolhand.log "🔌 Net::HTTP interceptor unpatched (capture stopped)"
       end
     end
 
@@ -93,7 +91,7 @@ module Coolhand
       active = (Thread.current[:coolhand_active_requests] ||= {}.compare_by_identity)
       return super if active.key?(self)
 
-      url = capturable_url(req)
+      url = Helpers.capturable_url(self, req)
       return super unless url
 
       # Capture body before setting the guard — if this raises we skip logging cleanly
@@ -102,7 +100,7 @@ module Coolhand
       # from being attempted — this gem must never be the reason the host
       # app's actual LLM call doesn't happen.
       captured_body = begin
-        capture_request_body(req, body)
+        Helpers.capture_request_body(req, body)
       rescue StandardError => e
         Coolhand.log "❌ Error capturing request body: #{e.message}"
         nil
@@ -129,9 +127,9 @@ module Coolhand
         body_content = Thread.current[:coolhand_stream_buffer] || response&.body
         body_content = body_content.dup.force_encoding("UTF-8") if body_content.is_a?(String)
         status_code = response.respond_to?(:code) ? response.code.to_i : nil
-        response_body = parse_json(body_content)
+        response_body = BaseInterceptor.parse_json(body_content)
       rescue StandardError => e
-        status_code = extract_status_from_exception(e)
+        status_code = Helpers.extract_status_from_exception(e)
         response_body = { "error" => { "class" => e.class.name, "message" => e.message } }
         raise
       ensure
@@ -141,13 +139,13 @@ module Coolhand
         end_time = Time.now
         duration_ms = ((end_time - start_time) * 1000).round(2)
 
-        send_complete_request_log(
+        BaseInterceptor.send_complete_request_log(
           request_id: request_id,
           method: req.method,
           url: url,
-          request_headers: sanitize_headers(req),
+          request_headers: BaseInterceptor.sanitize_headers(req),
           request_body: captured_body,
-          response_headers: sanitize_headers(response),
+          response_headers: BaseInterceptor.sanitize_headers(response),
           response_body: response_body,
           status_code: status_code,
           start_time: start_time,
@@ -160,164 +158,171 @@ module Coolhand
       response
     end
 
-    private
+    # Stateless helpers for #request. They live in their own namespaced module (not on the
+    # prepended module itself) so the only method NetHttpInterceptor adds to Net::HTTP is
+    # `request` — generically named helpers like `intercept?` would otherwise pollute
+    # Net::HTTP and could collide with, or be shadowed by, other code.
+    module Helpers
+      module_function
 
-    def should_capture?
-      return true if Coolhand.configuration.debug_mode
+      def should_capture?
+        return true if Coolhand.configuration.debug_mode
 
-      override = Thread.current[:coolhand_capture_override]
-      return override unless override.nil?
+        override = Thread.current[:coolhand_capture_override]
+        return override unless override.nil?
 
-      Coolhand.configuration.capture
-    end
-
-    def capture_request_body(req, body)
-      # Check content-type before touching body_stream at all — for a binary
-      # upload (multipart/form-data, audio/*, etc.) this avoids reading the
-      # stream into memory a second time just to build a log entry no one
-      # can read anyway.
-      return skipped_capture_marker(req, "non_json_content_type") if binary_upload?(req)
-
-      content = body || req.body
-      if content.nil? && req.respond_to?(:body_stream) && req.body_stream
-        content = req.body_stream.read
-        req.body_stream = StringIO.new(content)
-      end
-      return nil if content.nil?
-
-      cap_and_parse(content, req)
-    end
-
-    def binary_upload?(req)
-      content_type = req.respond_to?(:content_type) ? req.content_type : nil
-      content_type && !content_type.match?(/json/i)
-    end
-
-    def cap_and_parse(content, req)
-      max_bytes = Coolhand.configuration.max_captured_body_bytes
-      if max_bytes && content.bytesize > max_bytes
-        return skipped_capture_marker(req, "body_too_large", size_bytes: content.bytesize, max_bytes: max_bytes)
+        Coolhand.configuration.capture
       end
 
-      parse_json(content)
-    end
+      def capture_request_body(req, body)
+        # Check content-type before touching body_stream at all — for a binary
+        # upload (multipart/form-data, audio/*, etc.) this avoids reading the
+        # stream into memory a second time just to build a log entry no one
+        # can read anyway.
+        return skipped_capture_marker(req, "non_json_content_type") if binary_upload?(req)
 
-    def skipped_capture_marker(req, reason, extra = {})
-      marker = { "_coolhand_capture_skipped" => reason }.merge(extra.transform_keys(&:to_s))
-      content_type = req.respond_to?(:content_type) ? req.content_type : nil
-      marker["content_type"] = content_type if content_type
-      marker
-    end
+        content = body || req.body
+        if content.nil? && req.respond_to?(:body_stream) && req.body_stream
+          content = req.body_stream.read
+          req.body_stream = StringIO.new(content)
+        end
+        return nil if content.nil?
 
-    def extract_status_from_exception(e)
-      return e.status if e.respond_to?(:status) && e.status.is_a?(Integer)
-      return e.response.status if e.respond_to?(:response) && e.response.respond_to?(:status)
-
-      match = e.message.to_s.match(/status[=:\s]+(\d{3})/)
-      match ? match[1].to_i : nil
-    end
-
-    def intercept?(url)
-      return false unless url && Coolhand.configuration.respond_to?(:intercept_addresses)
-
-      uri = safe_parse(url)
-      return false unless uri&.host
-
-      return false if excluded_by_pattern?(uri)
-
-      host = uri.host.downcase.chomp(".")
-      path = uri.path.to_s
-      addresses = Coolhand.configuration.intercept_addresses
-      authorities = [host, "#{host}:#{uri.port}"]
-      return true if addresses.any? { |a| authorities.any? { |authority| address_matches?(authority, path, a) } }
-
-      return false unless google_api_host_configured?(addresses)
-      return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
-
-      Coolhand.configuration.intercept_path_patterns.any? { |p| path.include?(p) }
-    end
-
-    # The capture decision runs before the host's real request, so a bad config value (e.g. a
-    # non-array exclude_api_patterns) must degrade to "don't capture", never raise into the host.
-    def capturable_url(req)
-      url = build_url_for_request(self, req)
-      url if intercept?(url) && should_capture?
-    rescue StandardError => e
-      Coolhand.log "⚠️ Skipping capture, could not evaluate intercept rules: #{e.class}"
-      nil
-    end
-
-    def excluded_by_pattern?(uri)
-      patterns = Coolhand.configuration.exclude_api_patterns
-      return false if patterns.nil? || patterns.empty?
-
-      path = uri.path.to_s
-      matched = patterns.find { |pattern| path.include?(pattern) }
-      if matched && Coolhand.configuration.debug_mode
-        Coolhand.log "🚫 Skipping capture for #{sanitize_url(uri.to_s)} (matched exclude_api_pattern: \"#{matched}\")"
+        cap_and_parse(content, req)
       end
-      !!matched
-    end
 
-    # intercept_path_patterns only ever applies to googleapis.com hosts, and only when the
-    # user still wants Google API traffic intercepted at all — otherwise overriding
-    # intercept_addresses to exclude Google hosts wouldn't actually stop Google API capture.
-    def google_api_host_configured?(addresses)
-      addresses.any? do |a|
-        a = a.to_s.downcase
-        a == "googleapis.com" || a.end_with?(".googleapis.com")
+      def binary_upload?(req)
+        content_type = req.respond_to?(:content_type) ? req.content_type : nil
+        content_type && !content_type.match?(/json/i)
       end
-    end
 
-    # An intercept_addresses entry may optionally pin a port ("host:port") and/or anchor to a
-    # path prefix by embedding a "/" — e.g. "api.cohere.com/v2/chat" only matches requests to
-    # that host whose path starts with "/v2/chat", and "cognitiveservices.azure.com/openai/" only
-    # matches that multi-service Azure host's OpenAI paths, so unrelated endpoints on a shared
-    # host aren't swept in alongside the ones we mean to capture.
-    # The match is on a path *segment* boundary (trailing "/" on the pattern is optional and
-    # stripped before comparing), so "host.com/openai" matches "/openai" and "/openai/x" but not
-    # a same-prefix-but-different-segment path like "/openaiz".
-    def address_matches?(host, path, pattern)
-      host_pattern, sep, path_pattern = pattern.to_s.partition("/")
-      return host_matches?(host, host_pattern) if sep.empty?
-      return false unless host_matches?(host, host_pattern)
+      def cap_and_parse(content, req)
+        max_bytes = Coolhand.configuration.max_captured_body_bytes
+        if max_bytes && content.bytesize > max_bytes
+          return skipped_capture_marker(req, "body_too_large", size_bytes: content.bytesize, max_bytes: max_bytes)
+        end
 
-      path_pattern = path_pattern.delete_suffix("/")
-      return true if path_pattern.empty?
+        BaseInterceptor.parse_json(content)
+      end
 
-      prefix = "/#{path_pattern}"
-      path == prefix || path.start_with?("#{prefix}/")
-    end
+      def skipped_capture_marker(req, reason, extra = {})
+        marker = { "_coolhand_capture_skipped" => reason }.merge(extra.transform_keys(&:to_s))
+        content_type = req.respond_to?(:content_type) ? req.content_type : nil
+        marker["content_type"] = content_type if content_type
+        marker
+      end
 
-    # Host-boundary match: exact, or a dot-delimited suffix (case-insensitive).
-    # A single "*" in `pattern` matches exactly one host label, e.g.
-    # "bedrock-runtime.*.amazonaws.com" matches "bedrock-runtime.us-east-1.amazonaws.com".
-    def host_matches?(host, pattern)
-      pattern = pattern.to_s.downcase
-      return host == pattern || host.end_with?(".#{pattern}") unless pattern.include?("*")
+      def extract_status_from_exception(e)
+        return e.status if e.respond_to?(:status) && e.status.is_a?(Integer)
+        return e.response.status if e.respond_to?(:response) && e.response.respond_to?(:status)
 
-      regex = /\A#{pattern.split('*', -1).map { |part| Regexp.escape(part) }.join('[^.]+')}\z/
-      !!(host =~ regex)
-    end
+        match = e.message.to_s.match(/status[=:\s]+(\d{3})/)
+        match ? match[1].to_i : nil
+      end
 
-    def safe_parse(url)
-      URI.parse(url)
-    rescue URI::InvalidURIError
-      nil
-    end
+      def intercept?(url)
+        return false unless url && Coolhand.configuration.respond_to?(:intercept_addresses)
 
-    def build_url_for_request(http, req)
-      return req.path if %r{\Ahttps?://}.match?(req.path)
+        uri = safe_parse(url)
+        return false unless uri&.host
 
-      scheme = http.use_ssl? ? "https" : "http"
-      host = http.address
-      port = http.port
-      default = http.use_ssl? ? 443 : 80
+        return false if excluded_by_pattern?(uri)
 
-      url = "#{scheme}://#{host}"
-      url << ":#{port}" if port != default
-      url << req.path
-      url
+        host = uri.host.downcase.chomp(".")
+        path = uri.path.to_s
+        addresses = Coolhand.configuration.intercept_addresses
+        authorities = [host, "#{host}:#{uri.port}"]
+        return true if addresses.any? { |a| authorities.any? { |authority| address_matches?(authority, path, a) } }
+
+        return false unless google_api_host_configured?(addresses)
+        return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
+
+        Coolhand.configuration.intercept_path_patterns.any? { |p| path.include?(p) }
+      end
+
+      # The capture decision runs before the host's real request, so a bad config value (e.g. a
+      # non-array exclude_api_patterns) must degrade to "don't capture", never raise into the host.
+      def capturable_url(http, req)
+        url = build_url_for_request(http, req)
+        url if intercept?(url) && should_capture?
+      rescue StandardError => e
+        Coolhand.log "⚠️ Skipping capture, could not evaluate intercept rules: #{e.class}"
+        nil
+      end
+
+      def excluded_by_pattern?(uri)
+        patterns = Coolhand.configuration.exclude_api_patterns
+        return false if patterns.nil? || patterns.empty?
+
+        path = uri.path.to_s
+        matched = patterns.find { |pattern| path.include?(pattern) }
+        if matched && Coolhand.configuration.debug_mode
+          Coolhand.log "🚫 Skipping capture for #{BaseInterceptor.sanitize_url(uri.to_s)} " \
+                       "(matched exclude_api_pattern: \"#{matched}\")"
+        end
+        !!matched
+      end
+
+      # intercept_path_patterns only ever applies to googleapis.com hosts, and only when the
+      # user still wants Google API traffic intercepted at all — otherwise overriding
+      # intercept_addresses to exclude Google hosts wouldn't actually stop Google API capture.
+      def google_api_host_configured?(addresses)
+        addresses.any? do |a|
+          a = a.to_s.downcase
+          a == "googleapis.com" || a.end_with?(".googleapis.com")
+        end
+      end
+
+      # An intercept_addresses entry may optionally pin a port ("host:port") and/or anchor to a
+      # path prefix by embedding a "/" — e.g. "api.cohere.com/v2/chat" only matches requests to
+      # that host whose path starts with "/v2/chat", and "cognitiveservices.azure.com/openai/" only
+      # matches that multi-service Azure host's OpenAI paths, so unrelated endpoints on a shared
+      # host aren't swept in alongside the ones we mean to capture.
+      # The match is on a path *segment* boundary (trailing "/" on the pattern is optional and
+      # stripped before comparing), so "host.com/openai" matches "/openai" and "/openai/x" but not
+      # a same-prefix-but-different-segment path like "/openaiz".
+      def address_matches?(host, path, pattern)
+        host_pattern, sep, path_pattern = pattern.to_s.partition("/")
+        return host_matches?(host, host_pattern) if sep.empty?
+        return false unless host_matches?(host, host_pattern)
+
+        path_pattern = path_pattern.delete_suffix("/")
+        return true if path_pattern.empty?
+
+        prefix = "/#{path_pattern}"
+        path == prefix || path.start_with?("#{prefix}/")
+      end
+
+      # Host-boundary match: exact, or a dot-delimited suffix (case-insensitive).
+      # A single "*" in `pattern` matches exactly one host label, e.g.
+      # "bedrock-runtime.*.amazonaws.com" matches "bedrock-runtime.us-east-1.amazonaws.com".
+      def host_matches?(host, pattern)
+        pattern = pattern.to_s.downcase
+        return host == pattern || host.end_with?(".#{pattern}") unless pattern.include?("*")
+
+        regex = /\A#{pattern.split('*', -1).map { |part| Regexp.escape(part) }.join('[^.]+')}\z/
+        !!(host =~ regex)
+      end
+
+      def safe_parse(url)
+        URI.parse(url)
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def build_url_for_request(http, req)
+        return req.path if %r{\Ahttps?://}.match?(req.path)
+
+        scheme = http.use_ssl? ? "https" : "http"
+        host = http.address
+        port = http.port
+        default = http.use_ssl? ? 443 : 80
+
+        url = "#{scheme}://#{host}"
+        url << ":#{port}" if port != default
+        url << req.path
+        url
+      end
     end
   end
 end
