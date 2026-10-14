@@ -176,6 +176,40 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
 
         described_class.new(event_data: { "id" => "batch-3" }).call
       end
+
+      it "redacts data_sources credentials from the request body before forwarding" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+
+        secret_body = { "messages" => [], "data_sources" => [{ "parameters" => { "key" => "s3cret" } }] }
+        secret_input = [{ "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/1",
+                          "body" => secret_body }]
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(secret_input)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-1").and_return(output_items_jsonl)
+
+        expect(api_service).to receive(:send_llm_request_log) do |request_data|
+          sent_body = request_data[:raw_request][:request_body]
+          expect(sent_body["data_sources"].first["parameters"]["key"]).to eq("[REDACTED]")
+          expect(sent_body.to_json).not_to include("s3cret")
+        end
+
+        described_class.new(event_data: { "id" => "batch-3" }).call
+      end
+
+      it "pairs a response with the first request item when a custom_id is duplicated" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+
+        duplicated_input = [
+          { "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/first", "body" => {} },
+          { "custom_id" => "c1", "method" => "POST", "url" => "https://api.example/second", "body" => {} }
+        ]
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-in-1").and_return(duplicated_input)
+        allow(client).to receive_message_chain(:files, :content).with(id: "file-out-1").and_return(output_items_jsonl)
+
+        expect(api_service).to receive(:send_llm_request_log)
+          .with(hash_including(raw_request: hash_including(url: "https://api.example/first")))
+
+        described_class.new(event_data: { "id" => "batch-3" }).call
+      end
     end
 
     context "when batch status is unrecognized" do
