@@ -3,6 +3,7 @@
 require "spec_helper"
 require "webmock/rspec"
 require "net/http"
+require "socket"
 require "stringio"
 require "timeout"
 
@@ -144,6 +145,93 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     # Accept any non-nil response_body (string or streaming adapter)
     resp_body = raw[:response_body] || raw["response_body"]
     expect(resp_body).not_to be_nil
+  end
+
+  # WebMock defines read_body as a singleton on its stubbed responses, which bypasses the prepended
+  # ResponseInterceptor entirely, so the buffer is exercised directly here and over a real socket below.
+  describe Coolhand::NetHttpInterceptor::ResponseInterceptor do
+    let(:response_class) do
+      base = Class.new do
+        def read_body(dest = nil, &block)
+          return "unblocked-body" unless block
+
+          %w[chunk1 chunk2].each(&block)
+          dest
+        end
+      end
+      Class.new(base) { include Coolhand::NetHttpInterceptor::ResponseInterceptor }
+    end
+    let(:response) { response_class.new }
+
+    after do
+      Thread.current[:coolhand_stream_buffer] = nil
+      Thread.current[:coolhand_capturing_stream] = nil
+    end
+
+    it "accumulates yielded chunks into the thread-local buffer while a request is capturing, " \
+       "and still yields every chunk to the consumer" do
+      Thread.current[:coolhand_capturing_stream] = true
+      chunks = []
+
+      response.read_body { |chunk| chunks << chunk }
+
+      expect(chunks).to eq(%w[chunk1 chunk2])
+      expect(Thread.current[:coolhand_stream_buffer]).to eq("chunk1chunk2")
+    end
+
+    it "does not buffer when no intercepted request is capturing" do
+      chunks = []
+
+      response.read_body { |chunk| chunks << chunk }
+
+      expect(chunks).to eq(%w[chunk1 chunk2])
+      expect(Thread.current[:coolhand_stream_buffer]).to be_nil
+    end
+
+    it "passes a blockless read_body straight through without touching the buffer" do
+      Thread.current[:coolhand_capturing_stream] = true
+
+      expect(response.read_body).to eq("unblocked-body")
+      expect(Thread.current[:coolhand_stream_buffer]).to be_nil
+    end
+  end
+
+  it "logs the streamed response_body assembled from block-form read_body chunks over a real connection" do
+    server = TCPServer.new("127.0.0.1", 0)
+    port = server.addr[1]
+    body = "chunk1chunk2"
+    server_thread = Thread.new do
+      client = server.accept
+      client.gets("\r\n\r\n")
+      client.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: #{body.bytesize}\r\n" \
+                   "Connection: close\r\n\r\n#{body}")
+      client.close
+    end
+    Coolhand.configuration.intercept_addresses = ["127.0.0.1"]
+
+    begin
+      # WebMock swaps out Net::HTTP (and its read_body never reaches the interceptor), so use the real
+      # class via a throwaway subclass instead of patching the global one.
+      WebMock.disable!
+      http_class = Class.new(Net::HTTP) { prepend Coolhand::NetHttpInterceptor }
+      chunks = []
+      http_class.start("127.0.0.1", port) do |http|
+        http.request(Net::HTTP::Get.new("/stream")) do |res|
+          res.read_body { |chunk| chunks << chunk }
+        end
+      end
+
+      raw = @captured_log[:raw_request]
+      expect(chunks.join).to eq(body)
+      expect(raw[:response_body]).to eq(body)
+      expect(raw[:is_streaming]).to be true
+      expect(Thread.current[:coolhand_stream_buffer]).to be_nil
+      expect(Thread.current[:coolhand_capturing_stream]).to be_nil
+    ensure
+      WebMock.enable!
+      server_thread.kill
+      server.close
+    end
   end
 
   it "does not emit a JSON BINARY encoding warning when streaming multi-byte UTF-8 content" do

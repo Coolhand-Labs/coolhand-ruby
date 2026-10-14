@@ -264,6 +264,31 @@ RSpec.describe Coolhand::FeedbackService do
             .to output(/📝 CREATING FEEDBACK/).to_stdout
         end
 
+        it "logs the provider unique id when feedback is keyed by llm_provider_unique_id" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.create_feedback({ llm_provider_unique_id: "chatcmpl-abc", like: true }) }
+            .to output(/CREATING FEEDBACK for Provider Unique ID: chatcmpl-abc/).to_stdout
+        end
+
+        it "prefers llm_request_log_id over llm_provider_unique_id when both are given" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect do
+            verbose_service.create_feedback({ llm_request_log_id: 456, llm_provider_unique_id: "chatcmpl-abc" })
+          end.to output(/for LLM Request Log ID: 456/).to_stdout
+        end
+
+        it "logs a bare header when no identifier is given" do
+          stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+            .to_return(status: 200, body: JSON.generate({ id: 123 }))
+
+          expect { verbose_service.create_feedback({ sentiment: "like" }) }
+            .to output(/CREATING FEEDBACK\n/).to_stdout
+        end
+
         it "logs sentiment when present" do
           stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
             .to_return(status: 200, body: JSON.generate({ id: 123 }))
