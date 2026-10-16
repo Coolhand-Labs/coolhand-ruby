@@ -8,7 +8,7 @@ module Coolhand
   #
   #   class ApplicationService
   #     include Coolhand::Declarable
-  #     coolhand_workload source: "my-app"
+  #     coolhand_workload reporter: "my-app"
   #     coolhand_declare_all
   #   end
   #
@@ -33,10 +33,10 @@ module Coolhand
       # no `key`, each wrapped method declares its own workload, "ClassName#method"; a `key` makes every
       # method share one workload. The class name is the runtime class, so an inherited method declares
       # under the subclass.
-      def coolhand_workload(key: nil, name: nil, description: nil, source: nil)
+      def coolhand_workload(key: nil, name: nil, description: nil, reporter: nil)
         workload = DeclaredContext.normalize_part(:workload, { key: key, name: name, description: description }.compact,
           DeclaredContext::WORKLOAD_FIELDS)
-        @coolhand_settings = { workload: workload, source: DeclaredContext.normalize_source(source) }.compact
+        @coolhand_settings = { workload: workload, reporter: DeclaredContext.normalize_reporter(reporter) }.compact
       end
 
       # Wraps the named instance methods (now, or when they are defined later). `template:` is a key or a
@@ -65,7 +65,7 @@ module Coolhand
         key = "#{name}##{method_name}"
         template = coolhand_template_for(method_name)
         {
-          source: coolhand_setting(:source),
+          reporter: coolhand_setting(:reporter),
           workload: { key: key }.merge(coolhand_setting(:workload) || {}),
           template: template || { key: key }
         }
@@ -74,6 +74,7 @@ module Coolhand
       # @api private
       def coolhand_declare_call?(method_name)
         return false if name.nil? || !Coolhand.configuration.enabled
+        return false unless DeclaredContext.valid_key?("#{name}##{method_name}")
 
         public_method_defined?(method_name) || !coolhand_declaration(method_name).nil?
       end

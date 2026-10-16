@@ -63,8 +63,8 @@ module Coolhand
     # `name` renames the display name. `workload` (`{ id: }` or `{ key: }`, the latter find-or-created)
     # is needed only when the template is new; an existing one keeps its workload. Returns the template
     # Hash. Raises {Coolhand::HttpError} on a non-2xx response. See docs/declared_workloads.md.
-    def upsert(key:, workload: nil, name: nil, source: nil)
-      body = { name: name, source: source, **workload_params(workload) }.compact
+    def upsert(key:, workload: nil, name: nil, reporter: nil)
+      body = { name: name, reporter: reporter, **workload_params(workload) }.compact
       request_json(:put, by_key_url("upsert", key), ERROR_NOUN, body: body)
     end
 

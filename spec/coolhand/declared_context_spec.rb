@@ -7,7 +7,7 @@ require "net/http"
 RSpec.describe Coolhand::DeclaredContext do
   describe ".with_context" do
     it "requires a block" do
-      expect { Coolhand.with_context(source: "x") }.to raise_error(ArgumentError, /requires a block/)
+      expect { Coolhand.with_context(reporter: "x") }.to raise_error(ArgumentError, /requires a block/)
     end
 
     it "is nil outside any block" do
@@ -15,10 +15,10 @@ RSpec.describe Coolhand::DeclaredContext do
     end
 
     it "exposes a frozen snapshot of the declared identity inside the block" do
-      Coolhand.with_context(source: "squishling", workload: { key: "Parser#call", name: "Parser#call" },
+      Coolhand.with_context(reporter: "squishling", workload: { key: "Parser#call", name: "Parser#call" },
         template: { "key" => "Parser#call/squish:L2" }) do
         expect(described_class.current).to eq(
-          source: "squishling",
+          reporter: "squishling",
           workload: { key: "Parser#call", name: "Parser#call" },
           template: { key: "Parser#call/squish:L2" }
         )
@@ -46,14 +46,14 @@ RSpec.describe Coolhand::DeclaredContext do
     end
 
     it "merges nested blocks per field, innermost winning" do
-      Coolhand.with_context(source: "outer", workload: { key: "w" }) do
+      Coolhand.with_context(reporter: "outer", workload: { key: "w" }) do
         Coolhand.with_context(template: { key: "t" }) do
-          expect(described_class.current).to eq(source: "outer", workload: { key: "w" }, template: { key: "t" })
+          expect(described_class.current).to eq(reporter: "outer", workload: { key: "w" }, template: { key: "t" })
         end
-        Coolhand.with_context(source: "inner") do
-          expect(described_class.current[:source]).to eq("inner")
+        Coolhand.with_context(reporter: "inner") do
+          expect(described_class.current[:reporter]).to eq("inner")
         end
-        expect(described_class.current).to eq(source: "outer", workload: { key: "w" })
+        expect(described_class.current).to eq(reporter: "outer", workload: { key: "w" })
       end
     end
 
@@ -66,9 +66,9 @@ RSpec.describe Coolhand::DeclaredContext do
     end
 
     it "drops the inherited template when an inner block declares a different workload" do
-      Coolhand.with_context(source: "outer", workload: { key: "a" }, template: { key: "a/t" }) do
+      Coolhand.with_context(reporter: "outer", workload: { key: "a" }, template: { key: "a/t" }) do
         Coolhand.with_context(workload: { key: "b" }) do
-          expect(described_class.current).to eq(source: "outer", workload: { key: "b" })
+          expect(described_class.current).to eq(reporter: "outer", workload: { key: "b" })
         end
         Coolhand.with_context(workload: { key: "b" }, template: { key: "b/t" }) do
           expect(described_class.current[:template]).to eq(key: "b/t")
@@ -79,13 +79,13 @@ RSpec.describe Coolhand::DeclaredContext do
 
     it "restores the previous context after the block, even when it raises" do
       expect do
-        Coolhand.with_context(source: "x") { raise "boom" }
+        Coolhand.with_context(reporter: "x") { raise "boom" }
       end.to raise_error("boom")
       expect(described_class.current).to be_nil
     end
 
     it "returns the block's value" do
-      expect(Coolhand.with_context(source: "x") { :result }).to eq(:result)
+      expect(Coolhand.with_context(reporter: "x") { :result }).to eq(:result)
     end
 
     it "rejects a non-Hash workload or template before running the block" do
@@ -111,14 +111,30 @@ RSpec.describe Coolhand::DeclaredContext do
       end.to raise_error(ArgumentError, /needs an :id or a :key/)
     end
 
+    it "rejects keys the server would 422, before the block runs" do
+      ["", " k", "k ", "/k", "k/", "a//b", "a\nb", "k" * 256].each do |key|
+        expect { Coolhand.with_context(workload: { key: key }) { nil } }.to raise_error(ArgumentError, /key must be/)
+      end
+      Coolhand.with_context(workload: { key: "Parser#call/squish:L2 · x" }) { nil }
+      Coolhand.with_context(workload: { key: "k" * 255 }) { nil }
+    end
+
+    it "rejects a template key with no workload, but allows an id or an enclosing workload" do
+      expect { Coolhand.with_context(template: { key: "t" }) { nil } }.to raise_error(ArgumentError, /needs a workload/)
+      Coolhand.with_context(template: { id: "abc" }) { nil }
+      Coolhand.with_context(workload: { key: "w" }) do
+        Coolhand.with_context(template: { key: "t" }) { expect(described_class.current[:template]).to eq(key: "t") }
+      end
+    end
+
     it "does not leak into other threads" do
       seen = :unset
-      Coolhand.with_context(source: "x") { Thread.new { seen = described_class.current }.join }
+      Coolhand.with_context(reporter: "x") { Thread.new { seen = described_class.current }.join }
       expect(seen).to be_nil
     end
 
     it "is cleared by reset_configuration!" do
-      Thread.current[described_class::THREAD_KEY] = { source: "x" }
+      Thread.current[described_class::THREAD_KEY] = { reporter: "x" }
       Coolhand.reset_configuration!
       expect(described_class.current).to be_nil
     end
@@ -149,14 +165,14 @@ RSpec.describe Coolhand::DeclaredContext do
     end
 
     it "sends declared next to raw_request and collector" do
-      Coolhand.with_context(source: "squishling", workload: { key: "Parser#call" }, template: { key: "t1" }) do
+      Coolhand.with_context(reporter: "squishling", workload: { key: "Parser#call" }, template: { key: "t1" }) do
         call_llm
       end
 
       log = posted.fetch(0).fetch("llm_request_log")
       expect(log).to include("raw_request", "collector")
       expect(log["declared"]).to eq(
-        "source" => "squishling",
+        "reporter" => "squishling",
         "workload" => { "key" => "Parser#call" },
         "template" => { "key" => "t1" }
       )

@@ -48,8 +48,8 @@ module Coolhand
     # Creates the workload with this `key`, or updates the existing one. The key is immutable; a new
     # `name` renames the display name. Returns the workload Hash (the server answers 201 on create,
     # 200 on update). Raises {Coolhand::HttpError} on a non-2xx response. See docs/declared_workloads.md.
-    def upsert(key:, name: nil, description: nil, source: nil)
-      body = { name: name, description: description, source: source }.compact
+    def upsert(key:, name: nil, description: nil, reporter: nil)
+      body = { name: name, description: description, reporter: reporter }.compact
       request_json(:put, by_key_url("upsert", key), ERROR_NOUN, body: body)
     end
   end

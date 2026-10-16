@@ -6,7 +6,7 @@ module Coolhand
   # {Railtie} once the app has configured Coolhand. Kept free of any Rails require: it only touches
   # ActiveSupport and ActiveJob when a target is enabled, and only through their own load hooks.
   module RailsAutoDeclare
-    SOURCE = "rails"
+    REPORTER = "rails"
     TARGETS = %i[active_job controller].freeze
 
     @installed = []
@@ -41,10 +41,10 @@ module Coolhand
     # Runs the block inside a declared context. Anonymous classes have no stable key, so they are left
     # undeclared rather than named after an object id.
     def declare(klass, method_name, &block)
-      return yield if klass.name.nil? || !Coolhand.configuration.enabled
-
       key = "#{klass.name}##{method_name}"
-      Coolhand.with_context(source: SOURCE, workload: { key: key }, template: { key: key }, &block)
+      return yield if klass.name.nil? || !Coolhand.configuration.enabled || !DeclaredContext.valid_key?(key)
+
+      Coolhand.with_context(reporter: REPORTER, workload: { key: key }, template: { key: key }, &block)
     end
 
     # Testing-only: forget which targets were hooked.

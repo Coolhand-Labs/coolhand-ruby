@@ -97,16 +97,16 @@ module Coolhand
     end
 
     # Declares the workload/template that LLM calls captured inside the block belong to. Nested
-    # blocks override per field (`source`, `workload`, `template`), innermost wins. `workload` and
+    # blocks override per field (`reporter`, `workload`, `template`), innermost wins. `workload` and
     # `template` are Hashes with `id:` (an existing record) or `key:` (find-or-created), plus optional
     # `name:` (and `description:` on a workload). See docs/declared_workloads.md.
     #
     # Example:
-    #   Coolhand.with_context(source: "squishling", workload: { key: "Parser#call" }) { client.chat(...) }
-    def with_context(source: nil, workload: nil, template: nil, &block)
+    #   Coolhand.with_context(reporter: "squishling", workload: { key: "Parser#call" }) { client.chat(...) }
+    def with_context(reporter: nil, workload: nil, template: nil, &block)
       raise ArgumentError, "Coolhand.with_context requires a block" unless block
 
-      DeclaredContext.with(source: source, workload: workload, template: template, &block)
+      DeclaredContext.with(reporter: reporter, workload: workload, template: template, &block)
     end
 
     # Blocks until log requests queued by async logging have been sent, or the timeout (in

@@ -476,11 +476,11 @@ RSpec.describe Coolhand::TemplateService do
     it "PUTs the body with the workload id mapped to workload_id" do
       stub = stub_request(:put, key_url)
         .with(headers: { "X-API-Key" => "test-private-key" },
-          body: { name: "squish L2", source: "squishling", workload_id: "w1" }.to_json)
+          body: { name: "squish L2", reporter: "squishling", workload_id: "w1" }.to_json)
         .to_return(status: 201, body: summary.to_json, headers: json_headers)
 
       result = service.upsert(key: "Parser#call/squish:L2", workload: { id: "w1" }, name: "squish L2",
-        source: "squishling")
+        reporter: "squishling")
 
       expect(result).to eq(summary)
       expect(stub).to have_been_requested

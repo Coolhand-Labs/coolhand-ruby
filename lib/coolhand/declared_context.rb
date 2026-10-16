@@ -27,26 +27,51 @@ module Coolhand
     # key by key: `{ id: x }` merged with `{ key: y }` would declare both, and the server prefers `id`.
     # A template belongs to a workload, so a block that declares a workload without a template does
     # not inherit the outer one; it would pair the new workload with a template from another.
-    def with(source: nil, workload: nil, template: nil)
+    def with(reporter: nil, workload: nil, template: nil)
       previous = current
       declared = {
-        source: normalize_source(source),
+        reporter: normalize_reporter(reporter),
         workload: normalize_part(:workload, workload, WORKLOAD_FIELDS),
         template: normalize_part(:template, template, TEMPLATE_FIELDS)
       }.compact
       inherited = previous || {}
       inherited = inherited.except(:template) if declared.key?(:workload) && !declared.key?(:template)
       merged = inherited.merge(declared)
+      ensure_template_has_workload!(merged)
       Thread.current[THREAD_KEY] = merged.empty? ? nil : merged.freeze
       yield
     ensure
       Thread.current[THREAD_KEY] = previous
     end
 
-    def normalize_source(source)
-      return nil if source.nil?
+    def normalize_reporter(reporter)
+      return nil if reporter.nil?
 
-      source.to_s
+      reporter.to_s
+    end
+
+    # Mirrors the server's key rules: at most 255 characters, no control or invisible characters, no
+    # leading or trailing whitespace, and no leading, trailing or doubled "/". The server answers a
+    # bad key with a 422 that rejects the whole log, so it is checked here, before the call is made.
+    MAX_KEY_LENGTH = 255
+    KEY_FORMAT = %r{
+      \A(?!/)(?!.*//)
+      [^\p{Cntrl}\p{Cf}[:space:]]
+      (?:[^\p{Cntrl}\p{Cf}]*[^\p{Cntrl}\p{Cf}[:space:]])?
+      (?<!/)\z
+    }x
+
+    def valid_key?(key)
+      key.is_a?(String) && key.length <= MAX_KEY_LENGTH && KEY_FORMAT.match?(key)
+    end
+
+    # A template given by key, with no workload to create it in, is a 422 that drops the log. A
+    # template `id` refers to an existing record and needs no workload.
+    def ensure_template_has_workload!(declared)
+      template = declared[:template]
+      return if template.nil? || template.key?(:id) || declared.key?(:workload)
+
+      raise ArgumentError, "template with a :key needs a workload; declare one in this or an enclosing block"
     end
 
     # Validated up front: the server answers a non-object `workload`/`template` with a 422 for the
@@ -60,6 +85,11 @@ module Coolhand
         acc[field] = v.to_s.dup.freeze if fields.include?(field) && !v.nil?
       end
       return nil if part.empty?
+
+      if part.key?(:key) && !valid_key?(part[:key])
+        raise ArgumentError, "#{name} key must be at most #{MAX_KEY_LENGTH} printable characters with no " \
+                             "surrounding whitespace and no leading, trailing or doubled \"/\""
+      end
       unless part.key?(:id) || part.key?(:key)
         raise ArgumentError, "#{name} needs an :id or a :key, got #{value.keys.inspect}"
       end

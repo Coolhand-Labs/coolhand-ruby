@@ -66,7 +66,7 @@ RSpec.describe Coolhand::RailsAutoDeclare do
       described_class.install
       perform(SummariseJob.new)
 
-      expect(seen).to eq([{ source: "rails", workload: { key: "SummariseJob#perform" },
+      expect(seen).to eq([{ reporter: "rails", workload: { key: "SummariseJob#perform" },
                             template: { key: "SummariseJob#perform" } }])
       expect(Coolhand::DeclaredContext.current).to be_nil
     end
@@ -88,6 +88,15 @@ RSpec.describe Coolhand::RailsAutoDeclare do
       expect(seen).to eq([nil, nil])
     end
 
+    it "leaves a job undeclared when its computed key is not valid" do
+      described_class.install
+      stub_const("TooLong#{'x' * 260}Job", Class.new)
+
+      perform(Object.const_get("TooLong#{'x' * 260}Job").new)
+
+      expect(seen).to eq([nil])
+    end
+
     it "lets an explicit with_context inside the job win" do
       described_class.install
       explicit = -> { Coolhand.with_context(workload: { key: "Custom" }) { seen << Coolhand::DeclaredContext.current } }
@@ -107,7 +116,7 @@ RSpec.describe Coolhand::RailsAutoDeclare do
 
       controller_base.callbacks.first.call(UsersController.new, probe)
 
-      expect(seen.first).to include(source: "rails", workload: { key: "UsersController#show" })
+      expect(seen.first).to include(reporter: "rails", workload: { key: "UsersController#show" })
       expect(job_base.callbacks).to be_empty
     end
   end

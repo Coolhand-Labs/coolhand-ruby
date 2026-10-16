@@ -137,7 +137,7 @@ For batching, error semantics, and details, see [Linking Feedback →](docs/feed
 Tell Coolhand which workload and template an LLM call belongs to, instead of waiting for it to be matched. Calls captured inside the block carry the declared identity:
 
 ```ruby
-Coolhand.with_context(source: 'my-app', workload: { key: 'Parser#call' }, template: { key: 'Parser#call/summarize' }) do
+Coolhand.with_context(reporter: 'my-app', workload: { key: 'Parser#call' }, template: { key: 'Parser#call/summarize' }) do
   client.chat(...) # captured as usual
 end
 

@@ -262,10 +262,10 @@ RSpec.describe Coolhand::WorkloadService do
     it "PUTs the compacted body to the by_key route with the private key and returns the workload" do
       stub = stub_request(:put, key_url)
         .with(headers: { "X-API-Key" => "test-private-key", "Content-Type" => "application/json" },
-          body: { name: "Parser", description: "d", source: "squishling" }.to_json)
+          body: { name: "Parser", description: "d", reporter: "squishling" }.to_json)
         .to_return(status: 201, body: workload.to_json, headers: json_headers)
 
-      result = service.upsert(key: "Parser#call/squish:L2", name: "Parser", description: "d", source: "squishling")
+      result = service.upsert(key: "Parser#call/squish:L2", name: "Parser", description: "d", reporter: "squishling")
 
       expect(result).to eq(workload)
       expect(stub).to have_been_requested

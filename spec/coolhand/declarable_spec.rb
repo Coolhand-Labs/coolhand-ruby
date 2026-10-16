@@ -112,14 +112,14 @@ RSpec.describe Coolhand::Declarable do
       klass = define_class(name: "Svc") do
         include Coolhand::Declarable
 
-        coolhand_workload key: "Svc", name: "Service", description: "d", source: "my-app"
+        coolhand_workload key: "Svc", name: "Service", description: "d", reporter: "my-app"
         coolhand_declare_all
 
         def call(seen) = (seen << Coolhand::DeclaredContext.current)
       end
 
       klass.new.call(seen)
-      expect(seen).to eq([{ source: "my-app", workload: { key: "Svc", name: "Service", description: "d" },
+      expect(seen).to eq([{ reporter: "my-app", workload: { key: "Svc", name: "Service", description: "d" },
                             template: { key: "Svc#call" } }])
     end
 
@@ -127,17 +127,17 @@ RSpec.describe Coolhand::Declarable do
       base = define_class(name: "Base") do
         include Coolhand::Declarable
 
-        coolhand_workload key: "Shared", source: "base"
+        coolhand_workload key: "Shared", reporter: "base"
         coolhand_declare_all
       end
       child = define_class(base, name: "Child") do
-        coolhand_workload source: "child"
+        coolhand_workload reporter: "child"
 
         def call(seen) = (seen << Coolhand::DeclaredContext.current)
       end
 
       child.new.call(seen)
-      expect(seen.first).to include(source: "child", workload: { key: "Shared" }, template: { key: "Child#call" })
+      expect(seen.first).to include(reporter: "child", workload: { key: "Shared" }, template: { key: "Child#call" })
     end
   end
 
@@ -309,6 +309,13 @@ RSpec.describe Coolhand::Declarable do
       expect(seen).to eq(["Attrs#call"])
     end
 
+    it "skips declaring, rather than raising, when the computed key is too long" do
+      klass = define_class(base, name: "L#{'o' * 260}ng") { def call(seen) = (seen << Coolhand::DeclaredContext.current) }
+
+      klass.new.call(seen)
+      expect(seen).to eq([nil])
+    end
+
     it "skips anonymous classes" do
       klass = Class.new(base) { def call(seen) = (seen << Coolhand::DeclaredContext.current) }
 
@@ -357,7 +364,7 @@ RSpec.describe Coolhand::Declarable do
       define_class(name: "Summariser") do
         include Coolhand::Declarable
 
-        coolhand_workload source: "my-app"
+        coolhand_workload reporter: "my-app"
         coolhand_declare_all
 
         def call
@@ -389,7 +396,7 @@ RSpec.describe Coolhand::Declarable do
       expect(Coolhand.flush(timeout: 2)).to be true
 
       expect(posted.map { |p| p.dig("llm_request_log", "declared") }).to all(eq(
-        "source" => "my-app",
+        "reporter" => "my-app",
         "workload" => { "key" => "Summariser#call" },
         "template" => { "key" => "Summariser#call" }
       ))
