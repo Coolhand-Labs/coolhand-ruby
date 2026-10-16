@@ -132,6 +132,29 @@ links.unlink_feedback('optimizationHashid', link[:id])
 
 For batching, error semantics, and details, see [Linking Feedback →](docs/feedback-links.md).
 
+## Declaring Workloads and Templates
+
+Tell Coolhand which workload and template an LLM call belongs to, instead of waiting for it to be matched. Calls captured inside the block carry the declared identity:
+
+```ruby
+Coolhand.with_context(source: 'my-app', workload: { key: 'Parser#call' }, template: { key: 'Parser#call/summarize' }) do
+  client.chat(...) # captured as usual
+end
+
+Coolhand.workload_service.upsert(key: 'Parser#call', name: 'Parser') # private key; create or rename
+```
+
+Or declare it once on the class and let every capture inside it pick it up, subclasses included:
+
+```ruby
+class ApplicationService
+  include Coolhand::Declarable
+  coolhand_declare_all # each public method declares "ClassName#method"
+end
+```
+
+For nesting rules, class-level declarations, Rails jobs and controllers, upserts, and public-key limits, see [Declared Workloads →](docs/declared_workloads.md).
+
 ## Rails Integration
 
 ### Configuration
@@ -212,6 +235,7 @@ end
 | `exclude_api_patterns` | Array | `["/batchPredictionJobs/"]` | Deny-list checked after `intercept_addresses`; matching paths are skipped. Unlike `intercept_addresses`, `exclude_api_patterns = []` genuinely disables exclusion. See [Configuration](docs/configuration.md) |
 | `max_captured_body_bytes` | Integer | `1_000_000` | Maximum size of a captured JSON request body — oversized bodies are replaced with a placeholder. Non-JSON bodies (e.g. file/audio uploads) are always skipped regardless of size — see [Advanced Configuration](docs/configuration.md) |
 | `async_logging` | Boolean | `true` | Send logs to Coolhand from a background thread so a slow Coolhand API never delays your LLM calls. Set to `false` to send inline — see [Advanced Configuration](docs/configuration.md#asynchronous-logging) |
+| `auto_declare` | Array | `[]` | Rails only: `:active_job` and/or `:controller` to declare a workload and template for LLM calls made from jobs and controller actions — see [Declared Workloads](docs/declared_workloads.md#rails-auto-declare) |
 
 ## Usage Examples
 
@@ -464,7 +488,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`) and the feedback-link methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md) and [Linking Feedback →](docs/feedback-links.md)
+- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
 
 ## Documentation
 
@@ -474,6 +498,7 @@ The monitor handles errors gracefully:
 - **[Reading Workloads](docs/workload-search.md)** — List workloads with optional cost and performance metrics over a rolling or explicit time window
 - **[Reading Logs](docs/log-search.md)** — Search logs with per-log cost, filter and sort by cost, and fetch one log with its cost breakdown
 - **[Linking Feedback](docs/feedback-links.md)** — Link feedback to an optimization as evidence, singly or in bulk, using the private API key
+- **[Declared Workloads](docs/declared_workloads.md)** — Declare the workload and template of captured LLM calls with `Coolhand.with_context`, and create or rename them with `upsert`
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 - **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception

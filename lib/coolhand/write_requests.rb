@@ -13,6 +13,8 @@ module Coolhand
   # `api_key`, `apply_headers` and `format_error_body` from there and the shared HTTP helpers from
   # {ReadRequests}.
   module WriteRequests
+    DOT_SEGMENTS = [".", ".."].freeze
+
     protected
 
     # Returns the parsed body, or nil for an empty one (204).
@@ -24,6 +26,18 @@ module Coolhand
       raise_http_error(response, noun) unless response.is_a?(Net::HTTPSuccess)
 
       response.body.to_s.strip.empty? ? nil : parse_json_body(response.body, noun)
+    end
+
+    # `<endpoint>/by_key/<key>` for the upsert routes, which are globs: a key like "Parser#call/squish:L2"
+    # keeps its slashes and each segment is escaped, so `#` or `?` in a key cannot retarget the request.
+    def by_key_url(method_name, key)
+      trimmed = key.is_a?(String) ? key.strip : ""
+      segments = trimmed.split("/", -1)
+      if trimmed.empty? || segments.any? { |segment| segment.empty? || DOT_SEGMENTS.include?(segment) }
+        raise Error, "#{method_name}: key must be a non-empty string without empty or dot path segments"
+      end
+
+      URI.parse("#{api_endpoint}/by_key/#{segments.map { |segment| escape_path_segment(segment) }.join('/')}")
     end
 
     private

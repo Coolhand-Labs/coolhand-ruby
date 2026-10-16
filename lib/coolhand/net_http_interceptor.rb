@@ -139,7 +139,9 @@ module Coolhand
         end_time = Time.now
         duration_ms = ((end_time - start_time) * 1000).round(2)
 
+        # Read here on the calling thread: the log worker thread has no access to our thread-locals.
         BaseInterceptor.send_complete_request_log(
+          declared: DeclaredContext.current,
           request_id: request_id,
           method: req.method,
           url: url,

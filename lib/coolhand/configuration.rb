@@ -30,7 +30,7 @@ module Coolhand
 
     attr_accessor :api_key, :environment, :silent, :debug_mode, :capture, :exclude_api_patterns, :enabled,
       :max_captured_body_bytes, :webhook_replay_tolerance_seconds, :webhook_id_store, :async_logging
-    attr_reader :intercept_addresses, :intercept_path_patterns, :base_url
+    attr_reader :intercept_addresses, :intercept_path_patterns, :base_url, :auto_declare
 
     def initialize
       # Set defaults
@@ -45,6 +45,7 @@ module Coolhand
       @exclude_api_patterns = DEFAULT_EXCLUDE_API_PATTERNS.dup
       @enabled = true
       @async_logging = true
+      @auto_declare = []
       @max_captured_body_bytes = DEFAULT_MAX_CAPTURED_BODY_BYTES
       @webhook_replay_tolerance_seconds = 300
       @webhook_id_store = Coolhand::OpenAi::WebhookIdStore.new
@@ -72,6 +73,18 @@ module Coolhand
       return if value.nil? || (value.is_a?(Array) && value.empty?)
 
       @intercept_path_patterns = value.is_a?(Array) ? value : [value]
+    end
+
+    # Rails entry points to declare a workload/template for automatically: any of
+    # RailsAutoDeclare::TARGETS (:active_job, :controller). Off by default. See docs/declared_workloads.md.
+    def auto_declare=(value)
+      targets = Array(value).map { |target| target.to_s.to_sym }
+      unknown = targets - RailsAutoDeclare::TARGETS
+      unless unknown.empty?
+        raise Error, "auto_declare supports #{RailsAutoDeclare::TARGETS.inspect}, got #{unknown.inspect}"
+      end
+
+      @auto_declare = targets.uniq
     end
 
     def base_url=(value)
