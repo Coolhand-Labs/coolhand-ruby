@@ -48,13 +48,12 @@ module Coolhand
           Net::HTTPResponse.prepend(ResponseInterceptor)
 
           @patched = true
-          Coolhand.log "🔗 Net::HTTP interceptor patched"
         rescue StandardError
           # Roll back this call's hold — it never actually took effect, so it must not count
           # toward the refcount or a legitimate later unpatch! would underflow against it. This
           # branch only runs when @patched was false on entry (see `next if @patched` above), so
           # forcing it back to false here is correct regardless of which line above raised —
-          # including a failure in the log call itself, after prepend already succeeded.
+          # including a failure in the second prepend, after the first already succeeded.
           @patch_count -= 1
           @patched = false
           raise

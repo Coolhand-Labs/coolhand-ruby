@@ -249,15 +249,15 @@ RSpec.describe Coolhand::NetHttpInterceptor do
 
     it "rolls back both the refcount and the patched flag when the underlying patch step raises" do
       described_class.reset!
-      allow(Coolhand).to receive(:log).with(/patched/).and_raise("boom from log")
+      allow(Net::HTTPResponse).to receive(:prepend).and_raise("boom from prepend")
 
-      expect { described_class.patch! }.to raise_error("boom from log")
+      expect { described_class.patch! }.to raise_error("boom from prepend")
 
       expect(described_class.patched?).to be false
 
       # A subsequent, successful patch!/unpatch! pair must still balance cleanly — proves the
       # failed call above left no leaked refcount behind.
-      allow(Coolhand).to receive(:log).and_call_original
+      allow(Net::HTTPResponse).to receive(:prepend).and_call_original
       described_class.patch!
       expect(described_class.patched?).to be true
       described_class.unpatch!
