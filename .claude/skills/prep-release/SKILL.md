@@ -192,13 +192,18 @@ background thread) — surface these to the user for a decision, the same
    purely to move the percentage.
 
 2. If Phase 4.1 is green, run every script in `examples/` against live
-   provider keys: `bundle exec ruby examples/<name>.rb` for each. Each
-   script is expected to skip itself cleanly (exit 0, clear message) if
-   its provider's API key isn't set in this environment — treat that as a
-   skip, not a failure. Record pass/skip/fail per script. A script that
-   exits non-zero with a key present is a real failure and should be
-   investigated before continuing to Phase 5 — it means this release
-   would ship with broken interception or a broken provider integration.
+   provider keys with `bundle exec rake examples:live` (or
+   `bin/live-examples`). It runs the scripts concurrently, writes a log per
+   script to `tmp/live-examples/`, and prints one `PASS` / `SKIP` / `FAIL`
+   line each. It re-execs itself under `zsh -ic` so keys exported from
+   `~/.zshrc` are visible even from a non-interactive agent shell; don't
+   work around that with `COOLHAND_EXAMPLES_NO_ZSH=1` unless the keys are
+   already in this environment. A missing-key `SKIP` is not a failure, but
+   if **every** script is `SKIP` no live call was made: report the release
+   as *not* live-validated rather than green. `FAIL` (non-zero exit, or a
+   delivery-failed marker in the output) is a real failure and should be
+   investigated before continuing to Phase 5 — it means this release would
+   ship with broken interception or a broken provider integration.
 
 ## Phase 5: Open the release-prep PR, report everything
 
@@ -215,7 +220,7 @@ background thread) — surface these to the user for a decision, the same
    - Docs updated.
    - Red-team findings split into fixed vs. flagged-for-decision.
    - Phase 4's regression test/lint result and the example-app run
-     results (pass/skip/fail per script).
+     results (pass/skip/fail per script, from `rake examples:live`).
 
 ## Safety
 

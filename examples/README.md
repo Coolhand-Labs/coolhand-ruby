@@ -37,12 +37,43 @@ bundle exec ruby examples/anthropic_example.rb
 bundle exec ruby examples/elevenlabs_example.rb
 ```
 
+## Running everything: `bin/live-examples`
+
+```bash
+bin/live-examples            # or: bundle exec rake examples:live
+```
+
+Runs every script in this directory concurrently, writes each one's output to its own log
+(`tmp/live-examples/<script>.log`), and prints one line per script:
+
+| Result | Meaning |
+|---|---|
+| `PASS` | exited 0 and no delivery-failed marker (`❌ Request failed`, `❌ Request error`, ...) in the output. A script that skips only part of its work (the benchmark's live scenario) still runs and passes the rest, so it is `PASS` |
+| `SKIP` | exited 0 and printed a `Skipping ...` line because a key isn't set (a missing key is not a failure; new scripts should follow that convention) |
+| `FAIL` | non-zero exit, **or** a delivery-failed marker in the output even though the script exited 0 |
+
+It exits non-zero only on `FAIL`. If *every* script is `SKIP` it prints a warning: no live call was
+made, so the run validates nothing.
+
+Provider keys usually live in `~/.zshrc`, which a non-interactive shell (an agent's tool shell, for
+instance) never sources, so every script would quietly skip. When `zsh` is installed the runner
+therefore re-execs itself under `zsh -ic` to pick those keys up. Set `COOLHAND_EXAMPLES_NO_ZSH=1`
+to use the current environment as-is.
+
+Other knobs: `COOLHAND_EXAMPLES_TIMEOUT` (seconds per script, default 600; a timeout is a `FAIL`),
+`COOLHAND_EXAMPLES_DIR` (scripts to run) and `COOLHAND_EXAMPLES_LOG_DIR` (where logs go; files are
+written owner-only since they can contain provider request/response data). The scripts run
+side by side, so if `benchmark_async_logging.rb` fails on a latency budget, re-run it alone
+before treating it as a real regression.
+
+Interrupting the runner (Ctrl-C or `TERM`) kills every running script's process group and exits 130.
+
 ## Benchmark: `benchmark_async_logging.rb`
 
 Unlike the scripts above, this one is a pass/fail performance check for async logging
 (`config.async_logging`): it measures how much latency Coolhand adds to an intercepted call and
 whether a slow Coolhand backend leaks into it. It exits non-zero if an assertion fails, so
-`/prep-release` picks it up when it runs every script in this directory. With no keys set it runs
+`bin/live-examples` (and so `/prep-release`) picks it up. With no keys set it runs
 only the local scenario and exits 0; the live scenario is skipped.
 
 ```bash
