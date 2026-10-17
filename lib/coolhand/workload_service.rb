@@ -3,15 +3,17 @@
 require_relative "api_service"
 require_relative "pagination"
 require_relative "read_query"
+require_relative "write_requests"
 
 module Coolhand
   # Rows stay plain Symbol-keyed Hashes so a field the server adds later is not dropped in transit.
   WorkloadSearchResult = Struct.new(:workloads, :pagination, keyword_init: true)
 
-  # Read-only. Requires the client's **private** key. There is no per-id endpoint.
-  # See docs/workload-search.md.
+  # Lists workloads and upserts them by key. Requires the client's **private** key. There is no per-id
+  # endpoint. See docs/workload-search.md and docs/declared_workloads.md.
   class WorkloadService < ApiService
     include ReadQuery
+    include WriteRequests
 
     ERROR_NOUN = "Workload"
 
@@ -41,6 +43,14 @@ module Coolhand
         workloads: workloads,
         pagination: Pagination.from_headers(response, items: workloads, page: page, per: per)
       ).freeze
+    end
+
+    # Creates the workload with this `key`, or updates the existing one. The key is immutable; a new
+    # `name` renames the display name. Returns the workload Hash (the server answers 201 on create,
+    # 200 on update). Raises {Coolhand::HttpError} on a non-2xx response. See docs/declared_workloads.md.
+    def upsert(key:, name: nil, description: nil, reporter: nil)
+      body = { name: name, description: description, reporter: reporter }.compact
+      request_json(:put, by_key_url("upsert", key), ERROR_NOUN, body: body)
     end
   end
 end

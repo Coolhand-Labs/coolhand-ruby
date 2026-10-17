@@ -10,6 +10,9 @@ require_relative "coolhand/errors"
 require_relative "coolhand/version"
 require_relative "coolhand/configuration"
 require_relative "coolhand/collector"
+require_relative "coolhand/declared_context"
+require_relative "coolhand/declarable"
+require_relative "coolhand/rails_auto_declare"
 require_relative "coolhand/log_queue"
 require_relative "coolhand/base_interceptor"
 require_relative "coolhand/net_http_interceptor"
@@ -21,6 +24,8 @@ require_relative "coolhand/optimization_feedback_link_service"
 require_relative "coolhand/workload_service"
 require_relative "coolhand/log_service"
 require_relative "coolhand/webhook_interceptor"
+# Only when Rails is already loaded; the gem has no Rails dependency.
+require_relative "coolhand/railtie" if defined?(Rails::Railtie)
 
 # The main module for the Coolhand gem.
 # It provides the configuration interface and initializes the patching.
@@ -35,6 +40,7 @@ module Coolhand
     def reset_configuration!
       @configuration = Configuration.new
       Thread.current[:coolhand_capture_override] = nil
+      DeclaredContext.clear!
     end
 
     # Provides a block to configure the gem.
@@ -88,6 +94,19 @@ module Coolhand
       yield
     ensure
       Thread.current[:coolhand_capture_override] = previous
+    end
+
+    # Declares the workload/template that LLM calls captured inside the block belong to. Nested
+    # blocks override per field (`reporter`, `workload`, `template`), innermost wins. `workload` and
+    # `template` are Hashes with `id:` (an existing record) or `key:` (find-or-created), plus optional
+    # `name:` (and `description:` on a workload). See docs/declared_workloads.md.
+    #
+    # Example:
+    #   Coolhand.with_context(reporter: "squishling", workload: { key: "Parser#call" }) { client.chat(...) }
+    def with_context(reporter: nil, workload: nil, template: nil, &block)
+      raise ArgumentError, "Coolhand.with_context requires a block" unless block
+
+      DeclaredContext.with(reporter: reporter, workload: workload, template: template, &block)
     end
 
     # Blocks until log requests queued by async logging have been sent, or the timeout (in
