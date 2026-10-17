@@ -108,7 +108,7 @@ RSpec.describe Coolhand::Declarable do
   end
 
   describe ".coolhand_workload" do
-    it "shares one workload across methods when a key is given, and adds source and name" do
+    it "shares one workload across methods when a key is given, and adds reporter and name" do
       klass = define_class(name: "Svc") do
         include Coolhand::Declarable
 

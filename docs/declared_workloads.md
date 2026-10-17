@@ -85,7 +85,7 @@ end
 - `coolhand_declare :call, :other` wraps just those methods, whether they are defined before or after the line. `template:` takes a key or a `{ key:, name: }` Hash instead of the default `"ClassName#method"`: `coolhand_declare :call, template: "Parser#call/summarise"`.
 - `coolhand_declare_all` wraps every public instance method defined after it, in the class and its subclasses, so put it at the top of the class body. Private and protected methods are left alone, however they are made private (`private def`, `private :name`, or a `private` section), as are attribute readers and writers and object-protocol methods such as `to_s`, `==` and `method_missing`. A method you name in `coolhand_declare` is wrapped regardless.
 - The key uses the **runtime** class, so a method inherited from `ApplicationService` declares as `Parser#call` when called on a `Parser`. Anonymous classes are not declared.
-- `coolhand_workload(key:, name:, description:, reporter:)` sets class-level defaults and is inherited by subclasses, field by field, with the nearest class winning. Without a `key`, each method gets its own workload, `ClassName#method`.
+- `coolhand_workload(key:, name:, description:, reporter:)` sets class-level defaults and is inherited by subclasses, field by field, with the nearest class winning. Without a `key`, each method gets its own workload, `ClassName#method`. `name` and `description` need a `key`, since one name shared by per-method workloads would collide.
 - Services that call each other nest: the innermost wrapped method wins, and it brings its own template (see [Nesting](#nesting)).
 - It only works where the LLM call runs on the same thread and fiber as the wrapped method.
 

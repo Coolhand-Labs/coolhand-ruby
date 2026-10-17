@@ -119,11 +119,25 @@ RSpec.describe Coolhand::DeclaredContext do
       Coolhand.with_context(workload: { key: "k" * 255 }) { nil }
     end
 
+    it "rejects keys with a broken or non-UTF-8 encoding with ArgumentError" do
+      ["\xff", "caf\xC3\xA9".b, "k".encode("UTF-16LE")].each do |key|
+        expect { Coolhand.with_context(workload: { key: key }) { nil } }.to raise_error(ArgumentError, /key must be/)
+      end
+      expect(described_class.valid_key?("\xff")).to be false
+    end
+
     it "rejects a template key with no workload, but allows an id or an enclosing workload" do
       expect { Coolhand.with_context(template: { key: "t" }) { nil } }.to raise_error(ArgumentError, /needs a workload/)
       Coolhand.with_context(template: { id: "abc" }) { nil }
       Coolhand.with_context(workload: { key: "w" }) do
         Coolhand.with_context(template: { key: "t" }) { expect(described_class.current[:template]).to eq(key: "t") }
+      end
+    end
+
+    it "treats a blank id as not given and ignores keys that are not strings or symbols" do
+      Coolhand.with_context(workload: { id: "  " }) { expect(described_class.current).to be_nil }
+      Coolhand.with_context(workload: { id: "", key: "w", 1 => 2 }) do
+        expect(described_class.current[:workload]).to eq(key: "w")
       end
     end
 

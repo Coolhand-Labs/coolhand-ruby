@@ -95,7 +95,7 @@ module Coolhand
         return true if coolhand_declaration(method_name)
 
         public_method_defined?(method_name) && !SKIPPED_METHODS.include?(method_name) &&
-          !attribute_definition? && coolhand_declare_all?
+          coolhand_declare_all? && !attribute_definition?
       end
 
       # True while `attr_reader`/`attr_writer`/`attr_accessor` is what is defining the method. Read from

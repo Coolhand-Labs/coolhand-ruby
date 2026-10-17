@@ -63,6 +63,8 @@ module Coolhand
 
     def valid_key?(key)
       key.is_a?(String) && key.length <= MAX_KEY_LENGTH && KEY_FORMAT.match?(key)
+    rescue ArgumentError, EncodingError
+      false # a string with a broken or incompatible encoding is not a valid key
     end
 
     # A template given by key, with no workload to create it in, is a 422 that drops the log. A
@@ -81,8 +83,12 @@ module Coolhand
       raise ArgumentError, "#{name} must be a Hash, got #{value.class}" unless value.is_a?(Hash)
 
       part = value.each_with_object({}) do |(k, v), acc|
-        field = k.to_sym
-        acc[field] = v.to_s.dup.freeze if fields.include?(field) && !v.nil?
+        field = k.respond_to?(:to_sym) ? k.to_sym : nil
+        next unless fields.include?(field) && !v.nil?
+        # A blank id refers to nothing and would 422 the log, so it counts as not given.
+        next if field == :id && v.to_s.strip.empty?
+
+        acc[field] = v.to_s.dup.freeze
       end
       return nil if part.empty?
 
