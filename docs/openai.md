@@ -59,6 +59,10 @@ end
 # ...existing code...
 ```
 
+## Signature header and secret rotation
+
+The `webhook-signature` header may carry several space-separated signatures (`v1,sigA v1,sigB`), as senders produce while a webhook secret is being rotated. `Coolhand::OpenAi::WebhookValidator` accepts the request if any `v1,` entry matches your secret, comparing each in constant time and ignoring entries with any other version prefix. The timestamp and replay checks below still run, and only after a signature matches.
+
 ## Replay protection
 
 `Coolhand::OpenAi::WebhookValidator` rejects requests whose `webhook-timestamp` is more than **300 seconds** away from the current time, and rejects a `webhook-id` it has already seen within that window — this prevents a captured request (from a log aggregator, APM trace, or proxy log) from being replayed to re-trigger `Coolhand::OpenAi::BatchResultProcessor`.

@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal de-duplication with no behavior change ([#156](https://github.com/Coolhand-Labs/coolhand-ruby/pull/156)): list reads share `ReadQuery#fetch_list`, `LoggerService` shares one webhook-rejection path, `OpenAi::WebhookValidator` shares one enforce-or-allow path (same error messages and same strict/lenient behavior by `Rails.env`), and `Coolhand.with_capture` / `without_capture` share one override helper. `contract/` (declared, intentional duplication) is excluded from the gem package.
 - CI: added the `exhale` duplication and complexity gate ([#156](https://github.com/Coolhand-Labs/coolhand-ruby/pull/156)), and bumped `ruby/setup-ruby` to 1.329.0 ([#150](https://github.com/Coolhand-Labs/coolhand-ruby/pull/150)) and `actions/upload-artifact` to 7.0.2 ([#151](https://github.com/Coolhand-Labs/coolhand-ruby/pull/151)).
 
+### Fixed
+- `OpenAi::WebhookValidator` now accepts a `webhook-signature` header carrying several space-separated signatures (`v1,sigA v1,sigB`) and passes if any `v1,` entry matches ([#161](https://github.com/Coolhand-Labs/coolhand-ruby/pull/161)). Previously the whole remainder after `v1,` was compared as one value, so a legitimate webhook sent during secret rotation was rejected with a 401. Every candidate is compared in constant time, non-`v1` entries are ignored, a header that is not valid UTF-8 is rejected rather than raising, and the timestamp and replay-id checks still run only after a match. Single-signature headers behave as before. See [OpenAI Batch Webhook Handler](docs/openai.md#signature-header-and-secret-rotation).
+
+### Security
+- Warnings returned in a Coolhand log response are now sanitized before they are printed ([#162](https://github.com/Coolhand-Labs/coolhand-ruby/pull/162)): entries are coerced with `to_s`, invalid UTF-8 is scrubbed, control characters and line separators become a space, invisible Unicode format characters are removed, entries over 500 characters are truncated, and at most 5 are printed per response. Well-formed warnings print as before.
+
+### Documentation
+- `docs/declared_workloads.md` and the README now state that `Coolhand.with_context`, `with_capture` and `without_capture` are fiber-local, so work started in a new Fiber or Async task inside the block is not covered, and show opening the block inside the Fiber instead ([#160](https://github.com/Coolhand-Labs/coolhand-ruby/pull/160)).
+
 ## [0.8.0] - 2026-10-09
 
 ### Added
