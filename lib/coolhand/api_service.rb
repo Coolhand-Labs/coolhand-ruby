@@ -6,12 +6,14 @@ require "json"
 require_relative "collector"
 require_relative "errors"
 require_relative "read_requests"
+require_relative "response_warnings"
 
 module Coolhand
   class ApiService
     # The GET half of this class. See Coolhand::ReadRequests for why reads raise where writes
     # log and return nil.
     include ReadRequests
+    include ResponseWarnings
 
     # Caps how much of a failed response body is interpolated into a log line or an exception
     # message. Without it an oversized body from a proxy or gateway becomes the message.
@@ -120,13 +122,6 @@ module Coolhand
         log "❌ Request error: #{e.message}"
         nil
       end
-    end
-
-    # The server ingests a log normally but ignores a declared workload/template it cannot honour
-    # (e.g. over the public-key cap), and says so here.
-    def log_response_warnings(result)
-      warnings = result.is_a?(Hash) ? Array(result[:warnings]) : []
-      warnings.each { |warning| log "⚠️ Coolhand: #{warning}" }
     end
 
     def log(*args)

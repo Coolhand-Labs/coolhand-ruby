@@ -86,6 +86,103 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "server-supplied response warnings" do
+    let(:request_data) do
+      { method: "POST", url: "https://api.openai.com/v1/chat/completions",
+        request_body: {}, response_body: {}, status_code: 200 }
+    end
+
+    before { Coolhand.configuration.silent = false }
+
+    # Returns every stdout line except the success message, so a forged line would show up.
+    def warning_lines(warnings)
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 200, body: { id: 1, warnings: warnings }.to_json)
+
+      out = StringIO.new
+      original = $stdout
+      $stdout = out
+      begin
+        described_class.new.send_llm_request_log(request_data)
+      ensure
+        $stdout = original
+      end
+      out.string.lines.map(&:chomp).reject { |line| line.include?("Successfully sent request metadata") }
+    end
+
+    it "prints a well-formed warning unchanged" do
+      expect(warning_lines(["Declared workload was ignored: over cap"]))
+        .to eq(["⚠️ Coolhand: Declared workload was ignored: over cap"])
+    end
+
+    it "does not let newlines forge extra log lines" do
+      lines = warning_lines(["first\nsecond\r\n✅ Forged: success"])
+
+      expect(lines).to eq(["⚠️ Coolhand: first second ✅ Forged: success"])
+    end
+
+    it "strips ANSI escape bytes" do
+      lines = warning_lines(["\e[31mred\e[0m \e]0;title\a text"])
+
+      expect(lines.join).not_to match(/[\e\a]/)
+      expect(lines.first).to include("red")
+    end
+
+    it "replaces C1 and Unicode separators with a space and removes format characters" do
+      lines = warning_lines(["a\u0085b\u2028c\u2029d\u202Ee\u200Bf"])
+
+      expect(lines).to eq(["⚠️ Coolhand: a b c def"])
+    end
+
+    it "scrubs invalid UTF-8 bytes" do
+      text = described_class.new.send(:sanitize_warning, "bad \xFF byte")
+
+      expect(text).to be_valid_encoding
+      expect(text).to start_with("bad")
+    end
+
+    it "accepts a bare String instead of an Array" do
+      expect(warning_lines("just one")).to eq(["⚠️ Coolhand: just one"])
+    end
+
+    it "keeps an entry of exactly the maximum length and truncates one character more" do
+      limit = Coolhand::ResponseWarnings::MAX_WARNING_LENGTH
+
+      expect(warning_lines(["a" * limit]).first).to eq("⚠️ Coolhand: #{'a' * limit}")
+      expect(warning_lines(["a" * (limit + 1)]).first).to end_with("... [truncated]")
+    end
+
+    it "truncates an oversized entry" do
+      lines = warning_lines(["a" * 10_000])
+
+      expect(lines.size).to eq(1)
+      expect(lines.first).to end_with("... [truncated]")
+      expect(lines.first.length).to be < 600
+    end
+
+    it "coerces non-String entries with to_s" do
+      lines = warning_lines([42, { code: "over_cap" }, nil])
+
+      expect(lines.size).to eq(3)
+      expect(lines.first).to eq("⚠️ Coolhand: 42")
+      expect(lines[1]).to include("over_cap")
+    end
+
+    it "prints exactly the maximum number of warnings with no omitted line" do
+      lines = warning_lines(Array.new(Coolhand::ResponseWarnings::MAX_WARNINGS) { |i| "w#{i}" })
+
+      expect(lines.size).to eq(Coolhand::ResponseWarnings::MAX_WARNINGS)
+      expect(lines.join).not_to include("omitted")
+    end
+
+    it "caps how many warnings are printed per response" do
+      lines = warning_lines(Array.new(12) { |i| "warning #{i}" })
+
+      expect(lines.size).to eq(Coolhand::ResponseWarnings::MAX_WARNINGS + 1)
+      expect(lines.last).to match(/and 7 more warning\(s\) omitted/)
+    end
+  end
+
   describe "debug_mode with send_llm_request_log" do
     let(:service) { described_class.new }
     let(:request_data) do
