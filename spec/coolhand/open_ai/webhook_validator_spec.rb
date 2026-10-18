@@ -207,6 +207,120 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       end
     end
 
+    context "when the header carries multiple space-separated signatures (secret rotation)" do
+      context "when the valid signature is second" do
+        let(:signature_header) { "v1,bogus v1,#{valid_signature}" }
+
+        it "returns true" do
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the valid signature is first" do
+        let(:signature_header) { "v1,#{valid_signature} v1,bogus" }
+
+        it "returns true" do
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when no signature is valid" do
+        let(:signature_header) { "v1,bogus1 v1,bogus2" }
+
+        it "returns false" do
+          expect(validator.valid?).to be false
+          expect(validator.error_message).to include("OpenAI webhook signature verification failed")
+        end
+      end
+
+      context "when the valid signature is under a different version" do
+        let(:signature_header) { "v1,bogus v2,#{valid_signature}" }
+
+        it "ignores non-v1 entries and returns false" do
+          expect(validator.valid?).to be false
+        end
+      end
+
+      context "when the timestamp is stale" do
+        let(:timestamp) { (Time.now.to_i - 301).to_s }
+        let(:signature_header) { "v1,bogus v1,#{valid_signature}" }
+
+        it "still rejects after a signature match" do
+          expect(validator.valid?).to be false
+          expect(validator.error_message).to include("timestamp outside replay-protection tolerance window")
+        end
+      end
+
+      context "when the webhook id is replayed" do
+        let(:signature_header) { "v1,bogus v1,#{valid_signature}" }
+
+        it "rejects the replay" do
+          expect(validator.valid?).to be true
+          replay = described_class.new(request, webhook_secret)
+          expect(replay.valid?).to be false
+          expect(replay.error_message).to include("already processed")
+        end
+      end
+
+      context "when an entry is a bare v1, with an empty signature" do
+        let(:signature_header) { "v1, v1,#{valid_signature}" }
+
+        it "does not match the empty entry but still accepts the valid one" do
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the only entry is a bare v1," do
+        let(:signature_header) { "v1," }
+
+        it "returns false" do
+          expect(validator.valid?).to be false
+        end
+      end
+
+      context "when entries are separated by irregular whitespace" do
+        let(:signature_header) { " v1,bogus \t  v1,#{valid_signature} " }
+
+        it "returns true" do
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the header is not valid UTF-8" do
+        let(:signature_header) { (+"v1,\xFF").force_encoding("UTF-8") }
+
+        it "returns false instead of raising" do
+          expect(validator.valid?).to be false
+        end
+      end
+
+      context "when one entry is not valid UTF-8 but another is valid" do
+        let(:signature_header) { "v1,\xFF v1,#{valid_signature}".force_encoding("UTF-8") }
+
+        it "returns true" do
+          expect(validator.valid?).to be true
+        end
+      end
+
+      context "when no entry is v1" do
+        let(:signature_header) { "v2,bogus" }
+
+        it "returns false" do
+          expect(validator.valid?).to be false
+        end
+      end
+
+      context "when the secret is a bare whsec_ (empty key)" do
+        let(:webhook_secret) { "whsec_" }
+        let(:secret_bytes) { "" }
+        let(:signature_header) { "v1,bogus v1,#{valid_signature}" }
+
+        it "rejects even a signature made with the empty key" do
+          expect(validator.valid?).to be false
+        end
+      end
+    end
+
     context "with whsec_ prefixed secret" do
       let(:webhook_secret) { "whsec_MzBOMFki+RuS5YQqmN2O85Dj1/sOFHdncBhwXECP+VY=" }
 
