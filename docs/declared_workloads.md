@@ -75,7 +75,7 @@ end
 
 ### Public keys
 
-Declarations made with a public key are capped per client at 200 workloads and 1,000 templates. Past the cap, Coolhand ignores the declaration, ingests the log normally, and returns a warning, which the gem prints unless `config.silent` is on. Declarations from a private key are not capped.
+Declarations made with a public key are capped per client at 200 workloads and 1,000 templates. Past the cap, Coolhand ignores the declaration, ingests the log normally, and returns a warning, which the gem prints unless `config.silent` is on. Server-supplied warnings are sanitized before printing (control and invisible characters removed, each entry cut at 500 characters, at most 5 printed per response). Declarations from a private key are not capped.
 
 Older Coolhand servers ignore `declared`, so it is safe to use against them.
 

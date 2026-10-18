@@ -153,11 +153,7 @@ module Coolhand
       end
 
       def coolhand_declaration(method_name)
-        coolhand_each_class do |klass|
-          declared = klass.coolhand_own_state[1]
-          return declared[method_name] if declared&.key?(method_name)
-        end
-        nil
+        coolhand_nearest(1, method_name)
       end
 
       def coolhand_template_for(method_name)
@@ -165,9 +161,15 @@ module Coolhand
       end
 
       def coolhand_setting(field)
+        coolhand_nearest(0, field)
+      end
+
+      # The value for `key` in the nearest class whose own state (slot `slot` of `coolhand_own_state`)
+      # sets it, or nil.
+      def coolhand_nearest(slot, key)
         coolhand_each_class do |klass|
-          settings = klass.coolhand_own_state[0]
-          return settings[field] if settings&.key?(field)
+          state = klass.coolhand_own_state[slot]
+          return state[key] if state&.key?(key)
         end
         nil
       end
