@@ -15,24 +15,8 @@ module Coolhand
     # Helper method for forwarding webhook data to Coolhand
     def forward_webhook(webhook_body:, source:, event_type: nil, headers: {}, **options)
       # Validate required parameters
-      unless Coolhand.required_field?(webhook_body)
-        error_msg = "webhook_body is required and cannot be nil or empty"
-        if Coolhand.configuration.silent
-          puts "COOLHAND WARNING: #{error_msg}"
-          return false
-        else
-          raise ArgumentError, error_msg
-        end
-      end
-
-      unless Coolhand.required_field?(source)
-        error_msg = "source is required and cannot be nil or empty"
-        if Coolhand.configuration.silent
-          puts "COOLHAND WARNING: #{error_msg}"
-          return false
-        else
-          raise ArgumentError, error_msg
-        end
+      { webhook_body: webhook_body, source: source }.each do |name, value|
+        return reject_webhook("#{name} is required and cannot be nil or empty") unless Coolhand.required_field?(value)
       end
 
       # Auto-generate required fields unless provided
@@ -54,6 +38,14 @@ module Coolhand
     end
 
     private
+
+    # Silent mode warns and drops the webhook; otherwise the caller gets the error.
+    def reject_webhook(error_msg)
+      raise ArgumentError, error_msg unless Coolhand.configuration.silent
+
+      puts "COOLHAND WARNING: #{error_msg}"
+      false
+    end
 
     def build_webhook_url(source, event_type)
       base = "webhook://#{source}"

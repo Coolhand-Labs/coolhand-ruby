@@ -34,13 +34,7 @@ module Coolhand
         per: per
       }.compact
 
-      workloads, response = get_json_with_headers(list_url(query), ERROR_NOUN)
-      raise Error, "#{ERROR_NOUN} response was not a JSON array" unless workloads.is_a?(Array)
-
-      WorkloadSearchResult.new(
-        workloads: workloads,
-        pagination: Pagination.from_headers(response, items: workloads, page: page, per: per)
-      ).freeze
+      fetch_list(query, WorkloadSearchResult, :workloads, page: page, per: per)
     end
   end
 end

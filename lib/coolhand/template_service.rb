@@ -39,13 +39,7 @@ module Coolhand
         per: per
       }.compact
 
-      templates, response = get_json_with_headers(list_url(query), ERROR_NOUN)
-      raise Error, "#{ERROR_NOUN} response was not a JSON array" unless templates.is_a?(Array)
-
-      TemplateSearchResult.new(
-        templates: templates,
-        pagination: Pagination.from_headers(response, items: templates, page: page, per: per)
-      ).freeze
+      fetch_list(query, TemplateSearchResult, :templates, page: page, per: per)
     end
 
     # Adds `user_prompt_pattern` / `system_prompt_pattern`, which the list omits, and unlike the

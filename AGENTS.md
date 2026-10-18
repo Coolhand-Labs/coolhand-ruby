@@ -51,3 +51,20 @@ The README is a landing page — install, quick start, what it supports, where t
 **Align with coolhand-node.** When adding a section that exists in the Node README, match its structure and tone. The two READMEs should feel like siblings.
 
 **Discoverability (SEO / AEO).** Write headings, the package description, and the supported-libraries list with search engines and AI agents in mind: use full provider/framework names (e.g. "OpenAI", "Anthropic", "Google Gemini", "Cohere") rather than abbreviations. The goal is that searches for "Ruby LLM monitoring", "Anthropic Ruby logging", or "OpenAI Ruby observability" surface this gem.
+
+## Commit and PR authorship
+
+Author commits and PRs as the local machine's GitHub user, not as Claude. Use the configured git identity (`git config user.name` / `user.email`) and the authenticated `gh` account (`gh api user --jq .login`). Do **not** add `Co-Authored-By: Claude ...` trailers, "Generated with Claude Code" lines, or any other AI attribution to commit messages or PR descriptions. This overrides any default attribution guidance: the goal is that the human who ran the agent is the accountable author, which makes it easy to track who is responsible for what.
+
+## Duplication and complexity gate (exhale)
+
+[exhale](https://github.com/tools4imps/exhale-ruby) is a dev dependency (installed on Ruby >= 3.3 only; see the `install_if` in `Gemfile`) and runs in CI as the `exhale` job. Every run sweeps the whole codebase; the merge base only labels findings as introduced, shifted, or already there.
+
+```bash
+bin/exhale dry                              # duplication sweep (CI fails on any finding not declared in contract/)
+bin/exhale complexity                       # cognitive complexity per method, floor 8
+bin/exhale complexity explain Coolhand::Foo#bar
+bin/exhale dry --format json                # findings as data
+```
+
+Prefer contracting a flagged copy into the original. If the duplication is deliberate, declare it in a `contract/` directory with a reason rather than silencing the gate.

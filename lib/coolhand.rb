@@ -74,20 +74,12 @@ module Coolhand
       end
     end
 
-    def without_capture
-      previous = Thread.current[:coolhand_capture_override]
-      Thread.current[:coolhand_capture_override] = false
-      yield
-    ensure
-      Thread.current[:coolhand_capture_override] = previous
+    def without_capture(&block)
+      override_capture(false, &block)
     end
 
-    def with_capture
-      previous = Thread.current[:coolhand_capture_override]
-      Thread.current[:coolhand_capture_override] = true
-      yield
-    ensure
-      Thread.current[:coolhand_capture_override] = previous
+    def with_capture(&block)
+      override_capture(true, &block)
     end
 
     # Blocks until log requests queued by async logging have been sent, or the timeout (in
@@ -148,6 +140,17 @@ module Coolhand
       return false if value.to_s.strip.empty?
 
       true
+    end
+
+    private
+
+    # Forces capture on or off for the block on this thread, restoring the previous override after.
+    def override_capture(enabled)
+      previous = Thread.current[:coolhand_capture_override]
+      Thread.current[:coolhand_capture_override] = enabled
+      yield
+    ensure
+      Thread.current[:coolhand_capture_override] = previous
     end
   end
 end
