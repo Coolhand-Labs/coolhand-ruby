@@ -149,7 +149,8 @@ module Coolhand
     end
 
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
-      response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:, source_api: nil, model: nil)
+      response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:, source_api: nil, model: nil,
+      declared: nil)
       raw_request = {
         id: request_id,
         timestamp: start_time.iso8601,
@@ -168,6 +169,7 @@ module Coolhand
       raw_request[:model] = model if Coolhand.required_field?(model)
 
       request_data = { raw_request: raw_request }
+      request_data[:declared] = declared if declared && !declared.empty?
 
       LogQueue.submit do
         Coolhand::ApiService.new.send_llm_request_log(request_data)

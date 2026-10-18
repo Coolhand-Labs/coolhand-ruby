@@ -254,4 +254,52 @@ RSpec.describe Coolhand::WorkloadService do
       end
     end
   end
+
+  describe "#upsert" do
+    let(:key_url) { "#{endpoint}/by_key/Parser%23call/squish%3AL2" }
+    let(:json_headers) { { "Content-Type" => "application/json" } }
+
+    it "PUTs the compacted body to the by_key route with the private key and returns the workload" do
+      stub = stub_request(:put, key_url)
+        .with(headers: { "X-API-Key" => "test-private-key", "Content-Type" => "application/json" },
+          body: { name: "Parser", description: "d", reporter: "squishling" }.to_json)
+        .to_return(status: 201, body: workload.to_json, headers: json_headers)
+
+      result = service.upsert(key: "Parser#call/squish:L2", name: "Parser", description: "d", reporter: "squishling")
+
+      expect(result).to eq(workload)
+      expect(stub).to have_been_requested
+    end
+
+    it "sends an empty body object when only the key is given" do
+      stub = stub_request(:put, "#{endpoint}/by_key/Parser").with(body: "{}")
+        .to_return(status: 200, body: workload.to_json)
+
+      service.upsert(key: "Parser")
+      expect(stub).to have_been_requested
+    end
+
+    it "raises HttpError carrying the status on 401 and 422" do
+      stub_request(:put, "#{endpoint}/by_key/k").to_return({ status: 401, body: '{"error":"no"}' },
+        { status: 422, body: { errors: { external_key: ["is invalid"] } }.to_json })
+
+      expect { service.upsert(key: "k") }.to raise_error(Coolhand::HttpError) { |e| expect(e.status).to eq(401) }
+      expect { service.upsert(key: "k") }.to raise_error(Coolhand::HttpError, /is invalid/) { |e|
+        expect(e.status).to eq(422)
+      }
+    end
+
+    it "raises Error before any request for a blank or dot-segment key" do
+      ["", "  ", nil, "..", "a/../b", ".", "/a", "a/", "a//b"].each do |key|
+        expect { service.upsert(key: key) }.to raise_error(Coolhand::Error, /key must be a non-empty string/)
+      end
+      expect(WebMock).not_to have_requested(:put, /.*/)
+    end
+
+    it "wraps transport failures in Coolhand::Error" do
+      stub_request(:put, "#{endpoint}/by_key/k").to_timeout
+
+      expect { service.upsert(key: "k") }.to raise_error(Coolhand::Error, /Workload request failed/)
+    end
+  end
 end

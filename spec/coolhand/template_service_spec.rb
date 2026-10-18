@@ -468,4 +468,53 @@ RSpec.describe Coolhand::TemplateService do
       expect(Coolhand.template_service).to be_a(described_class)
     end
   end
+
+  describe "#upsert" do
+    let(:key_url) { "#{endpoint}/by_key/Parser%23call/squish%3AL2" }
+    let(:json_headers) { { "Content-Type" => "application/json" } }
+
+    it "PUTs the body with the workload id mapped to workload_id" do
+      stub = stub_request(:put, key_url)
+        .with(headers: { "X-API-Key" => "test-private-key" },
+          body: { name: "squish L2", reporter: "squishling", workload_id: "w1" }.to_json)
+        .to_return(status: 201, body: summary.to_json, headers: json_headers)
+
+      result = service.upsert(key: "Parser#call/squish:L2", workload: { id: "w1" }, name: "squish L2",
+        reporter: "squishling")
+
+      expect(result).to eq(summary)
+      expect(stub).to have_been_requested
+    end
+
+    it "maps a workload key to workload_key" do
+      stub = stub_request(:put, "#{endpoint}/by_key/t").with(body: { workload_key: "Parser#call" }.to_json)
+        .to_return(status: 200, body: summary.to_json)
+
+      service.upsert(key: "t", workload: { "key" => "Parser#call" })
+      expect(stub).to have_been_requested
+    end
+
+    it "omits workload fields when no workload is given" do
+      stub = stub_request(:put, "#{endpoint}/by_key/t").with(body: { name: "renamed" }.to_json)
+        .to_return(status: 200, body: summary.to_json)
+
+      service.upsert(key: "t", name: "renamed")
+      expect(stub).to have_been_requested
+    end
+
+    it "raises HttpError carrying the status on 422" do
+      stub_request(:put, "#{endpoint}/by_key/t")
+        .to_return(status: 422, body: { errors: { workload_id: ["workload was not found"] } }.to_json)
+
+      expect { service.upsert(key: "t", workload: { id: "nope" }) }
+        .to raise_error(Coolhand::HttpError, /workload was not found/) { |e| expect(e.status).to eq(422) }
+    end
+
+    it "raises before any request for a blank key or a non-Hash workload" do
+      expect { service.upsert(key: " ") }.to raise_error(Coolhand::Error, /key must be a non-empty string/)
+      expect { service.upsert(key: "t", workload: "Parser#call") }
+        .to raise_error(ArgumentError, /workload must be a Hash/)
+      expect(WebMock).not_to have_requested(:put, /.*/)
+    end
+  end
 end

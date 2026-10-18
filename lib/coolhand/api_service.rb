@@ -36,7 +36,9 @@ module Coolhand
         log JSON.pretty_generate(sanitize_payload_for_json(payload))
         nil
       else
-        send_request(payload, "✅ Successfully sent request metadata")
+        result = send_request(payload, "✅ Successfully sent request metadata")
+        log_response_warnings(result)
+        result
       end
     end
 
@@ -118,6 +120,13 @@ module Coolhand
         log "❌ Request error: #{e.message}"
         nil
       end
+    end
+
+    # The server ingests a log normally but ignores a declared workload/template it cannot honour
+    # (e.g. over the public-key cap), and says so here.
+    def log_response_warnings(result)
+      warnings = result.is_a?(Hash) ? Array(result[:warnings]) : []
+      warnings.each { |warning| log "⚠️ Coolhand: #{warning}" }
     end
 
     def log(*args)
