@@ -297,7 +297,7 @@ Coolhand.without_capture do
 end
 ```
 
-Both methods are thread-safe. Blocks nest correctly — the innermost block takes precedence, and the outer setting is restored when the block exits.
+Both methods are thread-safe. Blocks nest correctly — the innermost block takes precedence, and the outer setting is restored when the block exits. The override is fiber-local, so it does not follow into new Threads, Fibers or Async tasks started inside the block; see [Threads and background logging](docs/declared_workloads.md#threads-and-background-logging).
 
 ## Logging Inbound Webhooks
 
