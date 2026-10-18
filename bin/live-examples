@@ -1,0 +1,197 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Runs every live script in examples/ concurrently against real provider keys and prints one
+# PASS / SKIP / FAIL line per script. Exits non-zero only on FAIL.
+#
+# Provider keys usually live in the developer's ~/.zshrc, which a non-interactive shell (an
+# agent's tool shell, for instance) never sources; every script would then "skip" and the run
+# would look validated with no live call made. So when zsh is installed this re-execs itself
+# under `zsh -ic`. Set COOLHAND_EXAMPLES_NO_ZSH=1 to use the current environment as-is.
+#
+# Run: bin/live-examples   (or: bundle exec rake examples:live)
+# Env: COOLHAND_EXAMPLES_NO_ZSH   skip the zsh re-exec
+#      COOLHAND_EXAMPLES_DIR      scripts to run (default: examples/)
+#      COOLHAND_EXAMPLES_LOG_DIR  where per-script logs go (default: tmp/live-examples/)
+#      COOLHAND_EXAMPLES_TIMEOUT  per-script timeout in seconds (default: 600); a timeout is a FAIL
+
+require "fileutils"
+require "open3"
+require "rbconfig"
+
+ROOT = File.expand_path("..", __dir__)
+ZSH_GUARD = "COOLHAND_EXAMPLES_IN_ZSH"
+DEFAULT_TIMEOUT_SECONDS = 600
+# Process groups of the scripts currently running, so an interrupted runner can stop them. Each
+# script gets its own group (see capture_with_timeout), so Ctrl-C alone would not reach them.
+# Deliberately a bare Hash: a trap handler can't take a Mutex, and MRI's Hash#[]= / #delete are
+# atomic enough for this use.
+ACTIVE_GROUPS = {}
+
+# Strings the library logs (with `silent: false`) when a log could not be delivered to Coolhand.
+# A provider call can succeed and the script exit 0 while delivery silently failed, so these
+# count as FAIL. Keep in sync with lib/coolhand/api_service.rb, base_interceptor.rb, log_queue.rb
+# and net_http_interceptor.rb.
+DELIVERY_FAILED_MARKERS = [
+  "❌ Request failed",
+  "❌ Request error",
+  "❌ Error sending complete request log",
+  "❌ Error in background log job",
+  "❌ Error capturing request body"
+].freeze
+
+def zsh_installed?
+  ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).any? do |dir|
+    File.executable?(File.join(dir, "zsh"))
+  end
+end
+
+def reexec_under_zsh?
+  ENV["COOLHAND_EXAMPLES_NO_ZSH"].to_s.empty? && ENV[ZSH_GUARD].to_s.empty? && zsh_installed?
+end
+
+# The ruby is passed as a positional arg ("$@") rather than interpolated, so paths with spaces
+# or quotes can't break out of the command string.
+def reexec_under_zsh
+  puts "live-examples: re-running under `zsh -ic` to load provider keys " \
+       "(COOLHAND_EXAMPLES_NO_ZSH=1 to opt out)"
+  $stdout.flush # exec replaces the process without flushing buffered output
+  exec("zsh", "-ic", %(#{ZSH_GUARD}=1 exec "$@"), "live-examples",
+       RbConfig.ruby, File.expand_path(__FILE__), *ARGV)
+end
+
+def classify(success, output)
+  return :fail unless success
+  return :fail if DELIVERY_FAILED_MARKERS.any? { |marker| output.include?(marker) }
+  # The benchmark prints "Skipping live scenario" but still runs (and passes) its local scenario.
+  return :skip if output.match?(/^Skipping /) && !output.match?(/^\s*PASS\s/)
+
+  :pass
+end
+
+# Runs the command in its own process group with stdin closed (so an unexpected prompt can't hang
+# it) and kills the whole group after `timeout` seconds, so a script's own children can't hold the
+# output pipe open. Returns [combined output, success?].
+def capture_with_timeout(timeout, *command)
+  Open3.popen2e(*command, chdir: ROOT, pgroup: true) do |stdin, out, waiter|
+    ACTIVE_GROUPS[waiter.pid] = true
+    stdin.close
+    output = String.new # binary: chunks can split a multibyte character
+    reader = Thread.new do
+      loop { output << out.readpartial(4096) }
+    rescue EOFError, IOError
+      nil
+    end
+
+    timed_out = !waiter.join(timeout)
+    # Kill the group either way: after a timeout it ends the script, and after a normal exit it
+    # reaps any child the script left holding the output pipe open.
+    kill_group(waiter.pid)
+    reader.join(1)
+    text = utf8(output)
+    next ["#{text}\nlive-examples: timed out after #{timeout}s", false] if timed_out
+
+    [text, waiter.value.success?]
+  ensure
+    ACTIVE_GROUPS.delete(waiter.pid)
+  end
+end
+
+def stop_running_scripts
+  ACTIVE_GROUPS.keys.each { |pid| kill_group(pid) }
+end
+
+def utf8(binary)
+  binary.dup.force_encoding(Encoding::UTF_8).scrub # dup: the reader thread may still append
+end
+
+def kill_group(pid)
+  Process.kill("KILL", -pid)
+rescue Errno::ESRCH
+  nil # already gone
+end
+
+# Logs can hold provider request/response data, so keep them owner-only (File.write's perm: only
+# applies when it creates the file, hence the chmod for a log left over from an earlier run).
+def write_log(path, content)
+  File.write(path, content)
+  File.chmod(0o600, path)
+end
+
+def run_script(path, log_dir, timeout)
+  name = File.basename(path)
+  log_path = File.join(log_dir, "#{File.basename(name, '.rb')}.log")
+  output, success = capture_with_timeout(timeout, "bundle", "exec", RbConfig.ruby, path)
+  write_log(log_path, output)
+  { name: name, log: log_path, output: output, result: classify(success, output) }
+rescue StandardError => e
+  output = "live-examples: #{e.class}: #{e.message}"
+  begin
+    write_log(log_path, output)
+  rescue StandardError
+    nil # the report still shows the failure; the log path may simply not exist
+  end
+  { name: name, log: log_path, output: output, result: :fail }
+end
+
+def parse_timeout
+  timeout = Float(ENV.fetch("COOLHAND_EXAMPLES_TIMEOUT", DEFAULT_TIMEOUT_SECONDS))
+  raise ArgumentError, "must be positive" unless timeout.positive?
+
+  timeout
+rescue ArgumentError
+  warn "live-examples: COOLHAND_EXAMPLES_TIMEOUT must be a positive number of seconds"
+  exit 2
+end
+
+def print_report(results)
+  results.each do |r|
+    puts "#{r[:result].to_s.upcase.ljust(4)}  #{r[:name].ljust(32)} #{r[:log]}"
+  end
+  counts = results.group_by { |r| r[:result] }.transform_values(&:size)
+  puts "\n#{counts.fetch(:pass, 0)} passed, #{counts.fetch(:skip, 0)} skipped, #{counts.fetch(:fail, 0)} failed"
+end
+
+def print_failure_tails(results)
+  results.select { |r| r[:result] == :fail }.each do |r|
+    puts "\n--- #{r[:name]} (last 20 lines of #{r[:log]}) ---"
+    puts r[:output].lines.last(20).join
+  end
+end
+
+def main
+  reexec_under_zsh if reexec_under_zsh?
+
+  %w[INT TERM].each do |signal|
+    trap(signal) do
+      stop_running_scripts
+      exit 130
+    end
+  end
+
+  scripts = Dir[File.join(ENV.fetch("COOLHAND_EXAMPLES_DIR", File.join(ROOT, "examples")), "*.rb")].sort
+  if scripts.empty?
+    warn "live-examples: no scripts found"
+    exit 1
+  end
+
+  timeout = parse_timeout
+  log_dir = ENV.fetch("COOLHAND_EXAMPLES_LOG_DIR", File.join(ROOT, "tmp", "live-examples"))
+  FileUtils.mkdir_p(log_dir, mode: 0o700)
+  File.chmod(0o700, log_dir)
+  puts "live-examples: running #{scripts.size} script(s) concurrently, logs in #{log_dir}\n\n"
+
+  results = scripts.map { |path| Thread.new { run_script(path, log_dir, timeout) } }.map(&:value)
+
+  print_report(results)
+  print_failure_tails(results)
+
+  if results.all? { |r| r[:result] == :skip }
+    warn "\nWARNING: every script was skipped, so no live call was made. Provider keys are " \
+         "likely not visible to this shell; this run does NOT validate the release."
+  end
+
+  exit(results.any? { |r| r[:result] == :fail } ? 1 : 0)
+end
+
+main if $PROGRAM_NAME == __FILE__
