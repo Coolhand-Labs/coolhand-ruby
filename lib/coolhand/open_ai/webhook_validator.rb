@@ -7,6 +7,9 @@ require_relative "webhook_id_store"
 module Coolhand
   module OpenAi
     class WebhookValidator
+      SIGNATURE_VERSION_PREFIX = "v1,"
+      private_constant :SIGNATURE_VERSION_PREFIX
+
       attr_reader :request, :errors, :payload
 
       def initialize(request, webhook_secret)
@@ -97,8 +100,7 @@ module Coolhand
         expected_signature = calculate_expected_signature(secret_bytes, signed_payload)
 
         # An empty key (a bare "whsec_" secret) makes the HMAC forgeable by anyone, so never accept it.
-        signature_valid = !secret_bytes.empty? && webhook_signature.start_with?("v1,") &&
-                          secure_compare(webhook_signature[3..], expected_signature)
+        signature_valid = !secret_bytes.empty? && signature_matches?(webhook_signature, expected_signature)
 
         unless signature_valid
           @errors << "OpenAI webhook signature verification failed"
@@ -110,6 +112,18 @@ module Coolhand
         return false unless webhook_id_unused?(webhook_id)
 
         true
+      end
+
+      # Standard Webhooks allows several space-separated signatures (e.g. during secret rotation);
+      # accept the request if any v1 entry matches. Every candidate is compared (`map`, not an
+      # `any?` block) so there is no early exit on the first match.
+      # Split as binary so a header that isn't valid UTF-8 is rejected rather than raising.
+      def signature_matches?(webhook_signature, expected_signature)
+        candidates = webhook_signature.b.split.select { |entry| entry.start_with?(SIGNATURE_VERSION_PREFIX) }
+        results = candidates.map do |entry|
+          secure_compare(entry.delete_prefix(SIGNATURE_VERSION_PREFIX), expected_signature)
+        end
+        results.any?
       end
 
       # Checked only after the signature is confirmed valid, so an
