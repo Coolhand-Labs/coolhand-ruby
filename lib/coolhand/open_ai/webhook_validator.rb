@@ -41,27 +41,25 @@ module Coolhand
       def payload_valid?
         return true if @payload
 
-        if should_enforce_strict_validation?
-          @errors << "Empty webhook payload - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
-                     "not in development/test allowlist)"
-          Rails.logger.error(@errors.last)
-          false
-        else
-          Rails.logger.warn("Empty webhook payload - allowing in #{Rails.env} environment")
-          true
-        end
+        enforce_or_allow("Empty webhook payload",
+          "Empty webhook payload - allowing in #{Rails.env} environment")
       end
 
       def validate_in_non_production_env
+        enforce_or_allow("OpenAI webhook secret not configured",
+          "Webhook Secret is not configured - skipping signature verification in #{Rails.env}")
+      end
+
+      # Outside the development/test allowlist the webhook is rejected with `problem`; inside it the
+      # check is skipped with a warning.
+      def enforce_or_allow(problem, allow_warning)
         if should_enforce_strict_validation?
-          @errors << "OpenAI webhook secret not configured - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
+          @errors << "#{problem} - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
                      "not in development/test allowlist)"
           Rails.logger.error(@errors.last)
           false
         else
-          Rails.logger.warn(
-            "Webhook Secret is not configured - skipping signature verification in #{Rails.env}"
-          )
+          Rails.logger.warn(allow_warning)
           true
         end
       end

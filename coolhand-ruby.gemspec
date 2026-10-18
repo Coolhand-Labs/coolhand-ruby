@@ -30,7 +30,7 @@ Gem::Specification.new do |spec|
     `git ls-files -z`.split("\x0").reject do |f|
       (File.expand_path(f) == __FILE__) ||
         (f == "AGENTS.md") ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ examples/ .git .claude .idea appveyor Gemfile])
+        f.start_with?(*%w[bin/ contract/ test/ spec/ features/ examples/ .git .claude .idea appveyor Gemfile])
     end
   end
   spec.bindir = "exe"

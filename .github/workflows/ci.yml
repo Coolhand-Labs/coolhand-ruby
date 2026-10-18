@@ -85,6 +85,36 @@ jobs:
       - name: Audit dependencies for known vulnerabilities
         run: bundle exec bundler-audit check --update
 
+  exhale:
+    name: Duplication & Complexity (exhale)
+    # exhale judges a change against its merge base, so it only has something to compare on PRs.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      BASE_REF: ${{ github.base_ref }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # exhale needs history for the merge base and git blame
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: '3.3' # exhale requires Ruby >= 3.3
+          bundler-cache: true
+
+      - name: exhale dry
+        shell: bash
+        run: bin/exhale dry --base "origin/$BASE_REF" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: exhale complexity
+        shell: bash
+        run: bin/exhale complexity --base "origin/$BASE_REF" | tee -a "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build Gem
     runs-on: ubuntu-latest

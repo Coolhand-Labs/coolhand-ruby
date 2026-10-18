@@ -20,7 +20,14 @@ group :development, :test do
   gem "test-prof", "~> 1.4.4"
   gem "webmock", "~> 3.19"
 
-  # No Ruby-version-conditional gems here: the committed Gemfile.lock is installed in frozen
-  # mode on every Ruby in the CI matrix, so the Gemfile must resolve identically everywhere.
+  # exhale (duplication/complexity gate) requires Ruby >= 3.3, but the CI matrix and the shared
+  # Gemfile.lock cover older Rubies. install_if keeps it locked everywhere and installed only where it runs.
+  install_if -> { Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.3") } do
+    gem "exhale", "~> 0.2", require: false
+  end
+
+  # No resolution-affecting Ruby-version conditionals here (use install_if, as above, never `if RUBY_VERSION`):
+  # the committed Gemfile.lock is installed in frozen mode on every Ruby in the CI matrix, so the
+  # Gemfile must resolve identically everywhere.
   gem "pry"
 end

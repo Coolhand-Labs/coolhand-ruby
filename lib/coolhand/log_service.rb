@@ -47,13 +47,7 @@ module Coolhand
         per: per
       }.compact
 
-      logs, response = get_json_with_headers(list_url(query), ERROR_NOUN)
-      raise Error, "#{ERROR_NOUN} response was not a JSON array" unless logs.is_a?(Array)
-
-      LogSearchResult.new(
-        logs: logs,
-        pagination: Pagination.from_headers(response, items: logs, page: page, per: per)
-      ).freeze
+      fetch_list(query, LogSearchResult, :logs, page: page, per: per)
     end
 
     # The full log, with `cost` and `cost_breakdown`. Both are nil when the log has no tokens or its

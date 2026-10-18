@@ -4,6 +4,7 @@ require "date"
 require "time"
 require "uri"
 require_relative "errors"
+require_relative "pagination"
 
 module Coolhand
   # URL building shared by the read services. Everything goes through `URI.encode_www_form`, so a
@@ -15,6 +16,19 @@ module Coolhand
       uri = URI.parse(api_endpoint)
       uri.query = URI.encode_www_form(query) unless query.empty?
       uri
+    end
+
+    # GETs a list endpoint and wraps the JSON array and its pagination headers in `result_class`,
+    # keyed by `rows_key` (the field the result struct names its rows by).
+    def fetch_list(query, result_class, rows_key, page:, per:)
+      noun = self.class::ERROR_NOUN
+      rows, response = get_json_with_headers(list_url(query), noun)
+      raise Error, "#{noun} response was not a JSON array" unless rows.is_a?(Array)
+
+      result_class.new(
+        rows_key => rows,
+        pagination: Pagination.from_headers(response, items: rows, page: page, per: per)
+      ).freeze
     end
 
     def resource_url(id, blank_message, query = {})
