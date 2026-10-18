@@ -53,6 +53,26 @@ A `workload` or `template` Hash is replaced as a whole, not merged key by key. A
 
 The context is thread-local, like `Coolhand.with_capture`. It is also fiber-local, so it does not carry into threads, fibers, `Enumerator#next` blocks or async tasks you start inside the block; calls made there are captured without a declaration. The identity is read on the thread that made the LLM call, before the log is queued, so it survives `async_logging` (the default).
 
+This matters for Fiber-scheduler concurrency such as [Async](https://github.com/socketry/async). Nothing raises: the call is logged, just without a workload or template.
+
+```ruby
+Coolhand.with_context(workload: { key: "Parser#call" }) do
+  Async do
+    client.chat(...) # runs in a new Fiber: captured with no declared workload
+  end
+end
+```
+
+`Coolhand.with_capture` and `Coolhand.without_capture` work the same way, so a `without_capture` block does not suppress calls made from a Fiber started inside it, and with `config.capture = false` a `with_capture` block does not enable them. To cover work that runs in another Fiber, open the block inside that Fiber:
+
+```ruby
+Async do
+  Coolhand.with_context(workload: { key: "Parser#call" }) do
+    client.chat(...) # captured with the declared workload
+  end
+end
+```
+
 ### Public keys
 
 Declarations made with a public key are capped per client at 200 workloads and 1,000 templates. Past the cap, Coolhand ignores the declaration, ingests the log normally, and returns a warning, which the gem prints unless `config.silent` is on. Declarations from a private key are not capped.
@@ -87,7 +107,7 @@ end
 - The key uses the **runtime** class, so a method inherited from `ApplicationService` declares as `Parser#call` when called on a `Parser`. Anonymous classes are not declared.
 - `coolhand_workload(key:, name:, description:, reporter:)` sets class-level defaults and is inherited by subclasses, field by field, with the nearest class winning. Without a `key`, each method gets its own workload, `ClassName#method`. `name` and `description` need a `key`, since one name shared by per-method workloads would collide.
 - Services that call each other nest: the innermost wrapped method wins, and it brings its own template (see [Nesting](#nesting)).
-- It only works where the LLM call runs on the same thread and fiber as the wrapped method.
+- It only works where the LLM call runs on the same thread and fiber as the wrapped method (see [Threads and background logging](#threads-and-background-logging)).
 
 ## Rails auto-declare
 
