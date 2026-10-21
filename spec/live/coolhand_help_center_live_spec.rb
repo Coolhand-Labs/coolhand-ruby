@@ -7,10 +7,10 @@ require "webmock/rspec"
 #   COOLHAND_SPEC_LIVE_BASE_URL=http://127.0.0.1:3000/api
 # to exercise it. Makes about nine anonymous requests, so repeated runs within a minute can hit the
 # 30/min/IP limit (429). Creates and mutates nothing.
-PUBLIC_CONTENT_LIVE = !ENV.fetch("COOLHAND_SPEC_LIVE_BASE_URL", "").strip.empty?
+HELP_CENTER_LIVE = !ENV.fetch("COOLHAND_SPEC_LIVE_BASE_URL", "").strip.empty?
 
-RSpec.describe Coolhand, if: PUBLIC_CONTENT_LIVE do
-  let(:service) { Coolhand.public_content_service }
+RSpec.describe Coolhand, if: HELP_CENTER_LIVE do
+  let(:service) { Coolhand.help_center_service }
 
   before do
     WebMock.allow_net_connect!

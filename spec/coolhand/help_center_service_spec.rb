@@ -3,7 +3,7 @@
 require "spec_helper"
 require "webmock/rspec"
 
-RSpec.describe Coolhand::PublicContentService do
+RSpec.describe Coolhand::HelpCenterService do
   let(:endpoint) { "https://coolhandlabs.com/api/v2/public_content" }
   let(:api_key) { nil }
   let(:config) do
@@ -54,9 +54,9 @@ RSpec.describe Coolhand::PublicContentService do
     )
   end
 
-  describe "Coolhand.public_content_service" do
+  describe "Coolhand.help_center_service" do
     it "builds the service" do
-      expect(Coolhand.public_content_service).to be_a(described_class)
+      expect(Coolhand.help_center_service).to be_a(described_class)
     end
   end
 
