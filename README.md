@@ -118,6 +118,24 @@ Coolhand.log_service.search_logs(order: 'cost_desc', min_cost: 1.0, per: 10, **w
 
 See [Reading Workloads →](docs/workload-search.md) and [Reading Logs →](docs/log-search.md).
 
+## Reading the Help Center
+
+`Coolhand.public_content_service` reads the Coolhand help center (the same pages as coolhandlabs.com/help and /updates) with **no API key required**:
+
+```ruby
+require 'coolhand'
+
+help_center = Coolhand.public_content_service
+
+result = help_center.search_help_articles(query: 'match rate', per_page: 5)
+article = help_center.get_help_article(result.articles.first[:slug]) # full markdown :body
+categories = help_center.list_help_categories
+```
+
+Anonymous callers are limited to 30 requests per minute per IP. If `config.api_key` is set it is sent and lifts the limit; a key the server rejects raises a 401 `Coolhand::HttpError`. These are read methods, so they **raise** where the write methods log and return `nil`.
+
+See [Reading the Help Center →](docs/help-center.md) for parameters, the category filter and errors.
+
 ## Linking Feedback to an Optimization
 
 Attach feedback to an optimization as evidence, one at a time or in bulk. These require your **private** API key and **raise** `Coolhand::Error` on failure (`Coolhand::HttpError` for non-2xx responses).
@@ -488,7 +506,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
+- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
 
 ## Documentation
 
@@ -497,6 +515,7 @@ The monitor handles errors gracefully:
 - **[Reading Templates](docs/template-search.md)** — Search LLM request templates and fetch a single one, prompt patterns included, using the private API key
 - **[Reading Workloads](docs/workload-search.md)** — List workloads with optional cost and performance metrics over a rolling or explicit time window
 - **[Reading Logs](docs/log-search.md)** — Search logs with per-log cost, filter and sort by cost, and fetch one log with its cost breakdown
+- **[Reading the Help Center](docs/help-center.md)** — Search and read Coolhand's help center articles and list its sections, with no API key required
 - **[Linking Feedback](docs/feedback-links.md)** — Link feedback to an optimization as evidence, singly or in bulk, using the private API key
 - **[Declared Workloads](docs/declared_workloads.md)** — Declare the workload and template of captured LLM calls with `Coolhand.with_context`, and create or rename them with `upsert`
 - **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting

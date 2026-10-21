@@ -29,13 +29,20 @@ module Coolhand
 
     # Also returns the response, for endpoints that carry pagination in headers rather than the body.
     def get_json_with_headers(url, noun)
-      raise Error, "#{noun} request failed: an API key is required" unless Coolhand.required_field?(api_key)
+      if api_key_required? && !Coolhand.required_field?(api_key)
+        raise Error, "#{noun} request failed: an API key is required"
+      end
 
       response = perform_get(url, noun)
 
       raise_http_error(response, noun) unless response.is_a?(Net::HTTPSuccess)
 
       [parse_json_body(response.body, noun), response]
+    end
+
+    # Overridden by services over public endpoints, which work anonymously and send the key only if set.
+    def api_key_required?
+      true
     end
 
     private
@@ -45,7 +52,9 @@ module Coolhand
       http = build_http(uri)
 
       request = Net::HTTP::Get.new(uri.request_uri)
-      apply_headers(request, "Accept" => "application/json", "X-API-Key" => api_key)
+      headers = { "Accept" => "application/json" }
+      headers["X-API-Key"] = api_key if Coolhand.required_field?(api_key)
+      apply_headers(request, headers)
 
       # Net::HTTP does not follow redirects, so a 3xx raises rather than replaying the API key at
       # an unapproved host. without_capture is the same recursion guard send_request uses.
