@@ -24,7 +24,7 @@ module Coolhand
         id: options[:id] || SecureRandom.uuid,
         timestamp: options[:timestamp] || Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.%6NZ"),
         method: options[:method] || "POST",
-        url: options[:url] || build_webhook_url(source, event_type),
+        url: BaseInterceptor.sanitize_url(options[:url] || build_webhook_url(source, event_type)),
         headers: sanitize_headers(headers),
         request_body: clean_webhook_body(webhook_body, source),
         response_body: options[:response_body],

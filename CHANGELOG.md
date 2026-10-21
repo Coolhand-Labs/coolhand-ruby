@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-21
+
+### Added
+- **Read the Coolhand help center** ([#164](https://github.com/Coolhand-Labs/coolhand-ruby/pull/164)) — `Coolhand.public_content_service` wraps the read-only help center endpoints: `search_help_articles(query:, category:, page:, per_page:)` returns a `Coolhand::HelpArticleSearchResult` (`articles`, `pagination`), `get_help_article(slug)` returns one article with its markdown `body` and `toc`, and `list_help_categories` lists the sections. Unlike every other read service it needs **no API key**: with none configured no `X-API-Key` header is sent (anonymous callers are limited to 30 requests per minute per IP), and a configured `config.api_key` is sent and lifts the limit. Like the other read methods, these raise `Coolhand::Error` / `Coolhand::HttpError` rather than logging and returning `nil`. See [Reading the Help Center](docs/help-center.md).
+
+### Security
+- `LoggerService#forward_webhook` now redacts credentials (userinfo and sensitive query parameters such as `token=`) in a caller-supplied `url:` before logging it, the same way intercepted request URLs are. **Migration note:** if you pass a `url:` containing such values, they now appear as `[REDACTED]` in Coolhand.
+
 ## [0.9.0] - 2026-10-18
 
 ### Added

@@ -283,6 +283,21 @@ RSpec.describe Coolhand::LoggerService do
           end)
       end
 
+      it "redacts credentials in a caller-supplied url, as the interceptor does" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          url: "https://user:pass@hooks.example.com/in?token=abc123&page=2"
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            url = JSON.parse(req.body).dig("llm_request_log", "raw_request", "url")
+            expect(url).not_to include("pass", "abc123")
+            expect(url).to include("hooks.example.com", "page=2")
+          end)
+      end
+
       it "sets source as webhook source" do
         service.forward_webhook(
           webhook_body: webhook_body,
