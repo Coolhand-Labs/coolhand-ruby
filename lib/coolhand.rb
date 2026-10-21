@@ -22,6 +22,7 @@ require_relative "coolhand/feedback_service"
 require_relative "coolhand/template_service"
 require_relative "coolhand/optimization_feedback_link_service"
 require_relative "coolhand/workload_service"
+require_relative "coolhand/public_content_service"
 require_relative "coolhand/log_service"
 require_relative "coolhand/webhook_interceptor"
 # Only when Rails is already loaded; the gem has no Rails dependency.
@@ -145,6 +146,12 @@ module Coolhand
     # {logger_service}, which writes them. Needs the private API key.
     def log_service
       LogService.new
+    end
+
+    # Creates a new PublicContentService, for reading the Coolhand help center. Needs no API key; a
+    # configured one is sent and lifts the anonymous rate limit.
+    def public_content_service
+      PublicContentService.new
     end
 
     # Creates a new OptimizationFeedbackLinkService instance, for linking feedback to an
