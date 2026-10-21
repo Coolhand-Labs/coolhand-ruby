@@ -236,7 +236,8 @@ background thread) — surface these to the user for a decision, the same
 - Never create or push a git tag, never run `rake release` or `gem push`,
   and never merge the Phase 5 PR yourself. Tagging and publishing are the
   user's action once they've reviewed and merged this skill's PR, not
-  something this skill does.
+  something this skill does. `/finish-release` is that follow-up: the user
+  invokes it after merging, and it tags and publishes the GitHub release.
 
 ## Rationalizations to resist
 
