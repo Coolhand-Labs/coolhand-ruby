@@ -102,6 +102,36 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
   end
 
+  describe "Bedrock endpoint variants" do
+    intercepted_hosts = %w[
+      bedrock-runtime.us-east-1.amazonaws.com
+      bedrock-runtime.cn-north-1.amazonaws.com.cn
+      bedrock-runtime-fips.us-gov-west-1.amazonaws.com
+      bedrock-runtime.us-east-1.api.aws
+      bedrock-runtime-fips.us-gov-west-1.api.aws
+    ]
+
+    intercepted_hosts.each do |host|
+      it "intercepts #{host}" do
+        expect(intercepted?("https://#{host}/model/anthropic.claude-3/invoke")).to be true
+      end
+    end
+
+    it "does not intercept the control-plane host or a region-less host" do
+      expect(intercepted?("https://bedrock.us-east-1.amazonaws.com/model/x/invoke")).to be false
+      expect(intercepted?("https://bedrock-runtime.amazonaws.com/model/x/invoke")).to be false
+    end
+
+    it "does not intercept a look-alike host" do
+      expect(intercepted?("https://bedrock-runtime.us-east-1.amazonaws.com.evil.net/model/x/invoke")).to be false
+      expect(intercepted?("https://notbedrock-runtime.us-east-1.amazonaws.com/model/x/invoke")).to be false
+    end
+
+    it "does not intercept a multi-label region, since \"*\" is one label" do
+      expect(intercepted?("https://bedrock-runtime.evil.s3.amazonaws.com/model/x/invoke")).to be false
+    end
+  end
+
   describe "user-supplied address entries" do
     def with_addresses(*addresses)
       Coolhand.configuration.intercept_addresses = addresses

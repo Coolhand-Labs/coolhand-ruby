@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Amazon Bedrock FIPS, dual-stack and China-partition endpoints are now captured.** The default
+  intercept list held only `bedrock-runtime.*.amazonaws.com`, so calls to the FIPS hosts
+  (`bedrock-runtime-fips.<region>.amazonaws.com`, the common case for GovCloud callers), the
+  dual-stack IPv6 hosts (`bedrock-runtime.<region>.api.aws` and the FIPS variant) and the China
+  partition (`bedrock-runtime.<region>.amazonaws.com.cn`) were silently not captured — a wildcard
+  entry is an exact host match with no implicit subdomains, and `amazonaws.com.cn` is not a
+  dot-boundary suffix of `amazonaws.com`. This brings the gem in line with coolhand-python, which
+  already covered all five.
+
 ## [0.10.0] - 2026-10-21
 
 ### Added
