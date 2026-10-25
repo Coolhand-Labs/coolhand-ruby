@@ -3,6 +3,7 @@
 require "spec_helper"
 require "openai"
 require "coolhand/open_ai/batch_result_processor"
+require_relative "../../support/log_wire_helper"
 
 RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
   let(:logger) { instance_double("logger", info: nil, warn: nil, error: nil) }
@@ -449,6 +450,72 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
 
         expect { described_class.new(event_data: { "id" => "batch_abc125" }).call }.not_to raise_error
       end
+    end
+  end
+
+  # Asserts on the HTTP request the real ApiService sends, not on what is handed to a stubbed one.
+  # Deliberately avoids exact url/source_api/model/timestamp expectations: those are pinned in the
+  # unit examples above.
+  describe "what reaches the wire when a batch completes" do
+    include LogWireHelper
+
+    let(:secret) { "azure-search-admin-key-123" }
+    let(:start_time) { 1_700_000_000 }
+    let(:end_time) { start_time + 5 }
+    let(:batch_info) do
+      { "id" => "batch_wire", "status" => "completed", "input_file_id" => "file-in", "output_file_id" => "file-out",
+        "in_progress_at" => start_time, "completed_at" => end_time }
+    end
+    let(:input_items) do
+      [
+        { "custom_id" => "c1", "method" => "POST", "url" => "/v1/chat/completions",
+          "body" => { "messages" => [{ "role" => "user", "content" => "hi" }],
+                      "data_sources" => [{ "parameters" => { "authentication" => { "key" => secret } } }] } },
+        { "custom_id" => "c2", "method" => "POST", "url" => "/v1/chat/completions", "body" => { "n" => 2 } }
+      ]
+    end
+    let(:output_items) do
+      [
+        { "custom_id" => "c1",
+          "response" => { "request_id" => "req-wire-1", "status_code" => 200, "body" => { "ok" => true } } },
+        { "custom_id" => "no-such-request",
+          "response" => { "request_id" => "req-orphan", "status_code" => 200, "body" => {} } }
+      ]
+    end
+
+    before do
+      # Undo the file-level ApiService double so the real HTTP path runs.
+      allow(Coolhand::ApiService).to receive(:new).and_call_original
+      allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+      allow(client).to receive_message_chain(:files, :content).with(id: "file-in")
+        .and_return(input_items.map(&:to_json).join("\n"))
+      allow(client).to receive_message_chain(:files, :content).with(id: "file-out")
+        .and_return(output_items.map(&:to_json).join("\n"))
+      stub_log_endpoint
+
+      described_class.new(event_data: { "id" => "batch_wire" }).call
+    end
+
+    it_behaves_like "a log request sent to the Coolhand API"
+
+    it "POSTs exactly one log, for the response that has a matching request" do
+      expect(wire_requests.size).to eq(1)
+      expect(wire_raw_requests.first["id"]).to eq("req-wire-1")
+    end
+
+    it "carries the batch item's request and response and the batch timing in the payload" do
+      raw = wire_raw_requests.first
+
+      expect(raw).to include("method" => "post", "status_code" => 200, "response_body" => { "ok" => true },
+        "duration_ms" => 5000, "completed_at" => Time.at(end_time).iso8601)
+      expect(raw["url"]).to include("/v1/chat/completions")
+      expect(raw["request_body"]["messages"]).to eq([{ "role" => "user", "content" => "hi" }])
+    end
+
+    it "redacts data_sources credentials in the request body that is sent" do
+      key = wire_raw_requests.first["request_body"]["data_sources"][0]["parameters"]["authentication"]["key"]
+
+      expect(key).to eq("[REDACTED]")
     end
   end
 end

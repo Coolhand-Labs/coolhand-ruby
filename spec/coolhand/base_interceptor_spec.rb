@@ -314,6 +314,20 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(described_class.sanitize_url(url)).to eq(url)
     end
 
+    it "redacts sensitive query params whatever the case of their names" do
+      sanitized = described_class.sanitize_url("https://example.com/p?API_KEY=k1&Token=t1&page=2")
+
+      expect(sanitized).not_to include("k1")
+      expect(sanitized).not_to include("t1")
+      expect(sanitized).to include("page=2")
+    end
+
+    it "returns a URL with no credentials unchanged" do
+      url = "https://api.example.com/v1/chat?model=gpt-4&stream=true"
+
+      expect(described_class.sanitize_url(url)).to eq(url)
+    end
+
     it "redacts sensitive matrix params in the path" do
       sanitized = described_class.sanitize_url("https://api.example.com/v1;key=abc123/things;sig=xyz;ver=2/list")
 
@@ -379,6 +393,14 @@ RSpec.describe Coolhand::BaseInterceptor do
 
     it "does not alter a URL with an empty query" do
       expect(described_class.sanitize_url("https://api.example.com/v1?")).to eq("https://api.example.com/v1?")
+    end
+
+    it "fails closed on an unparseable URL with userinfo but no query or fragment" do
+      sanitized = described_class.sanitize_url("https://user:pw@ho st/p")
+
+      expect(sanitized).not_to include("user")
+      expect(sanitized).not_to include("pw")
+      expect(sanitized).to eq("https://REDACTED@ho st/p")
     end
   end
 
@@ -481,6 +503,48 @@ RSpec.describe Coolhand::BaseInterceptor do
       body = { "messages" => [{ "role" => "user", "content" => "hi" }] }
 
       expect(described_class.sanitize_body(body)).to eq(body)
+    end
+
+    it "redacts credential keys inside data_sources regardless of hyphen, space or case in the key name" do
+      params = { "api-key" => "a", "Api Key" => "b", "CONNECTION-STRING" => "c", "Encoded-API-Key" => "d",
+                 "index_name" => "docs" }
+
+      sanitized = described_class.sanitize_body("data_sources" => [{ "parameters" => params }])
+
+      expect(sanitized["data_sources"][0]["parameters"])
+        .to eq("api-key" => "[REDACTED]", "Api Key" => "[REDACTED]", "CONNECTION-STRING" => "[REDACTED]",
+          "Encoded-API-Key" => "[REDACTED]", "index_name" => "docs")
+    end
+
+    it "redacts credentials in arrays nested inside data_sources and leaves non-credential siblings alone" do
+      body = {
+        "data_sources" => [
+          [{ "parameters" => { "key" => "deep-secret", "endpoint" => "https://search.example" } }],
+          { "parameters" => { "fields" => [{ "token" => "t", "name" => "title" }] } }
+        ]
+      }
+
+      sanitized = described_class.sanitize_body(body)
+
+      expect(sanitized["data_sources"][0][0]["parameters"])
+        .to eq("key" => "[REDACTED]", "endpoint" => "https://search.example")
+      expect(sanitized["data_sources"][1]["parameters"]["fields"])
+        .to eq([{ "token" => "[REDACTED]", "name" => "title" }])
+    end
+
+    it "passes scalar and nil data_sources values and entries through without raising" do
+      expect(described_class.sanitize_body("data_sources" => nil)).to eq("data_sources" => nil)
+      expect(described_class.sanitize_body("data_sources" => "none")).to eq("data_sources" => "none")
+      expect(described_class.sanitize_body("data_sources" => [nil, "x", 3]))
+        .to eq("data_sources" => [nil, "x", 3])
+    end
+
+    it "does not mutate the caller's body" do
+      body = { "data_sources" => [{ "parameters" => { "key" => "top-secret" } }] }
+
+      described_class.sanitize_body(body)
+
+      expect(body["data_sources"][0]["parameters"]["key"]).to eq("top-secret")
     end
   end
 

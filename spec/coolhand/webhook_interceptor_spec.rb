@@ -126,6 +126,26 @@ RSpec.describe Coolhand::WebhookInterceptor do
       end
     end
 
+    context "when the configured whsec_ secret is not valid base64 (real validator, not a double)" do
+      before do
+        allow(Coolhand::OpenAi::WebhookValidator).to receive(:new).and_call_original
+        allow(controller).to receive(:webhook_secret).and_return("whsec_not*valid*base64!")
+        controller.request = double("request", # rubocop:disable RSpec/VerifiedDoubles
+          raw_post: validator_payload,
+          headers: { "webhook-signature" => "v1,placeholder",
+                     "webhook-timestamp" => Time.now.to_i.to_s,
+                     "webhook-id" => "wh_1" })
+      end
+
+      it "fails closed: halts with :unauthorized, logs, and never dispatches to BatchResultProcessor" do
+        expect(Coolhand::OpenAi::BatchResultProcessor).not_to receive(:new)
+        expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request"))
+
+        expect(controller.intercept_batch_request).to be false
+        expect(controller.head_status).to eq(:unauthorized)
+      end
+    end
+
     context "when the webhook payload is valid JSON but not an object (e.g. an array or string)" do
       it "rescues, logs, and halts with :unauthorized instead of passing a non-Hash payload downstream" do
         allow(validator).to receive(:payload).and_return('["not", "an", "object"]')

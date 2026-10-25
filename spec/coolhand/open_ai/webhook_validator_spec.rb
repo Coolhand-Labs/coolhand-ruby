@@ -321,6 +321,22 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
       end
     end
 
+    context "when the whsec_ secret is not valid base64" do
+      let(:webhook_secret) { "whsec_not*valid*base64!" }
+      # The default header derives from the decoded secret, which can't be decoded here.
+      let(:signature_header) { "v1,placeholder" }
+
+      it "raises ArgumentError out of valid? rather than returning a verdict" do
+        expect { validator.valid? }.to raise_error(ArgumentError, /invalid base64/)
+      end
+
+      it "never reaches replay-store state" do
+        expect(Coolhand.configuration.webhook_id_store).not_to receive(:claim!)
+
+        expect { validator.valid? }.to raise_error(ArgumentError)
+      end
+    end
+
     context "with whsec_ prefixed secret" do
       let(:webhook_secret) { "whsec_MzBOMFki+RuS5YQqmN2O85Dj1/sOFHdncBhwXECP+VY=" }
 
