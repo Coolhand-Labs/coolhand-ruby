@@ -393,22 +393,6 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         end
       end
 
-      context "when the signature/timestamp headers are missing" do
-        let(:request) do
-          headers_hash = { "webhook-id" => webhook_id }
-
-          instance_double("hash",
-            headers: headers_hash,
-            raw_post: payload,
-            body: instance_double("IO", read: payload))
-        end
-
-        it "allows the webhook through and warns instead of rejecting" do
-          expect(Rails.logger).to receive(:warn).with(/Missing OpenAI webhook headers/)
-          expect(validator.valid?).to be true
-        end
-      end
-
       context "when the payload is empty" do
         let(:payload) { nil }
         let(:request) do
@@ -427,6 +411,51 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         it "allows the webhook through and warns instead of rejecting" do
           expect(Rails.logger).to receive(:warn).with(/allowing in development environment/)
           expect(validator.valid?).to be true
+        end
+      end
+    end
+
+    context "when a secret is configured and Rails.env is development or test (unsigned requests must be rejected)" do
+      def request_with(headers_hash)
+        instance_double("hash",
+          headers: headers_hash,
+          raw_post: payload,
+          body: instance_double("IO", read: payload))
+      end
+
+      let(:full_headers) do
+        { "webhook-signature" => signature_header, "webhook-timestamp" => timestamp, "webhook-id" => webhook_id }
+      end
+
+      before { allow(Rails.logger).to receive(:error) }
+
+      %w[development test].each do |env_name|
+        context "when Rails.env is #{env_name.inspect}" do
+          before { allow(Rails).to receive(:env).and_return(env_name) }
+
+          it "rejects a request with no signature headers at all" do
+            request = request_with({})
+            validator = described_class.new(request, webhook_secret)
+
+            expect(Rails.logger).to receive(:error).with(/Missing OpenAI webhook signature, timestamp, or id headers/)
+            expect(validator.valid?).to be false
+            expect(validator.error_message).to eq(
+              "Missing OpenAI webhook signature, timestamp, or id headers - rejecting webhook"
+            )
+          end
+
+          full_headers_keys = %w[webhook-signature webhook-timestamp webhook-id]
+          full_headers_keys.each do |missing|
+            it "rejects a partially present header set missing #{missing}" do
+              request = request_with(full_headers.except(missing))
+
+              expect(described_class.new(request, webhook_secret).valid?).to be false
+            end
+          end
+
+          it "still accepts a correctly signed request" do
+            expect(described_class.new(request_with(full_headers), webhook_secret).valid?).to be true
+          end
         end
       end
     end

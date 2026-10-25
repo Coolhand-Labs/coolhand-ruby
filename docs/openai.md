@@ -63,6 +63,35 @@ end
 
 The `webhook-signature` header may carry several space-separated signatures (`v1,sigA v1,sigB`), as senders produce while a webhook secret is being rotated. `Coolhand::OpenAi::WebhookValidator` accepts the request if any `v1,` entry matches your secret, comparing each in constant time and ignoring entries with any other version prefix. The timestamp and replay checks below still run, and only after a signature matches.
 
+## Local development and testing
+
+Signature headers (`webhook-signature`, `webhook-timestamp`, `webhook-id`) are required whenever a webhook secret is configured, in every `Rails.env`, including `development` and `test`. A request missing any of them is rejected, so your controller responds with 401. Earlier versions let unsigned requests through in development and test, which meant an app running with `RAILS_ENV=development` on a reachable host accepted forged webhooks.
+
+Signature verification is skipped (with a logged warning) only when no secret is configured at all, and only in `development` and `test`. Every other environment rejects the request.
+
+If you post unsigned test payloads to a local app that has a secret set, pick one of these:
+
+- **Sign the test payload** with the same secret:
+
+  ```ruby
+  require "openssl"
+  require "base64"
+
+  secret_bytes = Base64.strict_decode64(ENV.fetch("OPENAI_WEBHOOK_SECRET").delete_prefix("whsec_"))
+  id = "wh_local_#{SecureRandom.hex(4)}"
+  timestamp = Time.now.to_i.to_s
+  body = { type: "batch.completed", data: { id: "batch_123" } }.to_json
+  signature = Base64.strict_encode64(OpenSSL::HMAC.digest("sha256", secret_bytes, "#{id}.#{timestamp}.#{body}"))
+
+  # Send `body` with these headers:
+  #   webhook-id: <id>
+  #   webhook-timestamp: <timestamp>
+  #   webhook-signature: v1,<signature>
+  ```
+
+- **Leave the secret unset in development**, for example have `webhook_secret` return `nil` unless `Rails.env.production?`.
+- **Replay a real delivery** to your local app through a tunnel.
+
 ## Replay protection
 
 `Coolhand::OpenAi::WebhookValidator` rejects requests whose `webhook-timestamp` is more than **300 seconds** away from the current time, and rejects a `webhook-id` it has already seen within that window — this prevents a captured request (from a log aggregator, APM trace, or proxy log) from being replayed to re-trigger `Coolhand::OpenAi::BatchResultProcessor`.
