@@ -170,13 +170,23 @@ RSpec.describe Coolhand::NetHttpInterceptor do
 
     it "accumulates yielded chunks into the thread-local buffer while a request is capturing, " \
        "and still yields every chunk to the consumer" do
-      Thread.current[:coolhand_capturing_stream] = true
+      Thread.current[:coolhand_capturing_stream] = response
       chunks = []
 
       response.read_body { |chunk| chunks << chunk }
 
       expect(chunks).to eq(%w[chunk1 chunk2])
       expect(Thread.current[:coolhand_stream_buffer]).to eq("chunk1chunk2")
+    end
+
+    it "does not buffer a different response than the one being captured" do
+      Thread.current[:coolhand_capturing_stream] = response_class.new
+      chunks = []
+
+      response.read_body { |chunk| chunks << chunk }
+
+      expect(chunks).to eq(%w[chunk1 chunk2])
+      expect(Thread.current[:coolhand_stream_buffer]).to be_nil
     end
 
     it "does not buffer when no intercepted request is capturing" do
@@ -189,7 +199,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
 
     it "passes a blockless read_body straight through without touching the buffer" do
-      Thread.current[:coolhand_capturing_stream] = true
+      Thread.current[:coolhand_capturing_stream] = response
 
       expect(response.read_body).to eq("unblocked-body")
       expect(Thread.current[:coolhand_stream_buffer]).to be_nil
@@ -231,6 +241,189 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       WebMock.enable!
       server_thread.kill
       server.close
+    end
+  end
+
+  # Real-socket helpers: WebMock's stubbed responses bypass the prepended ResponseInterceptor, so the
+  # nesting and host-block-error behavior has to be exercised over a real connection.
+  describe "streaming capture over a real connection" do
+    let(:server) { TCPServer.new("127.0.0.1", 0) }
+    let(:port) { server.addr[1] }
+    let(:http_class) { Class.new(Net::HTTP) { prepend Coolhand::NetHttpInterceptor } }
+
+    # Serves "outer-body" for /outer, "NESTED-SECRET" for everything else (one connection per request).
+    before do
+      @server_thread = Thread.new do
+        loop do
+          client = server.accept
+          path = client.gets.to_s.split[1]
+          client.gets("\r\n\r\n")
+          body = path == "/outer" ? "outer-body" : "NESTED-SECRET"
+          client.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n" \
+                       "Content-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n#{body}")
+          client.close
+        end
+      rescue IOError, Errno::EBADF
+        nil
+      end
+      Coolhand.configuration.intercept_addresses = ["127.0.0.1"]
+      WebMock.disable!
+    end
+
+    after do
+      WebMock.enable!
+      @server_thread.kill
+      server.close
+    end
+
+    def stream_get(path, &block)
+      http_class.start("127.0.0.1", port) do |http|
+        http.request(Net::HTTP::Get.new(path), &block)
+      end
+    end
+
+    it "does not append chunks of a non-intercepted nested request to the outer request's log" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      stream_get("/outer") do |res|
+        res.read_body do |_chunk|
+          # excluded by the default /batchPredictionJobs/ pattern, so this request is never intercepted
+          stream_get("/batchPredictionJobs/nested") { |inner| inner.read_body { |_c| nil } }
+        end
+      end
+
+      expect(logs.size).to eq(1)
+      expect(logs.first[:raw_request][:response_body]).to eq("outer-body")
+    end
+
+    it "logs an intercepted nested request's own chunks without mixing them into the outer log" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      stream_get("/outer") do |res|
+        res.read_body do |_chunk|
+          stream_get("/inner") { |inner| inner.read_body { |_c| nil } }
+        end
+      end
+
+      bodies = logs.map { |l| l[:raw_request][:response_body] }
+      expect(bodies).to contain_exactly("outer-body", "NESTED-SECRET")
+    end
+
+    it "logs only the class of an error raised in the host's streaming block, never its message" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      expect do
+        stream_get("/outer") do |res|
+          res.read_body { |_chunk| raise ArgumentError, "app-level secret: user 42" }
+        end
+      end.to raise_error(ArgumentError, "app-level secret: user 42")
+
+      error = logs.first[:raw_request][:response_body]["error"]
+      expect(error["class"]).to eq("ArgumentError")
+      expect(error["message"]).to eq("[redacted: raised in host streaming block]")
+      expect(logs.first.to_s).not_to include("app-level secret")
+    end
+
+    it "keeps the message of a transport error that surfaces inside the host's streaming block" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      expect do
+        stream_get("/outer") { |res| res.read_body { |_c| raise IOError, "closed stream" } }
+      end.to raise_error(IOError)
+
+      error = logs.first[:raw_request][:response_body]["error"]
+      expect(error["message"]).to eq("closed stream")
+    end
+
+    it "derives no status code from a host-block error" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      expect do
+        stream_get("/outer") { |res| res.read_body { |_c| raise ArgumentError, "upstream status=502" } }
+      end.to raise_error(ArgumentError)
+
+      expect(logs.first[:raw_request][:status_code]).to be_nil
+    end
+
+    it "captures only the intercepted response when the host streams via Net::HTTP#get with a block" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+      chunks = []
+
+      http_class.start("127.0.0.1", port) do |http|
+        http.get("/outer") do |chunk|
+          chunks << chunk
+          http_class.start("127.0.0.1", port) { |h2| h2.get("/batchPredictionJobs/nested") { |_c| nil } }
+        end
+      end
+
+      expect(chunks.join).to eq("outer-body")
+      expect(logs.size).to eq(1)
+      expect(logs.first[:raw_request][:response_body]).to eq("outer-body")
+    end
+
+    it "captures a streaming request made on an unstarted connection (request re-enters through start)" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      http_class.new("127.0.0.1", port).request(Net::HTTP::Get.new("/outer")) { |res| res.read_body { |_c| nil } }
+
+      expect(logs.size).to eq(1)
+      expect(logs.first[:raw_request][:response_body]).to eq("outer-body")
+    end
+
+    it "keeps buffering the outer response after a nested intercepted request raises" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      stream_get("/outer") do |res|
+        res.read_body do |_chunk|
+          stream_get("/inner") { |inner| inner.read_body { |_c| raise "nested boom" } }
+        rescue RuntimeError
+          nil
+        end
+      end
+
+      outer = logs.find { |l| l[:raw_request][:url].end_with?("/outer") }
+      expect(outer[:raw_request][:response_body]).to eq("outer-body")
+    end
+
+    it "still logs a transport error's message" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+      dead = TCPServer.new("127.0.0.1", 0)
+      dead_port = dead.addr[1]
+      dead.close
+
+      expect do
+        http_class.new("127.0.0.1", dead_port).request(Net::HTTP::Get.new("/x"))
+      end.to raise_error(SystemCallError)
+
+      error = logs.first[:raw_request][:response_body]["error"]
+      expect(error["class"]).to match(/ECONNREFUSED/)
+      expect(error["message"]).to match(/refused/i)
+    end
+
+    it "still logs and lets the host break out of the request block, restoring the capture state" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      result = http_class.start("127.0.0.1", port) do |http|
+        http.request(Net::HTTP::Get.new("/outer")) do |res|
+          res.read_body { |_chunk| nil }
+          break :broke
+        end
+      end
+
+      expect(result).to eq(:broke)
+      expect(logs.size).to eq(1)
+      expect(Thread.current[:coolhand_capturing_stream]).to be_nil
+      expect(Thread.current[:coolhand_stream_buffer]).to be_nil
     end
   end
 
