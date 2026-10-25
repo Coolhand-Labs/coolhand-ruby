@@ -329,6 +329,34 @@ RSpec.describe Coolhand::BaseInterceptor do
   end
 
   describe ".sanitize_body" do
+    it "redacts credentials embedded in URL string values under data_sources" do
+      body = {
+        "data_sources" => [{
+          "type" => "azure_search",
+          "parameters" => {
+            "endpoint" => "https://user:PASS@search.example.net/?sas=SASSECRET&api-version=1",
+            "index_name" => "docs",
+            "note" => "see https://example.com/?token=abc for details"
+          }
+        }]
+      }
+
+      params = described_class.sanitize_body(body)["data_sources"][0]["parameters"]
+
+      expect(params["endpoint"]).to eq(
+        "https://REDACTED@search.example.net/?sas=%5BREDACTED%5D&api-version=1"
+      )
+      expect(params["index_name"]).to eq("docs")
+      # Prose containing a URL is not a bare URL value, so it is left alone.
+      expect(params["note"]).to eq("see https://example.com/?token=abc for details")
+    end
+
+    it "does not touch URL strings outside data_sources, such as prompt content" do
+      body = { "messages" => [{ "role" => "user", "content" => "https://u:p@h.example/?token=abc" }] }
+
+      expect(described_class.sanitize_body(body)).to eq(body)
+    end
+
     it "redacts an Azure OpenAI On Your Data api_key credential under data_sources" do
       body = {
         "messages" => [{ "role" => "user", "content" => "hi" }],

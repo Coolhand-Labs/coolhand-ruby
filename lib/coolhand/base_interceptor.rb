@@ -197,9 +197,20 @@ module Coolhand
         end
       when Array
         node.map { |v| redact_sensitive_body_values(v) }
+      when String
+        redact_embedded_url_credentials(node)
       else
         node
       end
+    end
+
+    # A single whitespace-free absolute URL, e.g. an Azure `endpoint` of `https://u:PASS@h/?sas=...`.
+    # Only applied to data_sources config (never prompt content), where a URL value is a datastore
+    # address that can carry userinfo or a SAS/key query param in the string itself.
+    EMBEDDED_URL_PATTERN = %r{\A[a-z][a-z0-9+.-]*://\S+\z}i
+
+    def redact_embedded_url_credentials(value)
+      value.match?(EMBEDDED_URL_PATTERN) ? sanitize_url(value) : value
     end
 
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
