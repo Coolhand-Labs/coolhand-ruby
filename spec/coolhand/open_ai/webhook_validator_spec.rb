@@ -448,8 +448,10 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
           full_headers_keys.each do |missing|
             it "rejects a partially present header set missing #{missing}" do
               request = request_with(full_headers.except(missing))
+              validator = described_class.new(request, webhook_secret)
 
-              expect(described_class.new(request, webhook_secret).valid?).to be false
+              expect(validator.valid?).to be false
+              expect(validator.error_message).to match(/Missing OpenAI webhook signature, timestamp, or id headers/)
             end
           end
 

@@ -76,8 +76,12 @@ If you post unsigned test payloads to a local app that has a secret set, pick on
   ```ruby
   require "openssl"
   require "base64"
+  require "json"
+  require "securerandom"
 
-  secret_bytes = Base64.strict_decode64(ENV.fetch("OPENAI_WEBHOOK_SECRET").delete_prefix("whsec_"))
+  # Same key handling as the validator: a `whsec_` secret is base64-decoded, anything else is used as-is.
+  secret = ENV.fetch("OPENAI_WEBHOOK_SECRET")
+  secret_bytes = secret.start_with?("whsec_") ? Base64.strict_decode64(secret.delete_prefix("whsec_")) : secret
   id = "wh_local_#{SecureRandom.hex(4)}"
   timestamp = Time.now.to_i.to_s
   body = { type: "batch.completed", data: { id: "batch_123" } }.to_json
