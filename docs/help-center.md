@@ -1,6 +1,6 @@
 # Reading the Help Center
 
-`Coolhand::PublicContentService` reads Coolhand's help center: the articles served at
+`Coolhand::HelpCenterService` reads Coolhand's help center: the articles served at
 `coolhandlabs.com/help/:slug` and the posts at `/updates/:slug`. "Help center" is the user-facing name;
 on the wire the resource is `public_content` (`GET /api/v2/public_content`, `/:slug` and `/categories`).
 It is read-only. Creating, updating and archiving articles is Coolhand-internal and not wrapped.
@@ -10,7 +10,7 @@ It is read-only. Creating, updating and archiving articles is Coolhand-internal 
 ```ruby
 require "coolhand"
 
-help_center = Coolhand.public_content_service # works with Coolhand.configure never called
+help_center = Coolhand.help_center_service # works with Coolhand.configure never called
 ```
 
 - No key configured: no `X-API-Key` header is sent, and the calls work. Anonymous callers are limited to
@@ -111,10 +111,10 @@ unknown slug, `429` when the anonymous rate limit is exceeded.
 
 ## Verifying against a live server
 
-`spec/live/coolhand_public_content_live_spec.rb` runs against a real server with no key:
+`spec/live/coolhand_help_center_live_spec.rb` runs against a real server with no key:
 
 ```bash
-COOLHAND_SPEC_LIVE_BASE_URL=http://127.0.0.1:3000/api bundle exec rspec spec/live/coolhand_public_content_live_spec.rb
+COOLHAND_SPEC_LIVE_BASE_URL=http://127.0.0.1:3000/api bundle exec rspec spec/live/coolhand_help_center_live_spec.rb
 ```
 
 It makes about nine anonymous requests, so running it repeatedly within a minute can hit the `429`.

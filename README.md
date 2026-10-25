@@ -120,12 +120,12 @@ See [Reading Workloads →](docs/workload-search.md) and [Reading Logs →](docs
 
 ## Reading the Help Center
 
-`Coolhand.public_content_service` reads the Coolhand help center (the same pages as coolhandlabs.com/help and /updates) with **no API key required**:
+`Coolhand.help_center_service` reads the Coolhand help center (the same pages as coolhandlabs.com/help and /updates) with **no API key required**:
 
 ```ruby
 require 'coolhand'
 
-help_center = Coolhand.public_content_service
+help_center = Coolhand.help_center_service
 
 result = help_center.search_help_articles(query: 'match rate', per_page: 5)
 article = help_center.get_help_article(result.articles.first[:slug]) # full markdown :body

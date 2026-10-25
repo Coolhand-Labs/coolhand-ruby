@@ -15,7 +15,7 @@ module Coolhand
   # Unlike every other service this one needs no API key. A configured `api_key` is sent as `X-API-Key` and lifts
   # the anonymous limit of 30 requests per minute per IP (429 beyond); with none, no key header is sent. A key the
   # server rejects raises a 401 {Coolhand::HttpError}; it is not retried anonymously. See docs/help-center.md.
-  class PublicContentService < ApiService
+  class HelpCenterService < ApiService
     include ReadQuery
 
     ERROR_NOUN = "Help center"
