@@ -518,7 +518,7 @@ The monitor handles errors gracefully:
 - **[Reading the Help Center](docs/help-center.md)** — Search and read Coolhand's help center articles and list its sections, with no API key required
 - **[Linking Feedback](docs/feedback-links.md)** — Link feedback to an optimization as evidence, singly or in bulk, using the private API key
 - **[Declared Workloads](docs/declared_workloads.md)** — Declare the workload and template of captured LLM calls with `Coolhand.with_context`, and create or rename them with `upsert`
-- **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, dual gem handling, and troubleshooting
+- **[Anthropic Integration](docs/anthropic.md)** — Official and community Anthropic Ruby gems, streaming, using both gems, and troubleshooting
 - **[ElevenLabs Integration](docs/elevenlabs.md)** — Webhook capture, feedback submission, and Rails integration
 - **[OpenAI Batch Webhook Handler](docs/openai.md)** — Handle OpenAI batch job completion events via webhook interception
 - **[Google Vertex AI Batch Result Logging](docs/vertex.md)** — Log completed Vertex AI batch prediction job results

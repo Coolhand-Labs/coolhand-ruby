@@ -8,7 +8,7 @@ Coolhand monitors Anthropic API calls (`api.anthropic.com`) with a single `NetHt
 
 - **Official Anthropic Gem** (`anthropic`): Uses Net::HTTP directly, monitored via `NetHttpInterceptor`
 - **Community Ruby-Anthropic Gem** (`ruby-anthropic`): Uses Faraday. Faraday's default `net_http` adapter delegates to Net::HTTP, so these calls are monitored by the same `NetHttpInterceptor`
-- **Both gems installed**: Coolhand monitors either one, with no conflict warnings or duplicate logging
+- **Both gems installed**: Coolhand itself adds no conflict warnings or duplicate logging (see [Using Both Gems](#using-both-gems))
 
 **Caveat:** A Faraday connection configured with a non-Net::HTTP adapter (such as `faraday-typhoeus`) bypasses `Net::HTTP` and is not covered.
 
@@ -355,11 +355,12 @@ end
 
 **Solution**: Check the following:
 
+- `config.silent` is `false`, so Coolhand's debug and warning output is visible while you check the rest.
 - `config.api_key` is set. Intercepted requests are skipped, with a warning log, when the key is missing.
 - `config.enabled` is not `false`.
+- `config.capture` is not `false`, the call is not inside `Coolhand.without_capture`, and the path does not match `exclude_api_patterns`.
 - The request goes to a monitored address (`api.anthropic.com` is monitored by default).
 - If you use `ruby-anthropic`, the Faraday connection uses the default `net_http` adapter. A non-Net::HTTP adapter such as `faraday-typhoeus` is not covered.
-- Set `config.silent = false` to see Coolhand's debug output.
 
 #### 2. Missing Streaming Data
 
