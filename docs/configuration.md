@@ -58,9 +58,9 @@ end
 - `config.debug_mode` always runs inline so printed payloads appear in order.
 - Logs queued but not yet sent are lost if the process is killed hard (`kill -9`, OOM). Set `async_logging = false` if you need delivery before each call returns.
 
-## Request Body Capture Limits
+## Body Capture Limits
 
-To avoid holding large uploads (batch JSONL files, fine-tune corpora, audio for transcription) in memory and shipping them to Coolhand in full, `config.max_captured_body_bytes` caps how much of a request body gets captured:
+To avoid holding large uploads (batch JSONL files, fine-tune corpora, audio for transcription) and large responses in memory and shipping them to Coolhand in full, `config.max_captured_body_bytes` caps how much of a request body and of a response body gets captured. Set it to `nil` to disable the cap:
 
 ```ruby
 Coolhand.configure do |config|
@@ -71,8 +71,10 @@ end
 **What happens at the limits:**
 - A request body whose `Content-Type` doesn't look like JSON (e.g. `multipart/form-data`, `audio/mpeg`) is never read into memory for capture — the log entry gets a placeholder (`{"_coolhand_capture_skipped" => "non_json_content_type", ...}`) instead of the body. This is intentional: an opaque binary blob isn't human/LLM-readable in Coolhand's UI anyway.
 - A JSON (or content-type-unset) body larger than the configured limit is replaced with a placeholder (`{"_coolhand_capture_skipped" => "body_too_large", ...}`) instead of being logged in full.
+- A request body streamed via `body_stream` whose `Content-Length` is already over the limit is skipped without being read into memory at all. A chunked body (no `Content-Length`) has to be read to learn its size, so it is still buffered once before the limit is applied.
+- A response body larger than the limit is replaced with the same kind of placeholder (`{"_coolhand_capture_skipped" => "body_too_large", "size_bytes" => ..., "max_bytes" => ..., "content_type" => ...}`). For a streamed response (`read_body` with a block) Coolhand stops buffering once the limit is crossed, so memory use stays bounded; `size_bytes` is the number of bytes seen while streaming.
 
-In both cases, only the *captured log entry* is affected — the real request to the LLM provider always sends the complete, untruncated body.
+In every case, only the *captured log entry* is affected — the real request to the LLM provider always sends the complete, untruncated body, and your code always receives the complete response (every streamed chunk is passed to your block untouched).
 
 ## Custom Intercept Addresses
 
