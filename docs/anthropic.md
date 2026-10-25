@@ -4,11 +4,13 @@ Coolhand provides comprehensive monitoring for Anthropic's Claude API through su
 
 ## Overview
 
-Coolhand automatically detects which Anthropic gem you're using and applies the appropriate monitoring strategy:
+Coolhand monitors Anthropic API calls (`api.anthropic.com`) with a single `NetHttpInterceptor` that patches `Net::HTTP`. Both Ruby gems are covered with no gem-specific setup:
 
-- **Official Anthropic Gem** (`anthropic`): Uses Net::HTTP transport, monitored via AnthropicInterceptor
-- **Community Ruby-Anthropic Gem** (`ruby-anthropic`): Uses Faraday transport, monitored via FaradayInterceptor
-- **Dual Installation**: Automatically handles conflicts and prevents duplicate logging
+- **Official Anthropic Gem** (`anthropic`): Uses Net::HTTP directly, monitored via `NetHttpInterceptor`
+- **Community Ruby-Anthropic Gem** (`ruby-anthropic`): Uses Faraday. Faraday's default `net_http` adapter delegates to Net::HTTP, so these calls are monitored by the same `NetHttpInterceptor`
+- **Both gems installed**: Coolhand itself adds no conflict warnings or duplicate logging (see [Using Both Gems](#using-both-gems))
+
+**Caveat:** A Faraday connection configured with a non-Net::HTTP adapter (such as `faraday-typhoeus`) bypasses `Net::HTTP` and is not covered.
 
 ## Quick Start
 
@@ -131,7 +133,7 @@ Coolhand.configure do |config|
   config.api_key = 'your_coolhand_api_key'
 end
 
-# Use ruby-anthropic gem normally - monitored via Faraday
+# Use ruby-anthropic gem normally - monitored via Faraday's default net_http adapter
 client = Anthropic::Client.new(access_token: ENV['ANTHROPIC_API_KEY'])
 
 response = client.messages(
@@ -141,13 +143,15 @@ response = client.messages(
 )
 
 puts response.dig("content", 0, "text")
-# ✅ Automatically logged via FaradayInterceptor
+# ✅ Automatically logged via NetHttpInterceptor
 ```
+
+> If your Faraday connection uses a non-Net::HTTP adapter (such as `faraday-typhoeus`), requests are not captured.
 
 ### Streaming with Ruby-Anthropic
 
 ```ruby
-# Streaming works seamlessly via Faraday monitoring
+# Streaming is captured the same way as any other request
 response = client.messages(
   model: "claude-3-sonnet-20240229",
   max_tokens: 1024,
@@ -163,53 +167,13 @@ end
 # ✅ Complete conversation logged to Coolhand
 ```
 
-## Dual Gem Installation
+## Using Both Gems
 
-### Automatic Conflict Resolution
+Coolhand does not need to choose between the gems. Monitoring happens at the `Net::HTTP` layer through a single `NetHttpInterceptor`, so it does not depend on which gem makes the request. Coolhand does not disable monitoring, print conflict warnings, or log duplicates when both gems are installed.
 
-When both gems are installed, Coolhand automatically handles the conflict:
-
-```ruby
-require 'anthropic'        # Official gem
-require 'ruby-anthropic'  # Community gem
-require 'coolhand'
-
-Coolhand.configure do |config|
-  config.api_key = 'your_coolhand_api_key'
-end
-
-# ⚠️  Warning displayed:
-# "Both 'anthropic' and 'ruby-anthropic' gems are installed.
-#  Coolhand will only monitor ruby-anthropic (Faraday-based) requests.
-#  Official anthropic gem monitoring has been disabled."
-```
-
-**Recommendation**: Use only one gem to avoid confusion. Choose based on your needs:
+Both gems define an `Anthropic` namespace, so loading both in the same app can still conflict inside your own code. That is independent of Coolhand. Pick the gem that fits your needs:
 - **Official gem**: Latest features, official support, Net::HTTP transport
-- **Community gem**: Faraday-based, may have community contributions
-
-### Manual Conflict Resolution
-
-To explicitly use the official gem when both are installed:
-
-```ruby
-# Temporarily hide the community gem
-begin
-  # Remove ruby-anthropic from the load path
-  $LOAD_PATH.reject! { |path| path.include?('ruby-anthropic') }
-
-  require 'anthropic'
-  require 'coolhand'
-
-  Coolhand.configure do |config|
-    config.api_key = 'your_coolhand_api_key'
-  end
-
-  # Now only the official gem will be monitored
-  client = Anthropic::Client.new
-  # ... use official gem
-end
-```
+- **Community gem**: Faraday-based (default `net_http` adapter), may have community contributions
 
 ## Rails Integration
 
@@ -381,43 +345,24 @@ end
 
 # Now you'll see console output like:
 # "✅ Coolhand ready - will log inference calls on monitored URIs"
-# "COOLHAND: ⚠️ Warning: Both 'anthropic' and 'ruby-anthropic' gems are installed..."
 ```
 
 ### Common Issues
 
-#### 1. Gem Not Detected
+#### 1. Requests Not Appearing
 
-**Problem**: Coolhand says "Anthropic gem not loaded"
+**Problem**: Anthropic calls are not showing up in Coolhand
 
-**Solution**: Ensure you require the gem before configuring Coolhand:
+**Solution**: Check the following:
 
-```ruby
-require 'anthropic'  # Must come before coolhand
-require 'coolhand'
+- `config.silent` is `false`, so Coolhand's debug and warning output is visible while you check the rest.
+- `config.api_key` is set. Intercepted requests are skipped, with a warning log, when the key is missing.
+- `config.enabled` is not `false`.
+- `config.capture` is not `false`, the call is not inside `Coolhand.without_capture`, and the path does not match `exclude_api_patterns`.
+- The request goes to a monitored address (`api.anthropic.com` is monitored by default).
+- If you use `ruby-anthropic`, the Faraday connection uses the default `net_http` adapter. A non-Net::HTTP adapter such as `faraday-typhoeus` is not covered.
 
-Coolhand.configure do |config|
-  config.api_key = 'your_api_key'
-end
-```
-
-#### 2. Duplicate Requests
-
-**Problem**: Seeing requests logged twice in dashboard
-
-**Cause**: Usually indicates both gems are installed and conflicting
-
-**Solution**: Choose one gem and uninstall the other:
-
-```bash
-# Keep official gem
-gem uninstall ruby-anthropic
-
-# OR keep community gem
-gem uninstall anthropic
-```
-
-#### 3. Missing Streaming Data
+#### 2. Missing Streaming Data
 
 **Problem**: Only seeing individual chunks, not complete response
 
@@ -436,7 +381,7 @@ response = client.messages(parameters: { stream: true })
 response.each { |chunk| print chunk.delta.text }
 ```
 
-#### 4. Performance Concerns
+#### 3. Performance Concerns
 
 **Problem**: Worried about monitoring overhead
 
@@ -496,7 +441,7 @@ end
 
 ## Best Practices
 
-1. **Choose One Gem**: Avoid installing both `anthropic` and `ruby-anthropic` gems
+1. **Pick One Gem**: Both `anthropic` and `ruby-anthropic` define an `Anthropic` namespace, so avoid loading both in the same app. Coolhand monitors either one
 2. **Secure API Keys**: Use environment variables or Rails credentials, never commit keys
 3. **Silent in Production**: Set `config.silent = true` in production environments
 4. **Monitor Performance**: Use fast models (haiku) for high-frequency requests
@@ -515,4 +460,4 @@ For complete API documentation, see:
 
 - **Coolhand Issues**: [GitHub Issues](https://github.com/Coolhand-Labs/coolhand-ruby/issues)
 - **Anthropic API**: [Anthropic Documentation](https://docs.anthropic.com/)
-- **Gem Conflicts**: Check this guide's troubleshooting section
+- **Missing Requests**: Check this guide's troubleshooting section
