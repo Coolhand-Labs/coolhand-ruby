@@ -60,7 +60,7 @@ end
 
 ## Body Capture Limits
 
-To avoid holding large uploads (batch JSONL files, fine-tune corpora, audio for transcription) and large responses in memory and shipping them to Coolhand in full, `config.max_captured_body_bytes` caps how much of a request body and of a response body gets captured. Set it to `nil` to disable the cap:
+To avoid holding large uploads (batch JSONL files, fine-tune corpora, audio for transcription) and large responses in memory and shipping them to Coolhand in full, `config.max_captured_body_bytes` caps how much of a request body and of a response body gets captured. Set it to `nil` to disable the cap (a non-Integer or negative value is ignored and the default is used):
 
 ```ruby
 Coolhand.configure do |config|

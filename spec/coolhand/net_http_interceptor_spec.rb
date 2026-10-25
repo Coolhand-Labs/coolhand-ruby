@@ -659,17 +659,20 @@ RSpec.describe Coolhand::NetHttpInterceptor do
 
     after { Thread.current[:coolhand_stream_buffer] = nil }
 
+    def intercepted_request(request_class, url)
+      uri = URI(url)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      http.request(request_class.new(uri)).tap { sleep 0.05 }
+    end
+
     it "replaces an oversized non-streamed response body with a marker, but returns it to the host in full" do
       Coolhand.configuration.max_captured_body_bytes = 10
       body = '{"text":"a response that is well over ten bytes long"}'
       stub_request(:post, "https://api.test.com/v1/chat")
         .to_return(status: 200, body: body, headers: { "Content-Type" => "application/json" })
 
-      uri = URI("https://api.test.com/v1/chat")
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      response = http.request(Net::HTTP::Post.new(uri))
-      sleep 0.05
+      response = intercepted_request(Net::HTTP::Post, "https://api.test.com/v1/chat")
 
       expect(response.body).to eq(body)
       logged = @captured_log[:raw_request][:response_body]
@@ -686,11 +689,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       stub_request(:get, "https://api.test.com/hello")
         .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
 
-      uri = URI("https://api.test.com/hello")
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      http.request(Net::HTTP::Get.new(uri))
-      sleep 0.05
+      intercepted_request(Net::HTTP::Get, "https://api.test.com/hello")
 
       expect(@captured_log[:raw_request][:response_body]).to eq({ "msg" => "hi" })
     end
@@ -700,11 +699,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       stub_request(:get, "https://api.test.com/hello")
         .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
 
-      uri = URI("https://api.test.com/hello")
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      http.request(Net::HTTP::Get.new(uri))
-      sleep 0.05
+      intercepted_request(Net::HTTP::Get, "https://api.test.com/hello")
 
       expect(@captured_log[:raw_request][:response_body]).to eq({ "msg" => "hi" })
     end
@@ -753,6 +748,22 @@ RSpec.describe Coolhand::NetHttpInterceptor do
         )
       end
 
+      it "treats a negative or Float cap as invalid and uses the default" do
+        [-1, 10.5].each do |bad|
+          Coolhand.configuration.max_captured_body_bytes = bad
+
+          expect(helpers.capture_limit).to eq(Coolhand::Configuration::DEFAULT_MAX_CAPTURED_BODY_BYTES)
+        end
+      end
+
+      it "treats a cap of 0 as 'capture nothing' and still handles an empty or nil body" do
+        Coolhand.configuration.max_captured_body_bytes = 0
+
+        expect(helpers.response_body_for_log(nil, nil)).to be_nil
+        expect(helpers.response_body_for_log("", nil)).to eq("")
+        expect(helpers.response_body_for_log("x", nil)).to include("_coolhand_capture_skipped" => "body_too_large")
+      end
+
       it "counts bytes, not characters" do
         helpers.buffer_stream_chunk("こんにちは")
 
@@ -761,16 +772,22 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
 
     it "streams an oversized response to the host in full while logging only a marker (over a real connection)" do
-      Coolhand.configuration.max_captured_body_bytes = 20
-      chunks_sent = Array.new(5) { |i| "chunk-#{i}-" + ("x" * 10) }
-      body = chunks_sent.join
+      Coolhand.configuration.max_captured_body_bytes = 40
+      pieces = Array.new(4) { |i| "piece-#{i}-".ljust(25, "x") }
+      body = pieces.join
       server = TCPServer.new("127.0.0.1", 0)
       port = server.addr[1]
       server_thread = Thread.new do
         client = server.accept
+        client.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
         client.gets("\r\n\r\n")
-        client.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: #{body.bytesize}\r\n" \
-                     "Connection: close\r\n\r\n#{body}")
+        client.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n" \
+                     "Connection: close\r\n\r\n")
+        pieces.each do |piece|
+          client.write("#{piece.bytesize.to_s(16)}\r\n#{piece}\r\n")
+          sleep 0.05
+        end
+        client.write("0\r\n\r\n")
         client.close
       end
       Coolhand.configuration.intercept_addresses = ["127.0.0.1"]
@@ -779,24 +796,27 @@ RSpec.describe Coolhand::NetHttpInterceptor do
         WebMock.disable!
         http_class = Class.new(Net::HTTP) { prepend Coolhand::NetHttpInterceptor }
         received = +""
-        buffer_sizes = []
+        buffer_states = []
         http_class.start("127.0.0.1", port) do |http|
           http.request(Net::HTTP::Get.new("/stream")) do |res|
             res.read_body do |chunk|
               received << chunk
-              buffer = Thread.current[:coolhand_stream_buffer]
-              buffer_sizes << (buffer.is_a?(String) ? buffer.bytesize : buffer)
+              buffer_states << Thread.current[:coolhand_stream_buffer].dup
             end
           end
         end
 
         raw = @captured_log[:raw_request]
         expect(received).to eq(body)
+        # First 25-byte piece is within the 40-byte cap and buffered; once the second crosses it the
+        # buffer is dropped for a running byte count and never holds more than the cap again.
+        expect(buffer_states.first).to be_a(String).and(satisfy { |s| s.bytesize <= 40 })
+        expect(buffer_states.last).to eq(body.bytesize)
+        expect(buffer_states.grep(String).map(&:bytesize).max).to be <= 40
         expect(raw[:is_streaming]).to be true
         expect(raw[:response_body]).to include(
-          "_coolhand_capture_skipped" => "body_too_large", "size_bytes" => body.bytesize, "max_bytes" => 20
+          "_coolhand_capture_skipped" => "body_too_large", "size_bytes" => body.bytesize, "max_bytes" => 40
         )
-        expect(buffer_sizes.select { |s| s.is_a?(String) }.max.to_i).to be <= 20
         expect(Thread.current[:coolhand_stream_buffer]).to be_nil
         expect(Thread.current[:coolhand_capturing_stream]).to be_nil
       ensure
