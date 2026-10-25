@@ -728,6 +728,31 @@ RSpec.describe Coolhand::NetHttpInterceptor do
         expect(Thread.current[:coolhand_stream_buffer]).to eq(15)
       end
 
+      it "keeps a stream that lands exactly on the cap, and trips only on the next byte" do
+        helpers.buffer_stream_chunk("1234567890")
+        expect(Thread.current[:coolhand_stream_buffer]).to eq("1234567890")
+
+        helpers.buffer_stream_chunk("1")
+        expect(Thread.current[:coolhand_stream_buffer]).to eq(11)
+      end
+
+      it "buffers without limit when the cap is nil" do
+        Coolhand.configuration.max_captured_body_bytes = nil
+        helpers.buffer_stream_chunk("x" * 5_000)
+
+        expect(Thread.current[:coolhand_stream_buffer].bytesize).to eq(5_000)
+      end
+
+      it "falls back to the default cap instead of raising when the configured cap is not an Integer" do
+        Coolhand.configuration.max_captured_body_bytes = "10"
+
+        expect { helpers.buffer_stream_chunk("x" * 50) }.not_to raise_error
+        expect(Thread.current[:coolhand_stream_buffer]).to eq("x" * 50)
+        expect(helpers.response_body_for_log("x" * 2_000_000, nil)).to include(
+          "_coolhand_capture_skipped" => "body_too_large", "max_bytes" => 1_000_000
+        )
+      end
+
       it "counts bytes, not characters" do
         helpers.buffer_stream_chunk("こんにちは")
 
