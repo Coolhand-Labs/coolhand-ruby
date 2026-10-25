@@ -526,7 +526,7 @@ The monitor handles errors gracefully:
 
 ## Security
 
-- API keys in request headers are automatically redacted
+- API keys in request headers and credential-like URL query params are automatically redacted (rate-limit headers are kept)
 - No sensitive data is exposed in logs
 - All data is sent via HTTPS to Coolhand servers
 

@@ -542,6 +542,18 @@ RSpec.describe Coolhand::LoggerService do
         expect(result["x-signature"]).to eq("[REDACTED]")
       end
 
+      it "keeps rate-limit telemetry headers but still redacts rate-limit lookalikes" do
+        headers = {
+          "HTTP_X_RATELIMIT_REMAINING_TOKENS" => "1999",
+          "anthropic-ratelimit-tokens-limit" => "40000",
+          "x-ratelimit-api-key" => "secret-value"
+        }
+        result = service_with_private.sanitize_headers_public(headers)
+        expect(result["x-ratelimit-remaining-tokens"]).to eq("1999")
+        expect(result["anthropic-ratelimit-tokens-limit"]).to eq("40000")
+        expect(result["x-ratelimit-api-key"]).to eq("[REDACTED]")
+      end
+
       it "redacts sensitive headers" do
         headers = {
           "HTTP_AUTHORIZATION" => "Bearer secret",

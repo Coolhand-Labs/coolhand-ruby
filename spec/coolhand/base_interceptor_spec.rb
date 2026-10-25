@@ -206,6 +206,41 @@ RSpec.describe Coolhand::BaseInterceptor do
     end
   end
 
+  describe ".sensitive_header?" do
+    it "keeps provider rate-limit telemetry headers that merely contain 'token'" do
+      %w[x-ratelimit-limit-requests x-ratelimit-remaining-tokens x-ratelimit-reset-tokens
+         anthropic-ratelimit-tokens-remaining anthropic-ratelimit-input-tokens-reset
+         anthropic-ratelimit-output-tokens-limit X-RateLimit-Remaining-Tokens x-rate-limit-remaining].each do |name|
+        expect(described_class.sensitive_header?(name)).to be(false), "expected #{name} to be kept"
+      end
+    end
+
+    it "still redacts rate-limit lookalikes outside the closed vocabulary" do
+      %w[x-ratelimit-api-key x-ratelimit-tokens-secret x-ratelimit-token ratelimit-auth
+         x-auth-session-ratelimit-remaining x-ratelimit-remaining-tokens-key].each do |name|
+        expect(described_class.sensitive_header?(name)).to be(true), "expected #{name} to be redacted"
+      end
+    end
+
+    it "redacts ordinary sensitive names and passes ordinary safe ones" do
+      expect(described_class.sensitive_header?("x-api-key")).to be(true)
+      expect(described_class.sensitive_header?("Set-Cookie")).to be(true)
+      expect(described_class.sensitive_header?("content-type")).to be(false)
+    end
+
+    it "is applied by sanitize_headers" do
+      sanitized = described_class.sanitize_headers(
+        "x-ratelimit-remaining-tokens" => "1999", "anthropic-ratelimit-tokens-reset" => "2026-01-01T00:00:00Z",
+        "x-api-key" => "sk-secret"
+      )
+
+      expect(sanitized).to eq(
+        "x-ratelimit-remaining-tokens" => "1999", "anthropic-ratelimit-tokens-reset" => "2026-01-01T00:00:00Z",
+        "x-api-key" => "[REDACTED]"
+      )
+    end
+  end
+
   describe ".sanitize_url" do
     it "redacts presigned-URL credential params for AWS SigV4 and Google Cloud storage URLs, " \
        "not just the small fixed list it used to check" do
@@ -241,6 +276,55 @@ RSpec.describe Coolhand::BaseInterceptor do
 
       expect(sanitized).not_to include("s3cr3t")
       expect(sanitized).not_to include("abc123")
+    end
+
+    it "redacts the exact-name params code, sas, pwd and passwd, case-insensitively" do
+      sanitized = described_class.sanitize_url("https://f.azurewebsites.net/api/x?code=FNKEY&SAS=s1&pwd=p1&passwd=p2&n=1")
+
+      expect(sanitized).to eq(
+        "https://f.azurewebsites.net/api/x?code=%5BREDACTED%5D&SAS=%5BREDACTED%5D&" \
+        "pwd=%5BREDACTED%5D&passwd=%5BREDACTED%5D&n=1"
+      )
+    end
+
+    it "does not treat names merely containing 'code' as sensitive" do
+      url = "https://api.example.com/v1/x?encoding=utf-8&country_code=US&postcode=12345&codec=opus"
+
+      expect(described_class.sanitize_url(url)).to eq(url)
+    end
+
+    it "leaves a URL with nothing to redact byte-for-byte unchanged" do
+      url = "https://api.example.com/v1/models/gemini-1.5-pro:generateContent?alt=sse&a=b%20c&empty="
+
+      expect(described_class.sanitize_url(url)).to eq(url)
+    end
+
+    it "redacts sensitive matrix params in the path" do
+      sanitized = described_class.sanitize_url("https://api.example.com/v1;key=abc123/things;sig=xyz;ver=2/list")
+
+      expect(sanitized).to eq(
+        "https://api.example.com/v1;key=%5BREDACTED%5D/things;sig=%5BREDACTED%5D;ver=2/list"
+      )
+    end
+
+    it "redacts a matrix param smuggled into a query value" do
+      sanitized = described_class.sanitize_url("https://api.example.com/v1?a=1;key=SECRET&b=2")
+
+      expect(sanitized).not_to include("SECRET")
+      expect(sanitized).to eq("https://api.example.com/v1?a=1;key=%5BREDACTED%5D&b=2")
+    end
+
+    it "fails closed on bare query segments that have no '='" do
+      expect(described_class.sanitize_url("https://api.example.com/v1?sk-abc123")).to eq(
+        "https://api.example.com/v1?%5BREDACTED%5D"
+      )
+      expect(described_class.sanitize_url("https://api.example.com/v1?alt=sse&sk-abc123&n=1")).to eq(
+        "https://api.example.com/v1?alt=sse&%5BREDACTED%5D&n=1"
+      )
+    end
+
+    it "does not alter a URL with an empty query" do
+      expect(described_class.sanitize_url("https://api.example.com/v1?")).to eq("https://api.example.com/v1?")
     end
   end
 
