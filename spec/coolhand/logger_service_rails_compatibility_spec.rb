@@ -126,6 +126,88 @@ RSpec.describe Coolhand::LoggerService do
       end
     end
 
+    context "with a Rack-env-shaped headers object (real Rails request.headers iterates the whole env)" do
+      let(:rack_env_headers) do
+        mock_rails_headers_class.new({
+          "rack.session" => "SESSION_SENTINEL",
+          "rack.input" => "INPUT_SENTINEL",
+          "rack.request.form_hash" => "FORM_SENTINEL",
+          "action_dispatch.request.request_parameters" => "PARAMS_SENTINEL",
+          "action_dispatch.http_auth_salt" => "SALT_SENTINEL",
+          "REQUEST_METHOD" => "POST",
+          "PATH_INFO" => "/webhooks/PATH_SENTINEL",
+          "QUERY_STRING" => "q=QUERY_SENTINEL",
+          "REMOTE_ADDR" => "10.9.8.7",
+          "SERVER_NAME" => "SERVER_SENTINEL",
+          "CONTENT_TYPE" => "application/json",
+          "CONTENT_LENGTH" => "42",
+          "HTTP_X_REQUEST_ID" => "req_abc123",
+          "HTTP_AUTHORIZATION" => "Bearer secret_token"
+        })
+      end
+
+      before do
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .to_return(status: 200, body: JSON.generate({ id: 404 }))
+      end
+
+      it "forwards only real HTTP headers and none of the Rack env" do
+        service.forward_webhook(webhook_body: webhook_body, source: "elevenlabs", headers: rack_env_headers)
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            expect(req.body).not_to match(/SENTINEL|10\.9\.8\.7/)
+            headers = JSON.parse(req.body).dig("llm_request_log", "raw_request", "headers")
+            expect(headers).to eq(
+              "content-type" => "application/json",
+              "content-length" => "42",
+              "x-request-id" => "req_abc123",
+              "authorization" => "[REDACTED]"
+            )
+            true
+          end)
+      end
+
+      it "applies the same filter to response_headers" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          response_headers: rack_env_headers
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            expect(req.body).not_to match(/SENTINEL/)
+            true
+          end)
+      end
+    end
+
+    context "with plain Hash headers using already-normalized names" do
+      before do
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .to_return(status: 200, body: JSON.generate({ id: 505 }))
+      end
+
+      it "keeps them all, including all-caps and symbol keys" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          headers: { "Content-Type" => "application/json", "x-webhook-id" => "wh_1", "ETAG" => "abc",
+                     X_Custom: "yes" }
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            headers = JSON.parse(req.body).dig("llm_request_log", "raw_request", "headers")
+            expect(headers).to eq(
+              "content-type" => "application/json", "x-webhook-id" => "wh_1", "etag" => "abc", "x-custom" => "yes"
+            )
+            true
+          end)
+      end
+    end
+
     context "with edge cases that previously caused errors" do
       it "handles headers that throw NoMethodError on empty?" do
         # Create a headers object that aggressively throws NoMethodError
