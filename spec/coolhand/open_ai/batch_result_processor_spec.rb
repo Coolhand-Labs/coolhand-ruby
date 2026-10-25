@@ -454,8 +454,8 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
   end
 
   # Asserts on the HTTP request the real ApiService sends, not on what is handed to a stubbed one.
-  # Deliberately avoids exact url/source_api/model/timestamp expectations: how the processor derives
-  # those is being changed in a separate PR.
+  # Deliberately avoids exact url/source_api/model/timestamp expectations: those are pinned in the
+  # unit examples above.
   describe "what reaches the wire when a batch completes" do
     include LogWireHelper
 
@@ -463,7 +463,7 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
     let(:start_time) { 1_700_000_000 }
     let(:end_time) { start_time + 5 }
     let(:batch_info) do
-      { "id" => "batch-wire", "status" => "completed", "input_file_id" => "file-in", "output_file_id" => "file-out",
+      { "id" => "batch_wire", "status" => "completed", "input_file_id" => "file-in", "output_file_id" => "file-out",
         "in_progress_at" => start_time, "completed_at" => end_time }
     end
     let(:input_items) do
@@ -493,7 +493,7 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
         .and_return(output_items.map(&:to_json).join("\n"))
       stub_log_endpoint
 
-      described_class.new(event_data: { "id" => "batch-wire" }).call
+      described_class.new(event_data: { "id" => "batch_wire" }).call
     end
 
     it_behaves_like "a log request sent to the Coolhand API"
