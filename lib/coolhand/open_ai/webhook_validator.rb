@@ -20,6 +20,7 @@ module Coolhand
 
       def valid?
         @errors.clear
+        @claimed_id = nil
         @payload = request.raw_post || request.body.read
 
         return false unless payload_valid?
@@ -35,6 +36,20 @@ module Coolhand
 
       def error_message
         @errors.join(", ")
+      end
+
+      # Gives back the webhook-id claim made by the last successful `valid?` so a same-id retry
+      # (e.g. after processing failed) isn't rejected as a replay. A no-op when nothing was claimed
+      # or when the store has no `release!` (custom stores may implement only `claim!`).
+      def release_claim!
+        claimed_id = @claimed_id
+        return unless claimed_id
+
+        @claimed_id = nil
+        id_store.release!(claimed_id) if id_store.respond_to?(:release!)
+      rescue StandardError => e
+        # Best effort: a failing store must not stop the caller from rejecting the request.
+        Rails.logger.error("OpenAI webhook id release failed: #{e.message}")
       end
 
       private
@@ -139,9 +154,15 @@ module Coolhand
         false
       end
 
+      # The timestamp check accepts anything within +/- tolerance of now, so a request stamped
+      # `now + tolerance` stays fresh until `now + 2 * tolerance`. Remember the id for twice the
+      # tolerance so it can't be replayed after its claim expires but while it is still fresh.
       def webhook_id_unused?(webhook_id)
-        tolerance = Coolhand.configuration.webhook_replay_tolerance_seconds
-        return true if id_store.claim!(webhook_id, tolerance)
+        ttl = Coolhand.configuration.webhook_replay_tolerance_seconds * 2
+        if id_store.claim!(webhook_id, ttl)
+          @claimed_id = webhook_id
+          return true
+        end
 
         @errors << "OpenAI webhook id already processed (replay protection)"
         Rails.logger.error(@errors.last)

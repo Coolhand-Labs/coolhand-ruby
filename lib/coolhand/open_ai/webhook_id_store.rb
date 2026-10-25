@@ -27,6 +27,13 @@ module Coolhand
         end
       end
 
+      # Forgets a claim so the same id can be claimed again (used when processing failed and the
+      # sender retries). A no-op for an unknown id.
+      def release!(id)
+        @mutex.synchronize { @entries.delete(id) }
+        nil
+      end
+
       def seen?(id)
         @mutex.synchronize do
           prune
