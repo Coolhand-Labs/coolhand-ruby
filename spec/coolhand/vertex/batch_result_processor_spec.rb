@@ -3,6 +3,7 @@
 require "spec_helper"
 require "logger"
 require "coolhand/vertex/batch_result_processor"
+require_relative "../../support/log_wire_helper"
 
 RSpec.describe Coolhand::Vertex::BatchResultProcessor do
   let(:logger) { instance_double(Logger, info: nil, warn: nil, error: nil) }
@@ -387,6 +388,67 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
         expect(Rails.logger).to receive(:warn).with(a_string_including("Unknown batch status"))
         processor = described_class.new(batch_info: batch_info)
         expect { processor.call }.not_to raise_error
+      end
+    end
+  end
+
+  # Asserts on the HTTP request the real ApiService sends, not on what is handed to a stubbed one.
+  describe "what reaches the wire when a batch succeeds" do
+    include LogWireHelper
+
+    let(:secret) { "cosmos-account-key-xyz" }
+    let(:batch_info) do
+      { "name" => "projects/1/locations/us/batchPredictionJobs/42", "displayName" => "wire_batch",
+        "startTime" => "2026-01-04T20:16:56Z", "endTime" => "2026-01-04T20:17:06Z",
+        "state" => "JOB_STATE_SUCCEEDED", "model" => "publishers/google/models/gemini-2.0-flash" }
+    end
+    let(:good_item) do
+      { "request" => { "contents" => "hi", "data_sources" => [{ "parameters" => { "connection_string" => secret } }] },
+        "response" => { "output" => "bar" } }
+    end
+    let(:other_item) { { "request" => { "contents" => "yo" }, "response" => { "output" => "baz" } } }
+    let(:items) { [good_item, "not-a-hash", other_item] }
+
+    before do
+      stub_log_endpoint
+      described_class.new(batch_info: batch_info).call(items)
+    end
+
+    it_behaves_like "a log request sent to the Coolhand API"
+
+    it "POSTs one log per well-formed item and skips the malformed one" do
+      expect(wire_requests.size).to eq(2)
+      expect(wire_raw_requests.map { |r| r["response_body"] }).to eq([{ "output" => "bar" }, { "output" => "baz" }])
+    end
+
+    it "sends the Vertex job URL, source_api, normalized model, status and job timing" do
+      raw = wire_raw_requests.first
+
+      expect(raw).to include(
+        "url" => "https://aiplatform.googleapis.com/v1/projects/1/locations/us/batchPredictionJobs/42",
+        "source_api" => "vertex", "model" => "gemini-2.0-flash", "method" => "post", "status_code" => 200,
+        "duration_ms" => 10_000, "timestamp" => "2026-01-04T20:16:56Z", "completed_at" => "2026-01-04T20:17:06Z"
+      )
+    end
+
+    it "gives each log its own request id" do
+      ids = wire_raw_requests.map { |r| r["id"] }
+
+      expect(ids.uniq.size).to eq(2)
+      expect(ids).to all(match(/\A\h{32}\z/))
+    end
+
+    it "redacts data_sources credentials in the request body that is sent" do
+      params = wire_raw_requests.first["request_body"]["data_sources"][0]["parameters"]
+
+      expect(params["connection_string"]).to eq("[REDACTED]")
+    end
+
+    context "when the job name is invalid" do
+      let(:batch_info) { super().merge("name" => "not-a-job-name") }
+
+      it "sends nothing" do
+        expect(wire_requests).to be_empty
       end
     end
   end
