@@ -15,8 +15,7 @@ module Coolhand
         return super unless block && Thread.current[:coolhand_capturing_stream]
 
         super do |chunk|
-          Thread.current[:coolhand_stream_buffer] ||= +""
-          Thread.current[:coolhand_stream_buffer] << chunk
+          Helpers.buffer_stream_chunk(chunk)
           yield(chunk)
         end
       end
@@ -123,10 +122,10 @@ module Coolhand
 
       begin
         response = super
-        body_content = Thread.current[:coolhand_stream_buffer] || response&.body
-        body_content = body_content.dup.force_encoding("UTF-8") if body_content.is_a?(String)
+        captured = Thread.current[:coolhand_stream_buffer] || response&.body
+        # captured is a String, or an Integer byte count when a streamed body overflowed the cap.
+        response_body = Helpers.response_body_for_log(captured, response)
         status_code = response.respond_to?(:code) ? response.code.to_i : nil
-        response_body = BaseInterceptor.parse_json(body_content)
       rescue StandardError => e
         status_code = Helpers.extract_status_from_exception(e)
         response_body = { "error" => { "class" => e.class.name, "message" => e.message } }
@@ -184,6 +183,11 @@ module Coolhand
 
         content = body || req.body
         if content.nil? && req.respond_to?(:body_stream) && req.body_stream
+          # A declared Content-Length over the cap means we never need the bytes: skip
+          # before .read so a huge stream is not buffered just to be discarded.
+          too_large = oversized_declared_length(req)
+          return too_large if too_large
+
           content = req.body_stream.read
           req.body_stream = StringIO.new(content)
         end
@@ -192,16 +196,72 @@ module Coolhand
         cap_and_parse(content, req)
       end
 
+      # The effective cap: nil disables it; a non-Integer or negative value (e.g. an unparsed
+      # ENV string) falls back to the default rather than raising into the host's request or stream.
+      def capture_limit
+        limit = Coolhand.configuration.max_captured_body_bytes
+        return limit if limit.nil? || (limit.is_a?(Integer) && !limit.negative?)
+
+        Coolhand::Configuration::DEFAULT_MAX_CAPTURED_BODY_BYTES
+      end
+
+      def over_capture_limit?(size)
+        limit = capture_limit
+        !limit.nil? && size > limit
+      end
+
+      def body_too_large_marker(carrier, size)
+        skipped_capture_marker(carrier, "body_too_large", size_bytes: size, max_bytes: capture_limit)
+      end
+
+      # Returns a body_too_large marker when the request declares a Content-Length above the
+      # cap, else nil. Chunked/absent/malformed lengths return nil (the caller then reads the
+      # stream and cap_and_parse still enforces the cap on the real size).
+      def oversized_declared_length(req)
+        length = declared_content_length(req)
+        body_too_large_marker(req, length) if length && over_capture_limit?(length)
+      end
+
+      def declared_content_length(req)
+        req.content_length if req.respond_to?(:content_length)
+      rescue StandardError
+        nil
+      end
+
+      # Appends a streamed response chunk to the thread-local capture buffer, up to the cap.
+      # Past the cap the buffer is dropped and replaced by a running byte count (an Integer),
+      # so memory stays bounded; the host always still receives every chunk because the caller
+      # yields it regardless. Only #request (via response_body_for_log) reads this slot.
+      def buffer_stream_chunk(chunk)
+        buffer = Thread.current[:coolhand_stream_buffer]
+        total = (buffer.is_a?(Integer) ? buffer : buffer.to_s.bytesize) + chunk.bytesize
+
+        Thread.current[:coolhand_stream_buffer] =
+          if buffer.is_a?(Integer) || over_capture_limit?(total)
+            total
+          else
+            (buffer || +"") << chunk
+          end
+      end
+
+      # Builds the logged response body from either an Integer (streamed body that overflowed
+      # the cap, see buffer_stream_chunk) or the body String/nil. An oversized String is
+      # replaced by a marker before the dup/JSON.parse so we don't copy or parse it.
+      def response_body_for_log(body, response)
+        size = body.is_a?(Integer) ? body : body.to_s.bytesize
+        return body_too_large_marker(response, size) if body.is_a?(Integer) || over_capture_limit?(size)
+
+        body = body.dup.force_encoding("UTF-8") if body.is_a?(String)
+        BaseInterceptor.parse_json(body)
+      end
+
       def binary_upload?(req)
         content_type = req.respond_to?(:content_type) ? req.content_type : nil
         content_type && !content_type.match?(/json/i)
       end
 
       def cap_and_parse(content, req)
-        max_bytes = Coolhand.configuration.max_captured_body_bytes
-        if max_bytes && content.bytesize > max_bytes
-          return skipped_capture_marker(req, "body_too_large", size_bytes: content.bytesize, max_bytes: max_bytes)
-        end
+        return body_too_large_marker(req, content.bytesize) if over_capture_limit?(content.bytesize)
 
         BaseInterceptor.parse_json(content)
       end

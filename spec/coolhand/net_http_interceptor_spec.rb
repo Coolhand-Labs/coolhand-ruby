@@ -578,6 +578,255 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(captured["content_type"]).to eq("multipart/form-data")
   end
 
+  describe "request body_stream Content-Length pre-check" do
+    let(:uri) { URI("https://api.test.com/upload") }
+    let(:content) { '{"streamed":"this payload is well over ten bytes long"}' }
+    let(:http) { Net::HTTP.new(uri.host, uri.port).tap { |h| h.use_ssl = true } }
+
+    def stream_request(stream, content_length: content.bytesize.to_s)
+      req = Net::HTTP::Post.new(uri)
+      req.body_stream = stream
+      req["Content-Length"] = content_length if content_length
+      req
+    end
+
+    before { Coolhand.configuration.max_captured_body_bytes = 10 }
+
+    it "skips an oversized declared Content-Length without reading or rewrapping the stream" do
+      stream = StringIO.new(content)
+      allow(stream).to receive(:read).and_call_original
+      req = stream_request(stream)
+
+      captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
+
+      expect(stream).not_to have_received(:read)
+      expect(req.body_stream).to equal(stream)
+      expect(captured).to include(
+        "_coolhand_capture_skipped" => "body_too_large", "size_bytes" => content.bytesize, "max_bytes" => 10
+      )
+    end
+
+    it "still sends the full body to the provider when the capture is skipped up front" do
+      stub = stub_request(:post, "https://api.test.com/upload").with(body: content)
+        .to_return(status: 200, body: '{"ok":true}', headers: { "Content-Type" => "application/json" })
+
+      http.request(stream_request(StringIO.new(content)))
+      sleep 0.05
+
+      expect(stub).to have_been_requested
+      raw = @captured_log[:raw_request]
+      expect(raw[:request_body]["_coolhand_capture_skipped"]).to eq("body_too_large")
+    end
+
+    it "reads and captures a stream whose declared Content-Length is within the cap" do
+      Coolhand.configuration.max_captured_body_bytes = 1_000
+      req = stream_request(StringIO.new(content))
+
+      captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
+
+      expect(captured).to eq({ "streamed" => "this payload is well over ten bytes long" })
+    end
+
+    it "falls back to reading the stream when no Content-Length is declared (cap_and_parse still applies)" do
+      stream = StringIO.new(content)
+      req = stream_request(stream, content_length: nil)
+
+      captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
+
+      expect(captured["_coolhand_capture_skipped"]).to eq("body_too_large")
+      expect(captured["size_bytes"]).to eq(content.bytesize)
+    end
+
+    it "does not raise on a malformed Content-Length, and still falls back to reading the stream" do
+      req = stream_request(StringIO.new(content), content_length: "not-a-number")
+
+      captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
+
+      expect(captured["_coolhand_capture_skipped"]).to eq("body_too_large")
+    end
+
+    it "does not pre-check when the cap is disabled" do
+      Coolhand.configuration.max_captured_body_bytes = nil
+      req = stream_request(StringIO.new(content))
+
+      expect(Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil))
+        .to eq({ "streamed" => "this payload is well over ten bytes long" })
+    end
+  end
+
+  describe "response body cap (max_captured_body_bytes)" do
+    let(:helpers) { Coolhand::NetHttpInterceptor::Helpers }
+
+    after { Thread.current[:coolhand_stream_buffer] = nil }
+
+    def intercepted_request(request_class, url)
+      uri = URI(url)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      http.request(request_class.new(uri)).tap { sleep 0.05 }
+    end
+
+    it "replaces an oversized non-streamed response body with a marker, but returns it to the host in full" do
+      Coolhand.configuration.max_captured_body_bytes = 10
+      body = '{"text":"a response that is well over ten bytes long"}'
+      stub_request(:post, "https://api.test.com/v1/chat")
+        .to_return(status: 200, body: body, headers: { "Content-Type" => "application/json" })
+
+      response = intercepted_request(Net::HTTP::Post, "https://api.test.com/v1/chat")
+
+      expect(response.body).to eq(body)
+      logged = @captured_log[:raw_request][:response_body]
+      expect(logged).to eq(
+        "_coolhand_capture_skipped" => "body_too_large",
+        "size_bytes" => body.bytesize,
+        "max_bytes" => 10,
+        "content_type" => "application/json"
+      )
+    end
+
+    it "logs a non-streamed response body at or under the cap unchanged" do
+      Coolhand.configuration.max_captured_body_bytes = 12
+      stub_request(:get, "https://api.test.com/hello")
+        .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
+
+      intercepted_request(Net::HTTP::Get, "https://api.test.com/hello")
+
+      expect(@captured_log[:raw_request][:response_body]).to eq({ "msg" => "hi" })
+    end
+
+    it "does not cap response bodies when max_captured_body_bytes is nil" do
+      Coolhand.configuration.max_captured_body_bytes = nil
+      stub_request(:get, "https://api.test.com/hello")
+        .to_return(status: 200, body: '{"msg":"hi"}', headers: { "Content-Type" => "application/json" })
+
+      intercepted_request(Net::HTTP::Get, "https://api.test.com/hello")
+
+      expect(@captured_log[:raw_request][:response_body]).to eq({ "msg" => "hi" })
+    end
+
+    describe ".buffer_stream_chunk" do
+      before { Coolhand.configuration.max_captured_body_bytes = 10 }
+
+      it "accumulates chunks while the total stays within the cap" do
+        helpers.buffer_stream_chunk("12345")
+        helpers.buffer_stream_chunk("67890")
+
+        expect(Thread.current[:coolhand_stream_buffer]).to eq("1234567890")
+      end
+
+      it "drops the buffered content and keeps only a running byte count once the cap is crossed mid-chunk" do
+        helpers.buffer_stream_chunk("123456")
+        helpers.buffer_stream_chunk("789012")
+        expect(Thread.current[:coolhand_stream_buffer]).to eq(12)
+
+        helpers.buffer_stream_chunk("abc")
+        expect(Thread.current[:coolhand_stream_buffer]).to eq(15)
+      end
+
+      it "keeps a stream that lands exactly on the cap, and trips only on the next byte" do
+        helpers.buffer_stream_chunk("1234567890")
+        expect(Thread.current[:coolhand_stream_buffer]).to eq("1234567890")
+
+        helpers.buffer_stream_chunk("1")
+        expect(Thread.current[:coolhand_stream_buffer]).to eq(11)
+      end
+
+      it "buffers without limit when the cap is nil" do
+        Coolhand.configuration.max_captured_body_bytes = nil
+        helpers.buffer_stream_chunk("x" * 5_000)
+
+        expect(Thread.current[:coolhand_stream_buffer].bytesize).to eq(5_000)
+      end
+
+      it "falls back to the default cap instead of raising when the configured cap is not an Integer" do
+        Coolhand.configuration.max_captured_body_bytes = "10"
+
+        expect { helpers.buffer_stream_chunk("x" * 50) }.not_to raise_error
+        expect(Thread.current[:coolhand_stream_buffer]).to eq("x" * 50)
+        expect(helpers.response_body_for_log("x" * 2_000_000, nil)).to include(
+          "_coolhand_capture_skipped" => "body_too_large", "max_bytes" => 1_000_000
+        )
+      end
+
+      it "treats a negative or Float cap as invalid and uses the default" do
+        [-1, 10.5].each do |bad|
+          Coolhand.configuration.max_captured_body_bytes = bad
+
+          expect(helpers.capture_limit).to eq(Coolhand::Configuration::DEFAULT_MAX_CAPTURED_BODY_BYTES)
+        end
+      end
+
+      it "treats a cap of 0 as 'capture nothing' and still handles an empty or nil body" do
+        Coolhand.configuration.max_captured_body_bytes = 0
+
+        expect(helpers.response_body_for_log(nil, nil)).to be_nil
+        expect(helpers.response_body_for_log("", nil)).to eq("")
+        expect(helpers.response_body_for_log("x", nil)).to include("_coolhand_capture_skipped" => "body_too_large")
+      end
+
+      it "counts bytes, not characters" do
+        helpers.buffer_stream_chunk("こんにちは")
+
+        expect(Thread.current[:coolhand_stream_buffer]).to eq(15)
+      end
+    end
+
+    it "streams an oversized response to the host in full while logging only a marker (over a real connection)" do
+      Coolhand.configuration.max_captured_body_bytes = 40
+      pieces = Array.new(4) { |i| "piece-#{i}-".ljust(25, "x") }
+      body = pieces.join
+      server = TCPServer.new("127.0.0.1", 0)
+      port = server.addr[1]
+      server_thread = Thread.new do
+        client = server.accept
+        client.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
+        client.gets("\r\n\r\n")
+        client.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n" \
+                     "Connection: close\r\n\r\n")
+        pieces.each do |piece|
+          client.write("#{piece.bytesize.to_s(16)}\r\n#{piece}\r\n")
+          sleep 0.05
+        end
+        client.write("0\r\n\r\n")
+        client.close
+      end
+      Coolhand.configuration.intercept_addresses = ["127.0.0.1"]
+
+      begin
+        WebMock.disable!
+        http_class = Class.new(Net::HTTP) { prepend Coolhand::NetHttpInterceptor }
+        received = +""
+        buffer_states = []
+        http_class.start("127.0.0.1", port) do |http|
+          http.request(Net::HTTP::Get.new("/stream")) do |res|
+            res.read_body do |chunk|
+              received << chunk
+              buffer_states << Thread.current[:coolhand_stream_buffer].dup
+            end
+          end
+        end
+
+        raw = @captured_log[:raw_request]
+        expect(received).to eq(body)
+        # First 25-byte piece is within the 40-byte cap and buffered; once the second crosses it the
+        # buffer is dropped for a running byte count and never holds more than the cap again.
+        expect(buffer_states.first).to be_a(String).and(satisfy { |s| s.bytesize <= 40 })
+        expect(buffer_states.last).to eq(body.bytesize)
+        expect(buffer_states.grep(String).map(&:bytesize).max).to be <= 40
+        expect(raw[:is_streaming]).to be true
+        expect(raw[:response_body]).to include(
+          "_coolhand_capture_skipped" => "body_too_large", "size_bytes" => body.bytesize, "max_bytes" => 40
+        )
+        expect(Thread.current[:coolhand_stream_buffer]).to be_nil
+        expect(Thread.current[:coolhand_capturing_stream]).to be_nil
+      ensure
+        WebMock.enable!
+        server_thread.kill
+        server.close
+      end
+    end
+  end
+
   it "does not buffer a streamed read_body for a request that was never intercepted" do
     stub_request(:get, "https://not-intercepted.example.com/stream")
       .to_return(status: 200, body: "chunk1chunk2")
