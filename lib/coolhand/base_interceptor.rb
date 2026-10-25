@@ -16,16 +16,23 @@ module Coolhand
     # Rate-limit telemetry headers (OpenAI `x-ratelimit-remaining-tokens`, Anthropic
     # `anthropic-ratelimit-input-tokens-reset`, ...) contain the word "token" but carry counts and
     # reset times, not credentials, so redacting them only loses useful data. The vocabulary after
-    # `ratelimit` is deliberately closed: a lookalike such as `x-ratelimit-api-key` is not
-    # allow-listed and stays redacted. Checked against the downcased header name.
+    # `ratelimit` is closed (a lookalike such as `x-ratelimit-api-key` stays redacted), and the
+    # optional vendor prefix captured in group 1 must itself be free of sensitive words (see
+    # `safe_header?`), so `secret-ratelimit-remaining` stays redacted too. Checked against the
+    # downcased header name.
     SAFE_HEADER_PATTERN =
-      /\A(?:[a-z0-9]+-){0,2}rate-?limit(?:-(?:limit|remaining|reset|requests|tokens|input|output))+\z/
+      /\A((?:[a-z0-9]+-){0,2})rate-?limit(?:-(?:limit|remaining|reset|requests|tokens|input|output))+\z/
 
     # True when a header name should be redacted. Shared with LoggerService so both logging paths
     # make the same call.
     def sensitive_header?(name)
       down = name.to_s.downcase
-      down.match?(SENSITIVE_HEADER_PATTERN) && !down.match?(SAFE_HEADER_PATTERN)
+      down.match?(SENSITIVE_HEADER_PATTERN) && !safe_header?(down)
+    end
+
+    def safe_header?(down_name)
+      match = SAFE_HEADER_PATTERN.match(down_name)
+      !match.nil? && !match[1].match?(SENSITIVE_HEADER_PATTERN)
     end
 
     def sanitize_headers(headers)
@@ -104,14 +111,17 @@ module Coolhand
     # Percent-encoded "[REDACTED]", the form the placeholder takes once inside a URL.
     REDACTED_URL_VALUE = "%5BREDACTED%5D"
 
-    # A `;name=value` matrix parameter, in a path segment or smuggled into a query value.
-    MATRIX_PARAM_PATTERN = %r{;([^/;?#=&]+)=([^/;?#&]*)}
+    # A `;name=value` matrix parameter. In a path the value stops at the next path delimiter; in a
+    # query value "/" is legal inside a secret (base64), so the value runs to the next ";" or "&".
+    PATH_MATRIX_PARAM_PATTERN = %r{;([^/;?#=&]+)=([^/;?#&]*)}
+    QUERY_MATRIX_PARAM_PATTERN = /;([^;=&#]+)=([^;&#]*)/
 
     def sensitive_query_param?(name)
       decoded = begin
-        URI.decode_www_form_component(name)
+        # scrub: a percent-escaped invalid byte (`%FF`) must not make the match below raise.
+        URI.decode_www_form_component(name).scrub
       rescue ArgumentError
-        name
+        name.scrub
       end
       decoded.match?(SENSITIVE_QUERY_PARAM_PATTERN) || SENSITIVE_QUERY_PARAM_EXACT_NAMES.include?(decoded.downcase)
     end
@@ -127,7 +137,7 @@ module Coolhand
         modified = true
       end
 
-      path = uri.path && redact_matrix_params(uri.path)
+      path = uri.path && redact_matrix_params(uri.path, PATH_MATRIX_PARAM_PATTERN)
       if path != uri.path
         uri.path = path
         modified = true
@@ -146,8 +156,8 @@ module Coolhand
       url.to_s.sub(%r{//[^/?#]*@}, "//REDACTED@").split(/[?#]/, 2).first
     end
 
-    def redact_matrix_params(text)
-      text.gsub(MATRIX_PARAM_PATTERN) do |match|
+    def redact_matrix_params(text, pattern)
+      text.gsub(pattern) do |match|
         sensitive_query_param?(Regexp.last_match(1)) ? ";#{Regexp.last_match(1)}=#{REDACTED_URL_VALUE}" : match
       end
     end
@@ -166,7 +176,7 @@ module Coolhand
       return REDACTED_URL_VALUE if separator.empty?
       return "#{name}=#{REDACTED_URL_VALUE}" if sensitive_query_param?(name)
 
-      "#{name}=#{redact_matrix_params(value)}"
+      "#{name}=#{redact_matrix_params(value, QUERY_MATRIX_PARAM_PATTERN)}"
     end
 
     # Key names inside an Azure OpenAI "On Your Data" data_sources/dataSources entry that carry

@@ -222,6 +222,13 @@ RSpec.describe Coolhand::BaseInterceptor do
       end
     end
 
+    it "does not let a sensitive vendor prefix smuggle a header past redaction" do
+      %w[api-key-ratelimit-reset secret-ratelimit-tokens auth-session-ratelimit-remaining
+         x-token-ratelimit-limit].each do |name|
+        expect(described_class.sensitive_header?(name)).to be(true), "expected #{name} to be redacted"
+      end
+    end
+
     it "redacts ordinary sensitive names and passes ordinary safe ones" do
       expect(described_class.sensitive_header?("x-api-key")).to be(true)
       expect(described_class.sensitive_header?("Set-Cookie")).to be(true)
@@ -312,6 +319,31 @@ RSpec.describe Coolhand::BaseInterceptor do
 
       expect(sanitized).not_to include("SECRET")
       expect(sanitized).to eq("https://api.example.com/v1?a=1;key=%5BREDACTED%5D&b=2")
+    end
+
+    it "redacts the whole secret when a query matrix value contains '/'" do
+      sanitized = described_class.sanitize_url("https://h.example/a?next=/a;key=SEC/ret/more&b=2")
+
+      expect(sanitized).to eq("https://h.example/a?next=/a;key=%5BREDACTED%5D&b=2")
+    end
+
+    it "redacts percent-encoded sensitive param and matrix names" do
+      sanitized = described_class.sanitize_url("https://h.example/a;%6Bey=S1?c%6Fde=S2")
+
+      expect(sanitized).not_to include("S1")
+      expect(sanitized).not_to include("S2")
+    end
+
+    it "does not raise on a percent-escaped invalid UTF-8 byte in a param or matrix name" do
+      expect { described_class.sanitize_url("https://h.example/a;%FF=1?%FF=2&ok=3") }.not_to raise_error
+      expect(described_class.sanitize_url("https://h.example/a?%FF=2&ok=3")).to eq("https://h.example/a?%FF=2&ok=3")
+    end
+
+    it "leaves fragments and relative URLs working" do
+      expect(described_class.sanitize_url("https://h.example/a?key=S#frag")).to eq(
+        "https://h.example/a?key=%5BREDACTED%5D#frag"
+      )
+      expect(described_class.sanitize_url("/rel/path?code=S")).to eq("/rel/path?code=%5BREDACTED%5D")
     end
 
     it "fails closed on bare query segments that have no '='" do
