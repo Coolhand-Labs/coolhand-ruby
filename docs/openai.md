@@ -59,6 +59,12 @@ end
 # ...existing code...
 ```
 
+## What gets logged for a completed batch
+
+Each batch item is logged with `source_api: "openai"` and the `model` from the item's request body (falling back to the response body). Batch input files use relative URLs such as `/v1/chat/completions`; these are logged as `https://api.openai.com/v1/chat/completions` (the host is not configurable, so Azure OpenAI or proxy batches are logged with that host too). The batch's `in_progress_at` and `completed_at` timestamps become each log's start and completion times; if OpenAI reports either as missing, the whole batch is skipped with an error in `Rails.logger` rather than logged with bogus times. If `completed_at` is earlier than `in_progress_at`, a warning is logged and `duration_ms` is clamped to 0.
+
+The batch ID from the webhook payload and the batch's input/output file IDs are used in calls to the OpenAI API with your `OPENAI_API_KEY`, so they are format-checked first (`batch_...` and `file-...`/`file_...`, letters, digits, `_` and `-` only). An event or batch whose IDs don't match is ignored with an error in `Rails.logger`.
+
 ## Signature header and secret rotation
 
 The `webhook-signature` header may carry several space-separated signatures (`v1,sigA v1,sigB`), as senders produce while a webhook secret is being rotated. `Coolhand::OpenAi::WebhookValidator` accepts the request if any `v1,` entry matches your secret, comparing each in constant time and ignoring entries with any other version prefix. The timestamp and replay checks below still run, and only after a signature matches.
