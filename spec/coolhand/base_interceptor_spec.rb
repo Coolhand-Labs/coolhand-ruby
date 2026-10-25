@@ -327,6 +327,20 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized).to eq("https://h.example/a?next=/a;key=%5BREDACTED%5D&b=2")
     end
 
+    it "redacts exact-name matrix params that follow a non-sensitive name in a query segment" do
+      %w[code sas pwd passwd].each do |name|
+        sanitized = described_class.sanitize_url("https://h.example/a?x;#{name}=SECRET&y=1")
+
+        expect(sanitized).to eq("https://h.example/a?x;#{name}=%5BREDACTED%5D&y=1")
+      end
+    end
+
+    it "still redacts path matrix params when the URL is unparseable and falls back to fail-closed" do
+      sanitized = described_class.sanitize_url("https://u:p@h.example/a;key=SECRET/{x}?code=S#f")
+
+      expect(sanitized).to eq("https://REDACTED@h.example/a;key=%5BREDACTED%5D/{x}")
+    end
+
     it "redacts percent-encoded sensitive param and matrix names" do
       sanitized = described_class.sanitize_url("https://h.example/a;%6Bey=S1?c%6Fde=S2")
 

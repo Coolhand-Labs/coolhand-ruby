@@ -153,7 +153,8 @@ module Coolhand
     rescue URI::InvalidURIError
       # Fail closed: an unparseable URL can't be checked param-by-param, so drop everything
       # that could carry a credential (userinfo, query, fragment) rather than pass it through.
-      url.to_s.sub(%r{//[^/?#]*@}, "//REDACTED@").split(/[?#]/, 2).first
+      stripped = url.to_s.sub(%r{//[^/?#]*@}, "//REDACTED@").split(/[?#]/, 2).first
+      redact_matrix_params(stripped, PATH_MATRIX_PARAM_PATTERN)
     end
 
     def redact_matrix_params(text, pattern)
@@ -171,12 +172,15 @@ module Coolhand
     def redact_query_segment(segment)
       return segment if segment.empty?
 
-      name, separator, value = segment.partition("=")
+      # Matrix redaction first: in `x;code=S` the first "=" makes the "name" `x;code`, which would
+      # dodge the exact-name rule.
+      segment = redact_matrix_params(segment, QUERY_MATRIX_PARAM_PATTERN)
+      name, separator, = segment.partition("=")
       # No "=": nothing says what this is, so a stray token could be a credential. Fail closed.
       return REDACTED_URL_VALUE if separator.empty?
       return "#{name}=#{REDACTED_URL_VALUE}" if sensitive_query_param?(name)
 
-      "#{name}=#{redact_matrix_params(value, QUERY_MATRIX_PARAM_PATTERN)}"
+      segment
     end
 
     # Key names inside an Azure OpenAI "On Your Data" data_sources/dataSources entry that carry
