@@ -4,6 +4,17 @@ require_relative "api_service"
 
 module Coolhand
   class LoggerService < ApiService
+    # CGI/Rack/Rails/app-server variables that show up in a Rails `request.headers` iteration
+    # (it walks the whole Rack env) but are not HTTP headers. CONTENT_TYPE and
+    # CONTENT_LENGTH are real headers and are deliberately absent. ORIGINAL_FULLPATH and
+    # REQUEST_PATH carry the query string, so they must never be forwarded.
+    RACK_ENV_CGI_KEYS = %w[
+      AUTH_TYPE GATEWAY_INTERFACE HTTPS HTTP_VERSION ORIGINAL_FULLPATH ORIGINAL_SCRIPT_NAME
+      PATH_INFO PATH_TRANSLATED QUERY_STRING REMOTE_ADDR REMOTE_HOST REMOTE_IDENT REMOTE_PORT
+      REMOTE_USER REQUEST_METHOD REQUEST_PATH REQUEST_URI SCRIPT_NAME SERVER_ADDR SERVER_NAME
+      SERVER_PORT SERVER_PROTOCOL SERVER_SOFTWARE
+    ].freeze
+
     def initialize
       super("v2/llm_request_logs")
     end
@@ -60,7 +71,7 @@ module Coolhand
       # Handle Rails request headers or plain hash
       clean_headers = {}
       headers.each do |key, value|
-        next unless key && value
+        next unless forwardable_header?(key, value)
 
         # Convert Rails HTTP_ prefix headers
         clean_key = key.to_s.gsub(/^HTTP_/, "").tr("_", "-").downcase
@@ -71,6 +82,17 @@ module Coolhand
         clean_headers[clean_key] = clean_value
       end
       clean_headers
+    end
+
+    # Rails' request.headers#each yields the whole Rack env, not just headers. Drop the
+    # non-header entries (rack.session, action_dispatch.*, REQUEST_METHOD, QUERY_STRING, ...)
+    # so session/params data is never forwarded. Ordinary header names (including normalized
+    # plain-Hash ones like "Content-Type" or "x-webhook-id") never match; only dotted keys do.
+    def forwardable_header?(key, value)
+      return false unless key && value
+
+      name = key.to_s
+      !(name.include?(".") || RACK_ENV_CGI_KEYS.include?(name))
     end
 
     def clean_webhook_body(body, source)

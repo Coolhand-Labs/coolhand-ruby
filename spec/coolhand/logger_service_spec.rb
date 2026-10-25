@@ -312,6 +312,36 @@ RSpec.describe Coolhand::LoggerService do
           end)
       end
 
+      it "sanitizes a caller-supplied url (userinfo and sensitive query params)" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          url: "https://user:pass@example.test/hook?token=abc123&id=1"
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            url = JSON.parse(req.body).dig("llm_request_log", "raw_request", "url")
+            expect(url).not_to include("pass", "abc123")
+            expect(url).to include("id=1")
+          end)
+      end
+
+      it "accepts a URI object as url" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          url: URI("https://example.test/hook?api_key=zzz")
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            url = JSON.parse(req.body).dig("llm_request_log", "raw_request", "url")
+            expect(url).to start_with("https://example.test/hook")
+            expect(url).not_to include("zzz")
+          end)
+      end
+
       it "redacts sensitive response_headers instead of forwarding them raw" do
         service.forward_webhook(
           webhook_body: webhook_body,

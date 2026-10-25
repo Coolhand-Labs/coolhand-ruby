@@ -35,7 +35,7 @@ class WebhooksController < ApplicationController
         webhook_body: request.raw_post || request.body.read,
         source: "elevenlabs",
         event_type: request.headers["X-ElevenLabs-Event"] || "conversation",
-        headers: request.headers
+        headers: request.headers # only real HTTP headers are forwarded; Rack env entries are dropped
       )
 
       if result
