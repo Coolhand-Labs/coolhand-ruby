@@ -70,7 +70,8 @@ module Coolhand
         Rails.logger.info("[Interceptor] Successfully processed OpenAI batch #{batch_info['id']}")
       end
 
-      # Returns [input_file_id, output_file_id], or nil when either is absent or malformed.
+      # Returns [input_file_id, output_file_id], or nil when either is absent (quietly: a completed
+      # batch where every item failed legitimately has no output file) or malformed (logged).
       def result_file_ids
         input_file_id = batch_info["input_file_id"]
         output_file_id = batch_info["output_file_id"]
@@ -167,7 +168,7 @@ module Coolhand
       def item_model(*bodies)
         bodies.each do |body|
           model = body["model"] if body.is_a?(Hash)
-          return model if Coolhand.required_field?(model)
+          return model if model.is_a?(String) && Coolhand.required_field?(model)
         end
         nil
       end

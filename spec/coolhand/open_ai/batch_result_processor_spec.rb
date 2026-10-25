@@ -363,6 +363,14 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
         end
       end
 
+      context "when the request body model is not a string" do
+        let(:request_body) { { "model" => { "x" => 1 } } }
+
+        it "ignores it and falls back to the response body model" do
+          expect(sent_request[:model]).to eq("gpt-4o-mini-2024-07-18")
+        end
+      end
+
       context "when neither body has a model" do
         let(:request_body) { nil }
         let(:response_body) { { "id" => "chatcmpl-1" } }
