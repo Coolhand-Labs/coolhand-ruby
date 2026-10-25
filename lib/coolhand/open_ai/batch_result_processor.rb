@@ -98,13 +98,13 @@ module Coolhand
           return
         end
 
-        if completed < started
-          Rails.logger.warn("[Interceptor] OpenAI batch #{batch_info['id']} has a completed_at before its " \
-                            "in_progress_at; sending request log(s) with duration_ms clamped to 0")
-          completed = started
-        end
+        warn_inverted_window if completed < started
+        [Time.at(started), Time.at([started, completed].max)]
+      end
 
-        [Time.at(started), Time.at(completed)]
+      def warn_inverted_window
+        Rails.logger.warn("[Interceptor] OpenAI batch #{batch_info['id']} has a completed_at before its " \
+                          "in_progress_at; clamping duration_ms to 0")
       end
 
       def valid_id?(value, pattern, label)

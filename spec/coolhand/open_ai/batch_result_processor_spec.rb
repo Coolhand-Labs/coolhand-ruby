@@ -308,7 +308,7 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
           [{ "custom_id" => "c1", "method" => "POST", "url" => "/v1/chat/completions", "body" => {} }],
           [{ "custom_id" => "c1", "response" => { "request_id" => "r1", "body" => {}, "status_code" => 200 } }]
         )
-        expect(logger).to receive(:warn).with(a_string_including("clamped"))
+        expect(logger).to receive(:warn).with(a_string_including("clamping"))
         expect(api_service).to receive(:send_llm_request_log)
           .with(hash_including(raw_request: hash_including(duration_ms: 0)))
 
