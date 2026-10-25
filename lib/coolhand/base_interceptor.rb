@@ -59,7 +59,7 @@ module Coolhand
         headers.each { |k, v| h[k.to_s] = normalize_header_value(v) }
         h
       else
-        { "raw" => headers.to_s }
+        {} # fail closed: an unrecognised shape can't be checked header-by-header
       end
 
       raw ||= {} # in case to_hash raised and nothing was built
@@ -100,13 +100,16 @@ module Coolhand
     # credential params used by AWS (X-Amz-Signature, X-Amz-Credential,
     # X-Amz-Security-Token) and Google Cloud (X-Goog-Signature,
     # X-Goog-Credential) storage APIs.
-    SENSITIVE_QUERY_PARAM_PATTERN = /key|token|secret|sig|credential|password|auth/i
+    SENSITIVE_QUERY_PARAM_PATTERN = Regexp.new(
+      %w[key token secret sig credential password auth jwt bearer session cookie passphrase ticket assertion].join("|"),
+      Regexp::IGNORECASE
+    )
 
     # Param names that are sensitive but too short or generic to match as a substring without
     # over-matching (`code` would hit `encoding`, `country_code`). Matched by whole name,
     # case-insensitively: `code` (Azure Functions keys, OAuth authorization codes), `sas` (Azure
     # SAS tokens), and `pwd`/`passwd`, which the `password` substring above does not cover.
-    SENSITIVE_QUERY_PARAM_EXACT_NAMES = %w[code sas pwd passwd].freeze
+    SENSITIVE_QUERY_PARAM_EXACT_NAMES = %w[code sas pwd passwd pass sid otp].freeze
 
     # Percent-encoded "[REDACTED]", the form the placeholder takes once inside a URL.
     REDACTED_URL_VALUE = "%5BREDACTED%5D"
@@ -266,6 +269,9 @@ module Coolhand
 
     def parse_json(string)
       JSON.parse(string)
+    rescue JSON::NestingError
+      # Too deep to walk for redaction; logging the raw string would skip BodyRedactor entirely.
+      { "_coolhand_capture_skipped" => "nesting_too_deep" }
     rescue JSON::ParserError, TypeError
       string
     end

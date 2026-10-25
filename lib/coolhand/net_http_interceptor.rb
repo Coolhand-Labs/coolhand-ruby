@@ -129,10 +129,7 @@ module Coolhand
 
       begin
         response = super(req, body, &tracked_block)
-        captured = Thread.current[:coolhand_stream_buffer] || response&.body
-        # captured is a String, or an Integer byte count when a streamed body overflowed the cap.
-        response_body = Helpers.response_body_for_log(captured, response)
-        status_code = response.respond_to?(:code) ? response.code.to_i : nil
+        status_code, response_body = Helpers.capture_response(response)
       rescue StandardError => e
         status_code, response_body = Helpers.error_details(e, host_block_errors)
         raise
@@ -288,6 +285,20 @@ module Coolhand
           else
             (buffer || +"") << chunk
           end
+      rescue StandardError => e
+        # Runs inside the host's read_body loop: a capture failure must never reach the host.
+        Coolhand.log "❌ Error buffering streamed response chunk: #{e.message}"
+      end
+
+      # [status_code, response_body] for the log. Called after the real request has succeeded, so a
+      # failure here is logged and swallowed rather than re-raised into the host app.
+      def capture_response(response)
+        captured = Thread.current[:coolhand_stream_buffer] || response&.body
+        # captured is a String, or an Integer byte count when a streamed body overflowed the cap.
+        [response.respond_to?(:code) ? response.code.to_i : nil, response_body_for_log(captured, response)]
+      rescue StandardError => e
+        Coolhand.log "❌ Error capturing response: #{e.message}"
+        [nil, nil]
       end
 
       # Builds the logged response body from either an Integer (streamed body that overflowed

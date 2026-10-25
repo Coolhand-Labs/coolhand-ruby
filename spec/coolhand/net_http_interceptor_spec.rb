@@ -897,6 +897,22 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(@captured_log[:raw_request][:response_body]).to eq({ "msg" => "hi" })
     end
 
+    describe "capture failures never reach the host" do
+      it "buffer_stream_chunk logs and swallows an error instead of raising into read_body" do
+        expect(Coolhand).to receive(:log).with(a_string_including("Error buffering streamed response chunk"))
+
+        expect { helpers.buffer_stream_chunk(nil) }.not_to raise_error
+      end
+
+      it "capture_response logs and returns nils when building the log body raises" do
+        response = instance_double(Net::HTTPResponse, code: "200", body: "ok")
+        allow(helpers).to receive(:response_body_for_log).and_raise(StandardError, "boom")
+        expect(Coolhand).to receive(:log).with(a_string_including("Error capturing response: boom"))
+
+        expect(helpers.capture_response(response)).to eq([nil, nil])
+      end
+    end
+
     describe ".buffer_stream_chunk" do
       before { Coolhand.configuration.max_captured_body_bytes = 10 }
 

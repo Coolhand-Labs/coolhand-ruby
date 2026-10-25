@@ -221,13 +221,13 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized).to eq("Cookie" => "[REDACTED]", "Accept" => "*/*")
     end
 
-    it "falls back to a raw string for an object that supports no header enumeration" do
+    it "fails closed for an object that supports no header enumeration, never logging its to_s" do
       headers = Object.new
       def headers.to_s
-        "opaque-headers"
+        "Authorization: Bearer sk-secret"
       end
 
-      expect(described_class.sanitize_headers(headers)).to eq("raw" => "opaque-headers")
+      expect(described_class.sanitize_headers(headers)).to eq({})
     end
   end
 
@@ -426,6 +426,21 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized).not_to include("user")
       expect(sanitized).not_to include("pw")
       expect(sanitized).to eq("https://REDACTED@ho st/p")
+    end
+  end
+
+  describe "query-name and nesting-depth hardening" do
+    it "redacts jwt, session, pass, sid and otp query params" do
+      url = described_class.sanitize_url("https://h.example/a?jwt=J1&session=S1&pass=P1&sid=I1&otp=O1&page=2")
+
+      expect(url).not_to match(/J1|S1|P1|I1|O1/)
+      expect(url).to include("page=2")
+    end
+
+    it "does not log a body nested past the JSON depth limit as a raw string" do
+      deep = "#{'[' * 101}{\"authorization\":\"Bearer sk-SECRET\"}#{']' * 101}"
+
+      expect(described_class.parse_json(deep)).to eq("_coolhand_capture_skipped" => "nesting_too_deep")
     end
   end
 
