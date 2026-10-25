@@ -128,22 +128,21 @@ RSpec.describe Coolhand::LoggerService do
 
     context "with a Rack-env-shaped headers object (real Rails request.headers iterates the whole env)" do
       let(:rack_env_headers) do
-        mock_rails_headers_class.new({
+        # Every denylisted CGI/server key carries a sentinel, so a key dropped from the
+        # constant (or a new one that leaks) fails the "no SENTINEL" assertions below.
+        cgi_sentinels = Coolhand::LoggerService::RACK_ENV_CGI_KEYS.to_h { |k| [k, "SENTINEL_#{k}"] }
+        mock_rails_headers_class.new(cgi_sentinels.merge({
           "rack.session" => "SESSION_SENTINEL",
           "rack.input" => "INPUT_SENTINEL",
           "rack.request.form_hash" => "FORM_SENTINEL",
           "action_dispatch.request.request_parameters" => "PARAMS_SENTINEL",
           "action_dispatch.http_auth_salt" => "SALT_SENTINEL",
-          "REQUEST_METHOD" => "POST",
-          "PATH_INFO" => "/webhooks/PATH_SENTINEL",
-          "QUERY_STRING" => "q=QUERY_SENTINEL",
-          "REMOTE_ADDR" => "10.9.8.7",
-          "SERVER_NAME" => "SERVER_SENTINEL",
+          "ORIGINAL_FULLPATH" => "/webhooks?token=FULLPATH_SENTINEL",
           "CONTENT_TYPE" => "application/json",
           "CONTENT_LENGTH" => "42",
           "HTTP_X_REQUEST_ID" => "req_abc123",
           "HTTP_AUTHORIZATION" => "Bearer secret_token"
-        })
+        }))
       end
 
       before do
@@ -156,7 +155,7 @@ RSpec.describe Coolhand::LoggerService do
 
         expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
           .with do |req|
-            expect(req.body).not_to match(/SENTINEL|10\.9\.8\.7/)
+            expect(req.body).not_to include("SENTINEL")
             headers = JSON.parse(req.body).dig("llm_request_log", "raw_request", "headers")
             expect(headers).to eq(
               "content-type" => "application/json",
