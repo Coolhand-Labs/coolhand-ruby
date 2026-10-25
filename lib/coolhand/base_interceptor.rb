@@ -123,7 +123,12 @@ module Coolhand
       rescue ArgumentError
         name.scrub
       end
-      decoded.match?(SENSITIVE_QUERY_PARAM_PATTERN) || SENSITIVE_QUERY_PARAM_EXACT_NAMES.include?(decoded.downcase)
+      decoded.match?(SENSITIVE_QUERY_PARAM_PATTERN) || exact_sensitive_query_name?(decoded)
+    end
+
+    # Exact-name check that also sees through Rails/PHP bracket syntax: `code[]`, `auth[code]`.
+    def exact_sensitive_query_name?(decoded_name)
+      decoded_name.downcase.split(/[\[\]]+/).any? { |part| SENSITIVE_QUERY_PARAM_EXACT_NAMES.include?(part) }
     end
 
     def sanitize_url(url)

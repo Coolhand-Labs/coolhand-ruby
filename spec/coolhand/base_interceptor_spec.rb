@@ -294,6 +294,14 @@ RSpec.describe Coolhand::BaseInterceptor do
       )
     end
 
+    it "sees through bracketed array-style names for the exact-name rule" do
+      sanitized = described_class.sanitize_url("https://h.example/a?code[]=S1&a[sas]=S2&a[country_code]=US")
+
+      expect(sanitized).to eq(
+        "https://h.example/a?code[]=%5BREDACTED%5D&a[sas]=%5BREDACTED%5D&a[country_code]=US"
+      )
+    end
+
     it "does not treat names merely containing 'code' as sensitive" do
       url = "https://api.example.com/v1/x?encoding=utf-8&country_code=US&postcode=12345&codec=opus"
 
