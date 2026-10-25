@@ -1,18 +1,23 @@
 # frozen_string_literal: true
 
+require "net/http"
+require "openssl"
 require "stringio"
+require "timeout"
+require "zlib"
 
 module Coolhand
   module NetHttpInterceptor
     # Response streaming interceptor nested under NetHttpInterceptor
     module ResponseInterceptor
       def read_body(dest = nil, &block)
-        # Only buffer while a #request call below is actively capturing —
-        # otherwise every block-form read_body in the process (including
-        # ones on responses this gem never intercepted) accumulates into a
-        # thread-local that's never freed, which is an unbounded memory
-        # leak on any thread that streams large non-LLM responses.
-        return super unless block && Thread.current[:coolhand_capturing_stream]
+        # Only buffer this exact response while a #request call below is
+        # actively capturing it — otherwise every block-form read_body in
+        # the process (including ones on responses this gem never
+        # intercepted, such as a nested request made from inside the host's
+        # streaming block) accumulates into a thread-local that's never
+        # freed, and leaks one request's chunks into another's log.
+        return super unless block && Thread.current[:coolhand_capturing_stream].equal?(self)
 
         super do |chunk|
           Helpers.buffer_stream_chunk(chunk)
@@ -118,17 +123,18 @@ module Coolhand
       previous_stream_buffer = Thread.current[:coolhand_stream_buffer]
       previous_capturing_stream = Thread.current[:coolhand_capturing_stream]
       Thread.current[:coolhand_stream_buffer] = nil
-      Thread.current[:coolhand_capturing_stream] = true
+      Thread.current[:coolhand_capturing_stream] = nil
+      host_block_errors = []
+      tracked_block = Helpers.track_streaming_block(block, host_block_errors)
 
       begin
-        response = super
+        response = super(req, body, &tracked_block)
         captured = Thread.current[:coolhand_stream_buffer] || response&.body
         # captured is a String, or an Integer byte count when a streamed body overflowed the cap.
         response_body = Helpers.response_body_for_log(captured, response)
         status_code = response.respond_to?(:code) ? response.code.to_i : nil
       rescue StandardError => e
-        status_code = Helpers.extract_status_from_exception(e)
-        response_body = { "error" => { "class" => e.class.name, "message" => e.message } }
+        status_code, response_body = Helpers.error_details(e, host_block_errors)
         raise
       ensure
         active.delete(self)
@@ -164,6 +170,46 @@ module Coolhand
     # Net::HTTP and could collide with, or be shadowed by, other code.
     module Helpers
       module_function
+
+      HOST_BLOCK_ERROR_MESSAGE = "[redacted: raised in host streaming block]"
+      # Socket-level failures can surface inside the host's block (read_body runs there); they
+      # carry no app data, so they keep their message even when they pass through the host block.
+      TRANSPORT_ERRORS = [
+        IOError, SystemCallError, Timeout::Error, Net::ProtocolError, OpenSSL::SSL::SSLError,
+        Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Zlib::Error
+      ].freeze
+      private_constant :HOST_BLOCK_ERROR_MESSAGE, :TRANSPORT_ERRORS
+
+      # Wraps the host's streaming block so (a) read_body only buffers the response being
+      # captured here, and (b) exceptions raised by the host's own code can be told apart from
+      # transport errors (see TRANSPORT_ERRORS). Returns nil when there is no block.
+      def track_streaming_block(block, host_block_errors)
+        return unless block
+
+        proc do |res|
+          Thread.current[:coolhand_capturing_stream] = res
+          block.call(res)
+        rescue StandardError => e
+          host_block_errors << e unless transport_error?(e)
+          raise
+        end
+      end
+
+      # Matched by class, so a host block raising its own IOError/SystemCallError subclass keeps its
+      # message too; accepted trade-off, as telling those apart from socket failures isn't possible.
+      def transport_error?(error)
+        TRANSPORT_ERRORS.any? { |klass| error.is_a?(klass) }
+      end
+
+      # An error raised by the host's streaming block can carry app-level data in its message (and
+      # in a #status or message-embedded status code), so only its class is logged and no status is
+      # derived from it; transport errors keep their message and status. Returns [status, body].
+      def error_details(error, host_block_errors)
+        from_host = host_block_errors.any? { |host_error| host_error.equal?(error) }
+        status = from_host ? nil : extract_status_from_exception(error)
+        message = from_host ? HOST_BLOCK_ERROR_MESSAGE : error.message
+        [status, { "error" => { "class" => error.class.name, "message" => message } }]
+      end
 
       def should_capture?
         return true if Coolhand.configuration.debug_mode
