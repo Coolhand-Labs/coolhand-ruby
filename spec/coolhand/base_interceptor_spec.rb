@@ -706,6 +706,23 @@ RSpec.describe Coolhand::BaseInterceptor do
         sym: "ok")
     end
 
+    it "applies the depth guard along a chain of nested client_secret objects" do
+      deep = { "value" => "ek_leaf" }
+      5000.times { deep = { "client_secret" => deep } }
+
+      sanitized = nil
+      expect { sanitized = redact(deep) }.not_to raise_error
+      expect(sanitized.to_s).not_to include("ek_leaf")
+    end
+
+    it "still walks MCP headers that are not a flat map of strings" do
+      tool = { "type" => "mcp", "headers" => [{ "Authorization" => "x" }] }
+      nested = { "type" => "mcp", "headers" => { "X" => { "Authorization" => "y" }, "Retries" => 3 } }
+
+      expect(redact(tool)["headers"]).to eq([{ "Authorization" => "[REDACTED]" }])
+      expect(redact(nested)["headers"]).to eq("X" => { "Authorization" => "[REDACTED]" }, "Retries" => 3)
+    end
+
     it "redacts deeply nested but in-range credentials" do
       body = { "a" => { "b" => [{ "c" => { "api_key" => "s" } }] } }
 

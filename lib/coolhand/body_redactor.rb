@@ -23,11 +23,11 @@ module Coolhand
       redact_body_node(body, 0)
     end
 
-    def redact_body_node(node, depth)
+    def redact_body_node(node, depth, secret_object: false)
       return BaseInterceptor::REDACTED if depth > BaseInterceptor::MAX_BODY_DEPTH
 
       case node
-      when Hash then redact_body_hash(node, depth)
+      when Hash then redact_body_hash(node, depth, secret_object: secret_object)
       when Array then node.map { |v| redact_body_node(v, depth + 1) }
       else node
       end
@@ -48,9 +48,9 @@ module Coolhand
       elsif value.is_a?(String) && redact_string_leaf?(name, context)
         BaseInterceptor::REDACTED
       elsif name == "headers" && context[:mcp]
-        redact_header_values(value)
+        redact_header_values(value, depth + 1)
       elsif name == "clientsecret" && value.is_a?(Hash)
-        redact_body_hash(value, depth + 1, secret_object: true)
+        redact_body_node(value, depth + 1, secret_object: true)
       else
         redact_body_node(value, depth + 1)
       end
@@ -77,10 +77,14 @@ module Coolhand
       hash_value(hash, "type") == "mcp" || !hash_value(hash, "server_url").nil?
     end
 
-    def redact_header_values(headers)
-      return headers unless headers.is_a?(Hash)
+    # String values are the credentials; anything else (a malformed nested shape) goes back through
+    # the generic walk so it is still depth-limited and credential-key checked.
+    def redact_header_values(headers, depth)
+      return redact_body_node(headers, depth) unless headers.is_a?(Hash)
 
-      headers.transform_values { |v| v.is_a?(String) ? BaseInterceptor::REDACTED : v }
+      headers.transform_values do |v|
+        v.is_a?(String) ? BaseInterceptor::REDACTED : redact_body_node(v, depth + 1)
+      end
     end
 
     def hash_value(hash, name)
