@@ -28,7 +28,7 @@ module Coolhand
         secret_bytes = extract_secret_bytes
         webhook_signature, webhook_timestamp, webhook_id = extract_webhook_headers
 
-        return validate_headers_in_non_production_env unless webhook_signature && webhook_timestamp && webhook_id
+        return reject_missing_headers unless webhook_signature && webhook_timestamp && webhook_id
 
         verify_signature(webhook_signature, webhook_timestamp, webhook_id, secret_bytes)
       end
@@ -83,16 +83,11 @@ module Coolhand
         [webhook_signature, webhook_timestamp, webhook_id]
       end
 
-      def validate_headers_in_non_production_env
-        if should_enforce_strict_validation?
-          @errors << "Missing OpenAI webhook signature, timestamp, or id headers - " \
-                     "rejecting webhook (Rails.env=#{Rails.env.inspect} not in development/test allowlist)"
-          Rails.logger.error(@errors.last)
-          false
-        else
-          Rails.logger.warn("Missing OpenAI webhook headers - skipping verification in #{Rails.env}")
-          true
-        end
+      # A secret is configured, so unsigned requests are rejected in every environment.
+      def reject_missing_headers
+        @errors << "Missing OpenAI webhook signature, timestamp, or id headers - rejecting webhook"
+        Rails.logger.error(@errors.last)
+        false
       end
 
       def verify_signature(webhook_signature, webhook_timestamp, webhook_id, secret_bytes)
