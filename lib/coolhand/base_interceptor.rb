@@ -195,31 +195,32 @@ module Coolhand
     # (Elasticsearch) are caught — not just exact or snake_case-only names.
     SENSITIVE_BODY_KEY_PATTERN = /key|token|secret|passw|pwd|credential|bearer|jwt|connectionstring|signature/i
 
+    REDACTED = "[REDACTED]"
+
+    # Subtrees nested deeper than this are replaced wholesale rather than walked, so a pathological
+    # body can neither overflow the stack (SystemStackError is not a StandardError, so
+    # send_complete_request_log's rescue would not catch it) nor smuggle a credential past the walk.
+    MAX_BODY_DEPTH = 100
+
     def sanitize_body(body)
-      return body unless body.is_a?(Hash)
-
-      sanitized = body.dup
-      sanitized.each_key do |key|
-        next unless key.to_s.delete("_-").casecmp?("datasources")
-
-        sanitized[key] = redact_sensitive_body_values(sanitized[key])
-      end
-      sanitized
+      BodyRedactor.redact(body)
     end
 
-    def redact_sensitive_body_values(node)
+    def redact_sensitive_body_values(node, depth = 0)
+      return REDACTED if depth > MAX_BODY_DEPTH
+
       case node
-      when Hash
-        node.each_with_object({}) do |(k, v), acc|
-          normalized = k.to_s.gsub(/[_\-\s]/, "").downcase
-          acc[k] = normalized.match?(SENSITIVE_BODY_KEY_PATTERN) ? "[REDACTED]" : redact_sensitive_body_values(v)
-        end
-      when Array
-        node.map { |v| redact_sensitive_body_values(v) }
-      when String
-        redact_embedded_url_credentials(node)
-      else
-        node
+      when Hash then redact_sensitive_body_hash(node, depth)
+      when Array then node.map { |v| redact_sensitive_body_values(v, depth + 1) }
+      when String then redact_embedded_url_credentials(node)
+      else node
+      end
+    end
+
+    def redact_sensitive_body_hash(hash, depth)
+      hash.each_with_object({}) do |(k, v), acc|
+        normalized = k.to_s.gsub(/[_\-\s]/, "").downcase
+        acc[k] = normalized.match?(SENSITIVE_BODY_KEY_PATTERN) ? REDACTED : redact_sensitive_body_values(v, depth + 1)
       end
     end
 
@@ -243,7 +244,7 @@ module Coolhand
         headers: sanitize_headers(request_headers),
         request_body: sanitize_body(request_body),
         response_headers: sanitize_headers(response_headers),
-        response_body: response_body,
+        response_body: sanitize_body(response_body),
         status_code: status_code,
         duration_ms: duration_ms,
         completed_at: end_time.iso8601,

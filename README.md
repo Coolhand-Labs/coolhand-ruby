@@ -528,6 +528,7 @@ The monitor handles errors gracefully:
 ## Security
 
 - API keys in request headers and credential-like URL query params are automatically redacted (provider rate-limit headers such as `x-ratelimit-remaining-tokens` are kept)
+- Credentials in request and response bodies (MCP `authorization`/`authorization_token`, Realtime ephemeral client secrets, `api_key`, and similar) are redacted; see [Body redaction](docs/configuration.md#body-redaction)
 - No sensitive data is exposed in logs
 - All data is sent via HTTPS to Coolhand servers
 

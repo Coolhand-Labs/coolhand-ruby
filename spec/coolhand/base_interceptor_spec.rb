@@ -98,6 +98,31 @@ RSpec.describe Coolhand::BaseInterceptor do
       )
     end
 
+    it "redacts credentials in the response body that is sent, not just the request body" do
+      response = { "value" => "ek_live_abc", "expires_at" => 1_900_000_000, "session" => { "model" => "gpt-realtime" } }
+
+      described_class.send_complete_request_log(
+        **base_args,
+        request_body: { "api_key" => "sk-request-secret", "input" => "foo" },
+        response_body: response
+      )
+
+      expect(raw_request[:request_body]).to eq("api_key" => "[REDACTED]", "input" => "foo")
+      expect(raw_request[:response_body]).to eq(
+        "value" => "[REDACTED]", "expires_at" => 1_900_000_000, "session" => { "model" => "gpt-realtime" }
+      )
+    end
+
+    it "does not mutate the caller's request or response bodies" do
+      request_body = { "api_key" => "sk-request-secret" }
+      response_body = { "client_secret" => "cs-secret" }
+
+      described_class.send_complete_request_log(**base_args, request_body: request_body, response_body: response_body)
+
+      expect(request_body).to eq("api_key" => "sk-request-secret")
+      expect(response_body).to eq("client_secret" => "cs-secret")
+    end
+
     it "rescues an error from the API service, logs it, and does not raise" do
       allow(api_service).to receive(:send_llm_request_log).and_raise("network error")
       allow(Coolhand).to receive(:log)
@@ -481,6 +506,184 @@ RSpec.describe Coolhand::BaseInterceptor do
       body = { "messages" => [{ "role" => "user", "content" => "hi" }] }
 
       expect(described_class.sanitize_body(body)).to eq(body)
+    end
+  end
+
+  describe ".sanitize_body credential leaves" do
+    def redact(body)
+      described_class.sanitize_body(body)
+    end
+
+    it "redacts a top-level api_key" do
+      expect(redact("api_key" => "sk-live", "model" => "gpt-4o")).to eq("api_key" => "[REDACTED]", "model" => "gpt-4o")
+    end
+
+    it "redacts every listed key name, matching case and separator style" do
+      keys = %w[authorization authorization_token access_token refresh_token id_token api_key apikey client_secret
+                private_key secret_key password]
+      variants = keys + %w[Authorization authorizationToken accessToken refreshToken idToken apiKey API-KEY
+                           clientSecret privateKey secretKey PASSWORD]
+      body = variants.to_h { |k| [k, "s3cret"] }
+
+      expect(redact(body).values.uniq).to eq(["[REDACTED]"])
+    end
+
+    it "handles symbol keys" do
+      expect(redact(api_key: "sk-live", model: "m")).to eq(api_key: "[REDACTED]", model: "m")
+    end
+
+    it "redacts OpenAI Responses remote-MCP authorization and every headers value" do
+      body = {
+        "model" => "gpt-5",
+        "tools" => [{
+          "type" => "mcp", "server_label" => "stripe", "server_url" => "https://mcp.stripe.com",
+          "authorization" => "oauth-access-token", "headers" => { "X-Api-Token" => "t0k", "X-Tenant" => "acme" },
+          "require_approval" => "never"
+        }]
+      }
+
+      tool = redact(body)["tools"][0]
+
+      expect(tool).to eq(
+        "type" => "mcp", "server_label" => "stripe", "server_url" => "https://mcp.stripe.com",
+        "authorization" => "[REDACTED]", "headers" => { "X-Api-Token" => "[REDACTED]", "X-Tenant" => "[REDACTED]" },
+        "require_approval" => "never"
+      )
+    end
+
+    it "redacts headers on an entry that has server_url but no type, and on a symbol-keyed mcp tool" do
+      expect(redact("server_url" => "https://m", "headers" => { "A" => "b" })["headers"]).to eq("A" => "[REDACTED]")
+      expect(redact(type: "mcp", headers: { "A" => "b" })[:headers]).to eq("A" => "[REDACTED]")
+    end
+
+    it "leaves headers alone on objects that are not MCP tools" do
+      body = { "type" => "http_echo", "headers" => { "Host" => "example.com" } }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "redacts Anthropic mcp_servers authorization_token and keeps the rest" do
+      body = { "mcp_servers" => [{ "type" => "url", "url" => "https://m.example/sse", "name" => "m",
+                                   "authorization_token" => "tok" }] }
+
+      expect(redact(body)["mcp_servers"][0]).to eq(
+        "type" => "url", "url" => "https://m.example/sse", "name" => "m", "authorization_token" => "[REDACTED]"
+      )
+    end
+
+    it "redacts the legacy Realtime client_secret object's value but keeps expires_at" do
+      body = { "id" => "sess_1", "client_secret" => { "value" => "ek_abc", "expires_at" => 1_900_000_000 } }
+
+      expect(redact(body)).to eq(
+        "id" => "sess_1", "client_secret" => { "value" => "[REDACTED]", "expires_at" => 1_900_000_000 }
+      )
+    end
+
+    it "redacts a client_secret given as a plain string" do
+      expect(redact("client_secret" => "cs-secret")).to eq("client_secret" => "[REDACTED]")
+    end
+
+    it "redacts the GA Realtime client-secret value and the credentials echoed in its session" do
+      body = {
+        "value" => "ek_abc", "expires_at" => 1_900_000_000,
+        "session" => { "type" => "realtime",
+                       "tools" => [{ "type" => "mcp", "authorization" => "a", "headers" => { "h" => "v" } }] }
+      }
+
+      sanitized = redact(body)
+
+      expect(sanitized["value"]).to eq("[REDACTED]")
+      expect(sanitized["expires_at"]).to eq(1_900_000_000)
+      expect(sanitized["session"]["tools"][0]).to eq(
+        "type" => "mcp", "authorization" => "[REDACTED]", "headers" => { "h" => "[REDACTED]" }
+      )
+    end
+
+    it "leaves a bare value alone when there is no numeric expires_at beside it" do
+      expect(redact("value" => "42 apples")).to eq("value" => "42 apples")
+      expect(redact("value" => "x", "expires_at" => "tomorrow")).to eq("value" => "x", "expires_at" => "tomorrow")
+      expect(redact("expires_at" => 1)).to eq("expires_at" => 1)
+    end
+
+    it "does not mangle tool JSON schemas that have properties named like credentials" do
+      schema = {
+        "tools" => [{
+          "type" => "function",
+          "function" => {
+            "name" => "login",
+            "parameters" => {
+              "type" => "object",
+              "properties" => {
+                "key" => { "type" => "string" }, "token" => { "type" => "string" },
+                "api_key" => { "type" => "string", "description" => "the key" },
+                "authorization" => { "type" => "object", "properties" => { "scheme" => { "type" => "string" } } },
+                "password" => { "type" => "string" }
+              },
+              "required" => %w[api_key password]
+            }
+          }
+        }]
+      }
+
+      expect(redact(schema)).to eq(schema)
+    end
+
+    it "leaves usage counts, model output text and non-string values alone" do
+      body = {
+        "usage" => { "total_tokens" => 120, "input_tokens" => 100, "output_tokens" => 20 },
+        "max_tokens" => 256,
+        "choices" => [{ "message" => { "role" => "assistant",
+                                       "content" => "Set the authorization header and your api_key, token: abc" } }],
+        "api_key" => nil,
+        "password" => 12_345,
+        "authorization" => { "scheme" => "bearer" }
+      }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "walks arrays at the root and nested arrays of arrays" do
+      expect(redact([{ "api_key" => "a" }, [{ "authorization" => "b" }]]))
+        .to eq([{ "api_key" => "[REDACTED]" }, [{ "authorization" => "[REDACTED]" }]])
+    end
+
+    it "does not mutate its input" do
+      body = { "tools" => [{ "type" => "mcp", "authorization" => "a", "headers" => { "h" => "v" } }] }
+      snapshot = Marshal.load(Marshal.dump(body))
+
+      redact(body)
+
+      expect(body).to eq(snapshot)
+    end
+
+    it "passes nil, strings (including streamed SSE) and other non-JSON bodies through unchanged" do
+      sse = "data: {\"api_key\":\"sk-live\"}\n\n"
+
+      expect(redact(nil)).to be_nil
+      expect(redact(sse)).to eq(sse)
+      expect(redact(42)).to eq(42)
+    end
+
+    it "keeps redacting data_sources credentials when they are nested under other keys" do
+      body = { "request" => { "data_sources" => [{ "parameters" => { "key" => "k" } }] } }
+
+      expect(redact(body)["request"]["data_sources"][0]["parameters"]["key"]).to eq("[REDACTED]")
+    end
+
+    it "replaces subtrees nested deeper than 100 levels instead of recursing without bound" do
+      deep = { "api_key" => "x", "secret_holder" => "y" }
+      1000.times { deep = { "n" => deep } }
+
+      sanitized = nil
+      expect { sanitized = redact(deep) }.not_to raise_error
+      expect(sanitized.to_s).not_to include("secret_holder")
+      expect(sanitized.to_s).to include("[REDACTED]")
+    end
+
+    it "redacts deeply nested but in-range credentials" do
+      body = { "a" => { "b" => [{ "c" => { "api_key" => "s" } }] } }
+
+      expect(redact(body)["a"]["b"][0]["c"]["api_key"]).to eq("[REDACTED]")
     end
   end
 
