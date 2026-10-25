@@ -78,7 +78,7 @@ module Coolhand
 
         # Redact sensitive headers (shared with BaseInterceptor so both logging
         # paths treat the same header names as sensitive)
-        clean_value = clean_key.match?(BaseInterceptor::SENSITIVE_HEADER_PATTERN) ? "[REDACTED]" : value.to_s
+        clean_value = BaseInterceptor.sensitive_header?(clean_key) ? "[REDACTED]" : value.to_s
         clean_headers[clean_key] = clean_value
       end
       clean_headers

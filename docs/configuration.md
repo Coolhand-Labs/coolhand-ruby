@@ -35,7 +35,7 @@ end
 **What changes when `debug_mode` is `true`:**
 - No HTTP request is made — `create_log`, `create_feedback`, and `send_llm_request_log` all return `nil` and print the payload via `JSON.pretty_generate` instead.
 - Capture is forced on for every request, including inside a `Coolhand.without_capture` block and when `config.capture = false`. This is intentional — debug mode is meant to show you everything, not respect capture suppression — so don't leave it enabled in an environment where you rely on `without_capture` to keep specific calls out of the logs.
-- Header and URL sanitization (`[REDACTED]` API keys/tokens, redacted `key=`/`token=` query params) still applies to the printed payload, exactly as it would to a real request.
+- Header and URL sanitization (`[REDACTED]` API keys/tokens, redacted `key=`/`token=`/`code=` query params, `;key=` matrix params and bare `?value` query segments; rate-limit headers such as `x-ratelimit-remaining-tokens` are kept) still applies to the printed payload, exactly as it would to a real request.
 
 Because it forces capture unconditionally and prints full request/response bodies to the console, only enable `debug_mode` in development — never in production or in an environment handling real user data.
 
