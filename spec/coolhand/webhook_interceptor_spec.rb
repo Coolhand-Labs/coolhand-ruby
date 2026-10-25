@@ -39,7 +39,8 @@ RSpec.describe Coolhand::WebhookInterceptor do
     instance_double(Coolhand::OpenAi::WebhookValidator,
       valid?: validator_valid,
       payload: validator_payload,
-      error_message: "signature invalid")
+      error_message: "signature invalid",
+      release_claim!: nil)
   end
 
   before do
@@ -63,6 +64,15 @@ RSpec.describe Coolhand::WebhookInterceptor do
 
         expect(processor).to have_received(:call)
       end
+
+      it "keeps the webhook-id claimed after successful processing" do
+        allow(Coolhand::OpenAi::BatchResultProcessor).to receive(:new)
+          .and_return(instance_double(Coolhand::OpenAi::BatchResultProcessor, call: nil))
+
+        controller.intercept_batch_request
+
+        expect(validator).not_to have_received(:release_claim!)
+      end
     end
 
     context "when the webhook signature is invalid" do
@@ -74,6 +84,12 @@ RSpec.describe Coolhand::WebhookInterceptor do
         controller.intercept_batch_request
 
         expect(controller.head_status).to eq(:unauthorized)
+      end
+
+      it "does not release any claim" do
+        controller.intercept_batch_request
+
+        expect(validator).not_to have_received(:release_claim!)
       end
 
       it "logs the validator's error message" do
@@ -99,6 +115,14 @@ RSpec.describe Coolhand::WebhookInterceptor do
 
         expect { controller.intercept_batch_request }.not_to raise_error
         expect(controller.head_status).to eq(:unauthorized)
+      end
+
+      it "releases the webhook-id claim so the sender's retry isn't rejected as a replay" do
+        allow(controller).to receive(:process_event).and_raise(StandardError, "boom")
+
+        controller.intercept_batch_request
+
+        expect(validator).to have_received(:release_claim!)
       end
     end
 

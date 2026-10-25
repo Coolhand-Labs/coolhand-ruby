@@ -530,6 +530,94 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         end
       end
 
+      context "when the claim TTL is chosen" do
+        let(:store) { instance_double(Coolhand::OpenAi::WebhookIdStore, claim!: true) }
+
+        before { Coolhand.configuration.webhook_id_store = store }
+
+        it "claims the webhook id for twice the tolerance window" do
+          validator.valid?
+          expect(store).to have_received(:claim!).with(webhook_id, 600)
+        end
+
+        it "scales with a custom tolerance" do
+          Coolhand.configuration.webhook_replay_tolerance_seconds = 600
+          validator.valid?
+          expect(store).to have_received(:claim!).with(webhook_id, 1200)
+        end
+      end
+
+      context "when the timestamp is dated at the far edge of the tolerance window" do
+        let(:timestamp) { (Time.now.to_i + 290).to_s }
+
+        it "still rejects a replay after one tolerance, while the timestamp remains fresh" do
+          expect(validator.valid?).to be true
+
+          allow(Time).to receive(:now).and_return(Time.now + 301)
+          replay = described_class.new(request, webhook_secret)
+          expect(replay.valid?).to be false
+          expect(replay.error_message).to include("already processed")
+        end
+      end
+
+      context "when releasing the claim" do
+        it "lets the same webhook id be accepted again" do
+          expect(validator.valid?).to be true
+          validator.release_claim!
+
+          retry_validator = described_class.new(request, webhook_secret)
+          expect(retry_validator.valid?).to be true
+        end
+
+        it "releases only once" do
+          store = instance_double(Coolhand::OpenAi::WebhookIdStore, claim!: true, release!: nil)
+          Coolhand.configuration.webhook_id_store = store
+          validator.valid?
+
+          2.times { validator.release_claim! }
+
+          expect(store).to have_received(:release!).with(webhook_id).once
+        end
+
+        it "does nothing when this validator did not claim the id (a replay)" do
+          described_class.new(request, webhook_secret).valid?
+          replay = described_class.new(request, webhook_secret)
+          expect(replay.valid?).to be false
+
+          replay.release_claim!
+
+          expect(described_class.new(request, webhook_secret).valid?).to be false
+        end
+
+        it "does nothing when validation failed before claiming" do
+          store = instance_double(Coolhand::OpenAi::WebhookIdStore, claim!: true, release!: nil)
+          Coolhand.configuration.webhook_id_store = store
+          bad = described_class.new(request, "whsec_#{Base64.strict_encode64('another-secret-bytes')}")
+          expect(bad.valid?).to be false
+
+          bad.release_claim!
+
+          expect(store).not_to have_received(:release!)
+        end
+
+        it "is a no-op for a custom store that only implements claim!" do
+          Coolhand.configuration.webhook_id_store = Class.new { def claim!(_id, _ttl) = true }.new
+          validator.valid?
+
+          expect { validator.release_claim! }.not_to raise_error
+        end
+
+        it "swallows and logs an error raised by the store" do
+          store = instance_double(Coolhand::OpenAi::WebhookIdStore, claim!: true)
+          allow(store).to receive(:release!).and_raise(StandardError, "redis down")
+          Coolhand.configuration.webhook_id_store = store
+          validator.valid?
+
+          expect(logger).to receive(:error).with(a_string_including("redis down"))
+          expect { validator.release_claim! }.not_to raise_error
+        end
+      end
+
       context "when two requests use different webhook ids" do
         it "does not treat the second as a replay of the first" do
           expect(validator.valid?).to be true

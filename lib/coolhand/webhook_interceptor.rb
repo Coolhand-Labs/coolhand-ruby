@@ -27,6 +27,8 @@ module Coolhand
       # let the controller action run for a request whose webhook
       # signature was never confirmed valid.
       Rails.logger.error("[Interceptor] Failed to intercept batch request: #{e.message}")
+      # Give the webhook-id back so the sender's retry isn't rejected as a replay.
+      @validator&.release_claim!
       head :unauthorized
       false
     end

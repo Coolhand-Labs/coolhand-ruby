@@ -44,6 +44,28 @@ RSpec.describe Coolhand::OpenAi::WebhookIdStore do
     end
   end
 
+  describe "#release!" do
+    it "lets a released id be claimed again" do
+      store.claim!("wh_123", 300)
+      store.release!("wh_123")
+
+      expect(store.claim!("wh_123", 300)).to be true
+    end
+
+    it "leaves other claimed ids untouched" do
+      store.claim!("wh_123", 300)
+      store.claim!("wh_456", 300)
+      store.release!("wh_123")
+
+      expect(store.claim!("wh_456", 300)).to be false
+    end
+
+    it "is a no-op for an id that was never claimed" do
+      expect { store.release!("wh_unknown") }.not_to raise_error
+      expect(store.seen?("wh_unknown")).to be false
+    end
+  end
+
   describe "#seen?" do
     it "returns false for an id that has never been claimed" do
       expect(store.seen?("wh_123")).to be false
