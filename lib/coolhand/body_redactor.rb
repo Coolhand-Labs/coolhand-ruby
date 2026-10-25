@@ -61,7 +61,7 @@ module Coolhand
     end
 
     def normalize_body_key(key)
-      key.to_s.delete("_\\- ").downcase
+      key.to_s.delete("_ -").downcase # trailing "-" is a literal hyphen, not a range
     end
 
     # Realtime GA `POST /v1/realtime/client_secrets` returns `{"value": "ek_...", "expires_at": 123,

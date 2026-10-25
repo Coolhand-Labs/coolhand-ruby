@@ -680,6 +680,32 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized.to_s).to include("[REDACTED]")
     end
 
+    it "still scrubs URL credentials inside data_sources when reached through the shared walk, and only there" do
+      body = { "data_sources" => [{ "parameters" => { "endpoint" => "https://u:P@h.example/?sas=S" } }],
+               "note" => "https://u:P@h.example/?sas=S" }
+
+      sanitized = redact(body)
+
+      expect(sanitized["data_sources"][0]["parameters"]["endpoint"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+      expect(sanitized["note"]).to eq("https://u:P@h.example/?sas=S")
+    end
+
+    it "applies the depth guard inside data_sources too" do
+      deep = { "leaf" => "visible" }
+      500.times { deep = { "n" => deep } }
+
+      sanitized = nil
+      expect { sanitized = redact("data_sources" => deep) }.not_to raise_error
+      expect(sanitized.to_s).not_to include("visible")
+    end
+
+    it "accepts frozen input and non-String or nil keys without raising" do
+      body = { "api_key" => "s", nil => 1, 7 => { "authorization" => "a" }, :sym => "ok" }.freeze
+
+      expect(redact(body)).to eq("api_key" => "[REDACTED]", nil => 1, 7 => { "authorization" => "[REDACTED]" },
+        sym: "ok")
+    end
+
     it "redacts deeply nested but in-range credentials" do
       body = { "a" => { "b" => [{ "c" => { "api_key" => "s" } }] } }
 

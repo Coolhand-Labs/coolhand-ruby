@@ -43,10 +43,10 @@ Because it forces capture unconditionally and prints full request/response bodie
 
 Besides headers and URLs, Coolhand redacts credentials in the JSON body of both the request and the response before anything is sent. A redacted value becomes `[REDACTED]`; the rest of the body is untouched.
 
-- **String values under these keys, at any depth:** `authorization`, `authorization_token`, `access_token`, `refresh_token`, `id_token`, `api_key`, `client_secret`, `private_key`, `secret_key`, `password`. Names match exactly, ignoring case and `_`/`-` (so `apiKey` and `API-Key` match, `total_tokens` does not). Only string values are redacted, so a tool JSON Schema with a property named `api_key` or `token` is left as is.
-- **Remote MCP servers:** OpenAI `tools[].authorization` and Anthropic `mcp_servers[].authorization_token`. Every value in the `headers` map of an OpenAI MCP tool (`type: "mcp"` or a `server_url` is present) is redacted too.
+- **String values under these keys, at any depth:** `authorization`, `authorization_token`, `access_token`, `refresh_token`, `id_token`, `api_key`, `client_secret`, `private_key`, `secret_key`, `password`. Names match exactly, ignoring case and any `_`, `-` or space (so `apiKey` and `API-Key` match, `total_tokens` does not). Only string values are redacted, so a tool JSON Schema with a property named `api_key` or `token` is left as is.
+- **Remote MCP servers:** OpenAI `tools[].authorization` and Anthropic `mcp_servers[].authorization_token`. Every string value in the `headers` map of an OpenAI MCP tool (`type: "mcp"` or a `server_url` is present) is redacted too.
 - **Realtime ephemeral keys:** the `value` of a `client_secret` object (`expires_at` is kept), and the `value` of a client-secret response that has a numeric `expires_at` beside it.
-- **Azure OpenAI On Your Data:** credentials under `data_sources`, as before.
+- **Azure OpenAI On Your Data:** under a `data_sources` (or `dataSources`) key at any depth, key/token/secret/password-style fields are redacted, and credentials embedded in URL values (userinfo, `key=`/`sas=` query params) are scrubbed.
 
 Limits: only parsed JSON bodies (objects and arrays) are checked. Streamed (server-sent event) and other non-JSON bodies are sent as received, and so are secrets inside free text such as model output. Subtrees nested more than 100 levels deep are replaced with `[REDACTED]`. Webhooks forwarded with `Coolhand.forward_webhook` have their own body handling and are not covered by this.
 
