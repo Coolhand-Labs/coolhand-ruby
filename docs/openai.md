@@ -76,7 +76,7 @@ Coolhand.configure do |config|
 end
 ```
 
-The default `webhook-id` dedup store is in-memory and per-process, so it only protects a single process — replays across multiple app processes/dynos within the tolerance window aren't caught by default. If you run more than one process, supply your own store via `config.webhook_id_store`; any object responding to `claim!(id, ttl_seconds)` works (`ttl_seconds` is twice `webhook_replay_tolerance_seconds`), e.g. one backed by `Rails.cache`. `claim!` must atomically check-and-record the id in one operation (not a separate read then write) — otherwise two requests racing on the same id can both "win" — so lean on your cache backend's compare-and-set primitive (`unless_exist:` below maps to Redis `SET NX` when using `RedisCacheStore`):
+The default `webhook-id` dedup store is in-memory and per-process, so it only protects a single process — replays across multiple app processes/dynos within the replay-protection window aren't caught by default. If you run more than one process, supply your own store via `config.webhook_id_store`; any object responding to `claim!(id, ttl_seconds)` works (`ttl_seconds` is twice `webhook_replay_tolerance_seconds`), e.g. one backed by `Rails.cache`. `claim!` must atomically check-and-record the id in one operation (not a separate read then write) — otherwise two requests racing on the same id can both "win" — so lean on your cache backend's compare-and-set primitive (`unless_exist:` below maps to Redis `SET NX` when using `RedisCacheStore`):
 
 ```ruby
 class RailsCacheWebhookIdStore
@@ -94,10 +94,12 @@ end
 
 Note: the `webhook-id` is claimed as soon as the signature and timestamp are confirmed valid — before your controller's `process_event` runs. If something downstream raises (e.g. an error in your own `process_event` override, or an unexpectedly-shaped payload), the interceptor releases the claim before responding, so OpenAI's retry of the same `webhook-id` is processed rather than rejected as a replay. (`Coolhand::OpenAi::BatchResultProcessor` rescues and logs its own errors, and does its heavy work in the background, so this mainly matters for exceptions raised in your own code.)
 
-Releasing is optional for custom stores: if your store also responds to `release!(id)`, it is called to forget the claim; a store that only implements `claim!` behaves as before and keeps the id claimed for its TTL even after a failure. For the Rails.cache example above:
+Releasing is optional for custom stores: if your store also responds to `release!(id)`, it is called to forget the claim; a store that only implements `claim!` behaves as before and keeps the id claimed for its TTL even after a failure. To opt in, add `release!` to the store above:
 
 ```ruby
-def release!(id)
-  Rails.cache.delete("coolhand:openai_webhook:#{id}")
+class RailsCacheWebhookIdStore
+  def release!(id)
+    Rails.cache.delete("coolhand:openai_webhook:#{id}")
+  end
 end
 ```
