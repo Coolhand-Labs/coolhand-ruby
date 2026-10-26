@@ -107,6 +107,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       bedrock-runtime.us-east-1.amazonaws.com
       bedrock-runtime.cn-north-1.amazonaws.com.cn
       bedrock-runtime-fips.us-gov-west-1.amazonaws.com
+      bedrock-runtime-fips.us-east-1.amazonaws.com
       bedrock-runtime.us-east-1.api.aws
       bedrock-runtime-fips.us-gov-west-1.api.aws
     ]
@@ -115,6 +116,14 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       it "intercepts #{host}" do
         expect(intercepted?("https://#{host}/model/anthropic.claude-3/invoke")).to be true
       end
+    end
+
+    it "intercepts the OpenAI-compatible endpoint, which the /openai/* excludes must not swallow" do
+      expect(intercepted?("https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/chat/completions")).to be true
+    end
+
+    it "excludes the OpenAI-compatible control-plane paths" do
+      expect(intercepted?("https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/models")).to be false
     end
 
     it "does not intercept the control-plane host or a region-less host" do
