@@ -437,6 +437,49 @@ RSpec.describe Coolhand::LoggerService do
             expect(sanitized_headers["authorization"]).to eq("[REDACTED]")
           end)
       end
+
+      context "when headers is a whole Rack env (CGI/FastCGI handlers include the process env)" do
+        let(:rack_env) do
+          {
+            "REQUEST_METHOD" => "POST",
+            "REMOTE_ADDR" => "10.0.0.1",
+            "CONTENT_TYPE" => "application/json",
+            "CONTENT_LENGTH" => "42",
+            "HTTP_X_WEBHOOK_ID" => "wh_1",
+            "DATABASE_URL" => "postgres://user:hunter2@db.internal/app",
+            "REDIS_URL" => "redis://:hunter2@cache.internal",
+            "PASSENGER_APP_ENV" => "production",
+            "rack.session" => { "user_id" => 1 }
+          }
+        end
+
+        def posted_raw_request
+          posted = nil
+          expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+            .with { |req| posted = JSON.parse(req.body).dig("llm_request_log", "raw_request") })
+          posted
+        end
+
+        it "forwards only HTTP_*, CONTENT_TYPE and CONTENT_LENGTH from headers" do
+          service.forward_webhook(webhook_body: webhook_body, source: "elevenlabs", headers: rack_env)
+
+          raw_request = posted_raw_request
+          expect(raw_request["headers"]).to eq(
+            "content-type" => "application/json", "content-length" => "42", "x-webhook-id" => "wh_1"
+          )
+          expect(raw_request.to_json).not_to include("hunter2", "database-url", "redis-url", "passenger")
+        end
+
+        it "applies the same allowlist to response_headers" do
+          service.forward_webhook(webhook_body: webhook_body, source: "elevenlabs", response_headers: rack_env)
+
+          raw_request = posted_raw_request
+          expect(raw_request["response_headers"]).to eq(
+            "content-type" => "application/json", "content-length" => "42", "x-webhook-id" => "wh_1"
+          )
+          expect(raw_request.to_json).not_to include("hunter2", "database-url", "redis-url", "passenger")
+        end
+      end
     end
 
     context "when validating parameters" do
@@ -596,6 +639,108 @@ RSpec.describe Coolhand::LoggerService do
         expect(result["x-ratelimit-remaining-tokens"]).to eq("1999")
         expect(result["anthropic-ratelimit-tokens-limit"]).to eq("40000")
         expect(result["x-ratelimit-api-key"]).to eq("[REDACTED]")
+      end
+
+      context "with a Rack env (every key uppercase/digits/underscores or dotted)" do
+        let(:env) do
+          {
+            "REQUEST_METHOD" => "POST",
+            "CONTENT_TYPE" => "application/json",
+            "CONTENT_LENGTH" => "7",
+            "HTTP_X_WEBHOOK_ID" => "wh_1",
+            "HTTP_VERSION" => "HTTP/1.1",
+            "DATABASE_URL" => "postgres://u:pw@h/db",
+            "REDIS_URL" => "redis://:pw@h",
+            "PASSENGER_APP_ENV" => "production",
+            "SECRET_KEY_BASE" => "abc",
+            "rack.input" => "io"
+          }
+        end
+
+        it "forwards only HTTP_*, CONTENT_TYPE and CONTENT_LENGTH" do
+          expect(service_with_private.sanitize_headers_public(env)).to eq(
+            "content-type" => "application/json", "content-length" => "7", "x-webhook-id" => "wh_1"
+          )
+        end
+
+        it "handles symbol keys" do
+          result = service_with_private.sanitize_headers_public(env.transform_keys(&:to_sym))
+          expect(result.keys).to contain_exactly("content-type", "content-length", "x-webhook-id")
+        end
+
+        it "treats an env made only of non-header entries as empty" do
+          expect(service_with_private.sanitize_headers_public("DATABASE_URL" => "x", "rack.session" => "y")).to eq({})
+        end
+      end
+
+      context "with a plain hash that is not Rack-env-shaped" do
+        it "keeps normal header names, including ones that collide with env-style names" do
+          headers = {
+            "Content-Type" => "application/json",
+            "x-webhook-id" => "wh_1",
+            "X_CUSTOM" => "kept"
+          }
+          result = service_with_private.sanitize_headers_public(headers)
+          expect(result).to eq(
+            "content-type" => "application/json", "x-webhook-id" => "wh_1",
+            "x-custom" => "kept"
+          )
+        end
+
+        it "only drops the dotted and CGI-named entries, keeping the other headers" do
+          result = service_with_private.sanitize_headers_public(
+            "Content-Type" => "a", "X.Trace" => "1", "HTTPS" => "on", "HTTP_VERSION" => "2"
+          )
+          expect(result).to eq("content-type" => "a")
+        end
+
+        it "keeps symbol-keyed headers" do
+          result = service_with_private.sanitize_headers_public("x-webhook-id": "wh_1", "Content-Type": "text/plain")
+          expect(result).to eq("x-webhook-id" => "wh_1", "content-type" => "text/plain")
+        end
+      end
+
+      context "with a Rack env that also has undotted lowercase keys" do
+        it "still applies the allowlist when a key like warden or http_proxy is present" do
+          env = {
+            "REQUEST_METHOD" => "POST", "HTTP_X_WEBHOOK_ID" => "wh_1", "DATABASE_URL" => "postgres://u:pw@h/db",
+            "warden" => Object.new, "http_proxy" => "http://u:pw@p"
+          }
+          expect(service_with_private.sanitize_headers_public(env)).to eq("x-webhook-id" => "wh_1")
+        end
+
+        it "drops HTTP_PROXY, which is the process env var rather than a client header" do
+          result = service_with_private.sanitize_headers_public(
+            "REQUEST_METHOD" => "POST", "warden" => "w", "HTTP_X_ID" => "1", "HTTP_PROXY" => "http://u:pw@p"
+          )
+          expect(result).to eq("x-id" => "1")
+        end
+
+        it "treats a hash with a dotted Rack key as an env" do
+          result = service_with_private.sanitize_headers_public(
+            "x-webhook-id" => "wh_1", "HTTP_X_REQUEST_ID" => "r1", "rack.session" => "s"
+          )
+          expect(result).to eq("x-request-id" => "r1")
+        end
+      end
+
+      context "with an each-only headers object (ActionDispatch::Http::Headers shape)" do
+        it "applies the allowlist while iterating the object" do
+          env = Class.new do
+            def each
+              yield "HTTP_X_WEBHOOK_ID", "wh_1"
+              yield "DATABASE_URL", "postgres://u:pw@h/db"
+              yield nil, "orphan"
+              yield "REDIS_URL", nil
+            end
+          end.new
+          expect(service_with_private.sanitize_headers_public(env)).to eq("x-webhook-id" => "wh_1")
+        end
+      end
+
+      it "treats an all-uppercase header hash as a Rack env and drops names without HTTP_" do
+        result = service_with_private.sanitize_headers_public("X_HUB_SIGNATURE" => "abc", "HTTP_X_ID" => "1")
+        expect(result).to eq("x-id" => "1")
       end
 
       it "redacts sensitive headers" do
