@@ -45,8 +45,8 @@ module Coolhand
         method: options[:method] || "POST",
         url: BaseInterceptor.sanitize_url(options[:url] || build_webhook_url(source, event_type)),
         headers: sanitize_headers(headers),
-        request_body: clean_webhook_body(webhook_body, source),
-        response_body: options[:response_body],
+        request_body: BodyRedactor.redact(clean_webhook_body(webhook_body, source)),
+        response_body: BodyRedactor.redact(options[:response_body]),
         response_headers: options[:response_headers] && sanitize_headers(options[:response_headers]),
         status_code: options[:status_code] || 200,
         source: "#{source}_webhook"

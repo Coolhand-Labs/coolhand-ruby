@@ -312,6 +312,53 @@ RSpec.describe Coolhand::LoggerService do
           end)
       end
 
+      context "with credentials in the bodies" do
+        def forwarded_raw_request
+          raw = nil
+          expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+            .with { |req| raw = JSON.parse(req.body).dig("llm_request_log", "raw_request") })
+          raw
+        end
+
+        it "redacts the request_body and response_body, as the interceptor does" do
+          body = { "event" => "tool_call", "tools" => [{ "type" => "mcp", "authorization" => "Bearer sk-WH-1" }] }
+          response = { "ok" => true, "session" => { "client_secret" => "ek_WH_2" } }
+
+          service.forward_webhook(webhook_body: body, source: "acme", response_body: response)
+
+          raw = forwarded_raw_request
+          expect(raw["request_body"]["tools"][0]).to eq("type" => "mcp", "authorization" => "[REDACTED]")
+          expect(raw["response_body"]).to eq("ok" => true, "session" => { "client_secret" => "[REDACTED]" })
+        end
+
+        it "redacts raw JSON text and SSE text bodies" do
+          sse = %(event: m\ndata: {"api_key":"sk-WH-3","text":"hi"}\n\ndata: [DONE]\n\n)
+
+          service.forward_webhook(webhook_body: %({"password":"hunter2","n":1}), source: "acme", response_body: sse)
+
+          raw = forwarded_raw_request
+          expect(JSON.parse(raw["request_body"])).to eq("password" => "[REDACTED]", "n" => 1)
+          expect(raw["response_body"])
+            .to eq(%(event: m\ndata: {"api_key":"[REDACTED]","text":"hi"}\n\ndata: [DONE]\n\n))
+        end
+
+        it "leaves ordinary and nil bodies unchanged" do
+          service.forward_webhook(webhook_body: "plain text body", source: "acme")
+
+          raw = forwarded_raw_request
+          expect(raw["request_body"]).to eq("plain text body")
+          expect(raw["response_body"]).to be_nil
+        end
+
+        it "does not mutate the caller's body" do
+          body = { "api_key" => "sk-WH-4", "data" => { "n" => 1 } }
+
+          service.forward_webhook(webhook_body: body, source: "acme")
+
+          expect(body).to eq("api_key" => "sk-WH-4", "data" => { "n" => 1 })
+        end
+      end
+
       it "sanitizes a caller-supplied url (userinfo and sensitive query params)" do
         service.forward_webhook(
           webhook_body: webhook_body,

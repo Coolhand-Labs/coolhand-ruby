@@ -767,12 +767,16 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(body).to eq(snapshot)
     end
 
-    it "passes nil, strings (including streamed SSE) and other non-JSON bodies through unchanged" do
-      sse = "data: {\"api_key\":\"sk-live\"}\n\n"
-
+    it "passes nil, plain-text strings and other non-JSON bodies through unchanged" do
       expect(redact(nil)).to be_nil
-      expect(redact(sse)).to eq(sse)
+      expect(redact("raw string body")).to eq("raw string body")
       expect(redact(42)).to eq(42)
+    end
+
+    it "redacts JSON payloads in the data lines of a streamed (SSE) String body" do
+      sse = "data: {\"api_key\":\"sk-live\"}\n\ndata: [DONE]\n\n"
+
+      expect(redact(sse)).to eq("data: {\"api_key\":\"[REDACTED]\"}\n\ndata: [DONE]\n\n")
     end
 
     it "keeps redacting data_sources credentials when they are nested under other keys" do

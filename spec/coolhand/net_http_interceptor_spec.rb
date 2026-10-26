@@ -53,6 +53,23 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw).not_to have_key(:model)
   end
 
+  it "redacts credential-named fields in the data lines of a streamed (SSE) response body" do
+    sse = [
+      "event: message_start",
+      %(data: {"type":"message_start","mcp_servers":[{"authorization_token":"tok-LIVE"}]}\n),
+      %(data: {"choices":[{"delta":{"content":"hi"}}]}\n),
+      "data: [DONE]\n\n"
+    ].join("\n")
+    stub_request(:post, "https://api.test.com/stream")
+      .to_return(status: 200, body: sse, headers: { "Content-Type" => "text/event-stream" })
+
+    Net::HTTP.post(URI("https://api.test.com/stream"), "{}", "Content-Type" => "application/json")
+    sleep 0.05
+
+    logged = @captured_log[:raw_request][:response_body]
+    expect(logged).to eq(sse.sub("tok-LIVE", "[REDACTED]"))
+  end
+
   describe "Net::HTTP method pollution" do
     it "adds nothing but #request to Net::HTTP" do
       expect(described_class.public_instance_methods(false)).to eq([:request])

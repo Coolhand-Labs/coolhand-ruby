@@ -49,7 +49,15 @@ Besides headers and URLs, Coolhand redacts credentials in the JSON body of both 
 - **Realtime ephemeral keys:** the `value` of a `client_secret` object (`expires_at` is kept), and the `value` of a client-secret response that has a numeric `expires_at` beside it.
 - **Azure OpenAI On Your Data:** under a `data_sources` (or `dataSources`) key at any depth, key/token/secret/password-style fields are redacted, and credentials embedded in URL values (userinfo, `key=`/`sas=` query params) are scrubbed.
 
-Limits: a secret that is part of a URL's path (for example `https://actions.zapier.com/mcp/SECRET/sse`) cannot be detected generically and is sent as is. Only parsed JSON bodies (objects and arrays) are checked. Streamed (server-sent event) and other non-JSON bodies are sent as received, and so are secrets inside free text such as model output. Subtrees nested more than 100 levels deep are replaced with `[REDACTED]`. Webhooks forwarded with `Coolhand.forward_webhook` have their own body handling and are not covered by this.
+Limits:
+- A secret that is part of a URL's path (for example `https://actions.zapier.com/mcp/SECRET/sse`) cannot be detected generically and is sent as is.
+- Parsed JSON objects and arrays are walked as described above. Subtrees nested more than 100 levels deep are replaced with `[REDACTED]`.
+- A raw String body is checked in two cases: JSON text (e.g. a webhook body that is a JSON string) is parsed, redacted and re-serialized, and the JSON object/array payload on each `data:` line of a streamed (server-sent event) response is redacted the same way. A line is only rewritten when something in it was redacted, so a stream with nothing to redact is logged exactly as received.
+- Everything else in a String is sent as received: plain text, `[DONE]`, `event:`/`id:`/`retry:` and comment lines, a `data:` line that is not a JSON object or array or does not parse, a JSON payload split across several `data:` lines, and newline-delimited JSON streams (no `data:` prefix). Secrets inside free text such as model output are never detected.
+- A String JSON payload nested more than 100 levels deep is replaced with `{"_coolhand_capture_skipped": "nesting_too_deep"}`. If redacting a String body fails for any reason it is replaced with `{"_coolhand_capture_skipped": "redaction_failed"}` rather than logged unchecked.
+- Streamed bodies are capped by `max_captured_body_bytes` (see [Body Capture Limits](#body-capture-limits)) before redaction, so an over-limit stream is logged as the `body_too_large` placeholder and never scanned.
+
+Webhooks sent with `Coolhand.forward_webhook` get the same redaction on `webhook_body` and `response_body`, after the existing binary-field filtering. Webhook bodies are not subject to the capture cap.
 
 ## Asynchronous Logging
 
