@@ -327,6 +327,20 @@ RSpec.describe Coolhand::LoggerService do
           end)
       end
 
+      it "drops the fragment from a caller-supplied url" do
+        service.forward_webhook(
+          webhook_body: webhook_body,
+          source: "elevenlabs",
+          url: "https://example.test/hook?id=1#access_token=fragsecret"
+        )
+
+        expect(WebMock).to(have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+          .with do |req|
+            url = JSON.parse(req.body).dig("llm_request_log", "raw_request", "url")
+            expect(url).to eq("https://example.test/hook?id=1")
+          end)
+      end
+
       it "accepts a URI object as url" do
         service.forward_webhook(
           webhook_body: webhook_body,
