@@ -21,6 +21,7 @@ module Coolhand
     # Lowercase dotted Rack/Rails/server key: rack.session, action_dispatch.request.parameters, puma.config.
     RACK_DOTTED_KEY_PATTERN = /\A[a-z0-9_]+(?:\.[a-z0-9_]+)+\z/
     RACK_ENV_HEADER_KEYS = %w[CONTENT_TYPE CONTENT_LENGTH].freeze
+    private_constant :CGI_ENV_KEY_PATTERN, :RACK_DOTTED_KEY_PATTERN, :RACK_ENV_HEADER_KEYS
 
     def initialize
       super("v2/llm_request_logs")

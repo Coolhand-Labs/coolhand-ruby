@@ -350,7 +350,7 @@ end
 
 **Optional Parameters:**
 - `event_type` - Event type to append to URL (e.g., "post_call_transcription" → `webhook://elevenlabs/post_call_transcription`)
-- `headers` - Request headers (automatically sanitized). Passing Rails `request.headers` is safe: when the input looks like a Rack env (it has a `REQUEST_METHOD` or `rack.*` key, or every key is `UPPER_CASE`; in a plain hash use hyphenated or mixed-case names), only `HTTP_*` headers, `CONTENT_TYPE` and `CONTENT_LENGTH` are forwarded, so entries such as `rack.*`, `REQUEST_METHOD`, `QUERY_STRING`, or process env vars (`DATABASE_URL`, ...) are dropped
+- `headers` - Request headers (automatically sanitized). Passing Rails `request.headers` is safe: when the input looks like a Rack env (it has a `REQUEST_METHOD` key or a lowercase dotted key such as `rack.input`, or every key is `UPPER_CASE`; in a plain hash use hyphenated or mixed-case names), only `HTTP_*` headers, `CONTENT_TYPE` and `CONTENT_LENGTH` are forwarded, so entries such as `rack.*`, `REQUEST_METHOD`, `QUERY_STRING`, or process env vars (`DATABASE_URL`, ...) are dropped
 - `url` - Optional URL override; credentials in userinfo and sensitive query params are redacted, and any `#fragment` is dropped
 - `conversation_id`, `agent_id`, `metadata` - Custom fields for your tracking needs
 

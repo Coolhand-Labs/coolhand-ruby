@@ -710,7 +710,9 @@ RSpec.describe Coolhand::LoggerService do
         end
 
         it "drops HTTP_PROXY, which is the process env var rather than a client header" do
-          result = service_with_private.sanitize_headers_public("HTTP_X_ID" => "1", "HTTP_PROXY" => "http://u:pw@p")
+          result = service_with_private.sanitize_headers_public(
+            "REQUEST_METHOD" => "POST", "warden" => "w", "HTTP_X_ID" => "1", "HTTP_PROXY" => "http://u:pw@p"
+          )
           expect(result).to eq("x-id" => "1")
         end
 
