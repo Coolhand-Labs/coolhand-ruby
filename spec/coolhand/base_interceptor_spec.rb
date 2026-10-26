@@ -771,8 +771,8 @@ RSpec.describe Coolhand::BaseInterceptor do
 
         sanitized = redact(body)
 
-        sanitized["requests"].each do |item|
-          params = item["body"]["dataSources"][0]["parameters"]
+        sanitized["requests"].each do |entry|
+          params = entry["body"]["dataSources"][0]["parameters"]
           expect(params["authentication"]["key"]).to eq("[REDACTED]")
           expect(params["endpoint"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
         end
@@ -787,8 +787,25 @@ RSpec.describe Coolhand::BaseInterceptor do
       it "does not raise when a nested data_sources value is not an Array" do
         items = [{ "data_sources" => nil }, { "data_sources" => 3 }]
         body = { "input" => { "data_sources" => "none", "items" => items } }
+        snapshot = Marshal.load(Marshal.dump(body))
 
-        expect(redact(body)).to eq(body)
+        expect(redact(body)).to eq(snapshot)
+        expect(body).to eq(snapshot)
+      end
+
+      it "scrubs a URL string given directly as a nested data_sources value" do
+        sanitized = redact("input" => { "data_sources" => "https://u:P@h.example/?sas=S" })
+
+        expect(sanitized["input"]["data_sources"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+      end
+
+      it "handles symbol keys and arrays nested inside arrays" do
+        symbol_source = { parameters: { authentication: { key: "sk-search" }, index_name: "docs" } }
+
+        sanitized = redact(input: [[{ dataSources: [symbol_source] }]])
+
+        expect(sanitized[:input][0][0][:dataSources][0][:parameters])
+          .to eq(authentication: { key: "[REDACTED]" }, index_name: "docs")
       end
 
       it "leaves URL strings and key-like names outside data_sources untouched at the same depth" do
