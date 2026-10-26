@@ -453,6 +453,51 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
     end
   end
 
+  describe "per-item body cap (max_captured_body_bytes)" do
+    include LogWireHelper
+
+    let(:secret) { "unused" }
+    let(:batch_info) do
+      { "name" => "projects/1/locations/us/batchPredictionJobs/1", "displayName" => "evals",
+        "state" => "JOB_STATE_SUCCEEDED", "startTime" => "2026-01-04T20:16:56Z", "endTime" => "2026-01-04T20:21:38Z" }
+    end
+    let(:big_text) { "x" * 600 }
+    let(:results) do
+      [
+        { "request" => { "contents" => big_text }, "response" => { "ok" => true } },
+        { "request" => { "contents" => "hi" }, "response" => { "text" => big_text } },
+        { "request" => { "contents" => "hi" }, "response" => { "text" => "small" } }
+      ]
+    end
+
+    before do
+      Coolhand.configuration.max_captured_body_bytes = 300
+      stub_log_endpoint
+      described_class.new(batch_info: batch_info).call(results)
+    end
+
+    it "replaces an oversized request body with the body_too_large marker" do
+      raw = wire_raw_requests[0]
+
+      expect(raw["request_body"]).to include("_coolhand_capture_skipped" => "body_too_large", "max_bytes" => 300)
+      expect(raw["request_body"]["size_bytes"]).to be > 600
+      expect(raw["response_body"]).to eq({ "ok" => true })
+    end
+
+    it "replaces an oversized response body with the body_too_large marker" do
+      raw = wire_raw_requests[1]
+
+      expect(raw["response_body"]).to include("_coolhand_capture_skipped" => "body_too_large", "max_bytes" => 300)
+      expect(raw["request_body"]).to eq({ "contents" => "hi" })
+    end
+
+    it "logs items within the cap in full, and every item" do
+      expect(wire_requests.size).to eq(3)
+      expect(wire_raw_requests[2]).to include("request_body" => { "contents" => "hi" },
+        "response_body" => { "text" => "small" })
+    end
+  end
+
   describe "loading this file in isolation" do
     it "defines Coolhand::Vertex::BatchResultProcessor via $LOAD_PATH alone, without spec_helper having " \
        "already loaded the rest of the gem first" do

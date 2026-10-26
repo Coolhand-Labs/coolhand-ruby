@@ -154,7 +154,7 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
         Coolhand.configuration.async_logging = true
         allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
         processor = described_class.new(event_data: { "id" => "batch_abc123" })
-        allow(processor).to receive(:download_batch_results).and_raise(StandardError, "kaboom")
+        allow(processor).to receive(:each_batch_result).and_raise(StandardError, "kaboom")
 
         expect { processor.call }.not_to raise_error
         Coolhand.flush(timeout: 2)
@@ -449,6 +449,181 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
         expect(api_service).not_to receive(:send_llm_request_log)
 
         expect { described_class.new(event_data: { "id" => "batch_abc125" }).call }.not_to raise_error
+      end
+    end
+  end
+
+  describe "per-item body cap (max_captured_body_bytes)" do
+    include LogWireHelper
+
+    let(:secret) { "azure-search-admin-key-123" }
+    let(:start_time) { 1_700_000_000 }
+    let(:batch_info) do
+      { "id" => "batch_cap", "status" => "completed", "input_file_id" => "file-in", "output_file_id" => "file-out",
+        "in_progress_at" => start_time, "completed_at" => start_time + 5 }
+    end
+    let(:big_text) { "x" * 600 }
+    let(:input_items) do
+      [
+        { "custom_id" => "big-req", "method" => "POST", "url" => "/v1/chat/completions",
+          "body" => { "model" => "gpt-4o-mini", "messages" => [{ "role" => "user", "content" => big_text }] } },
+        { "custom_id" => "big-res", "method" => "POST", "url" => "/v1/chat/completions",
+          "body" => { "model" => "gpt-4o-mini", "messages" => [{ "role" => "user", "content" => "hi" }] } },
+        { "custom_id" => "small", "method" => "POST", "url" => "/v1/chat/completions", "body" => { "n" => 1 } }
+      ]
+    end
+    let(:output_items) do
+      [
+        { "custom_id" => "big-req",
+          "response" => { "request_id" => "r1", "status_code" => 200, "body" => { "ok" => true } } },
+        { "custom_id" => "big-res",
+          "response" => { "request_id" => "r2", "status_code" => 200, "body" => { "text" => big_text } } },
+        { "custom_id" => "small",
+          "response" => { "request_id" => "r3", "status_code" => 200, "body" => { "ok" => "small" } } }
+      ]
+    end
+    let(:input_content) { input_items.map(&:to_json).join("\n") }
+    let(:output_content) { output_items.map(&:to_json).join("\n") }
+
+    def run_batch
+      allow(Coolhand::ApiService).to receive(:new).and_call_original
+      allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+      allow(client).to receive_message_chain(:files, :content).with(id: "file-in").and_return(input_content)
+      allow(client).to receive_message_chain(:files, :content).with(id: "file-out").and_return(output_content)
+      stub_log_endpoint
+      described_class.new(event_data: { "id" => "batch_cap" }).call
+    end
+
+    def raw_for(request_id)
+      wire_raw_requests.find { |raw| raw["id"] == request_id }
+    end
+
+    before { Coolhand.configuration.max_captured_body_bytes = 300 }
+
+    it "replaces an oversized request body with the body_too_large marker, keeping the model" do
+      run_batch
+
+      raw = raw_for("r1")
+      expect(raw["request_body"]).to include("_coolhand_capture_skipped" => "body_too_large", "max_bytes" => 300)
+      expect(raw["request_body"]["size_bytes"]).to be > 600
+      expect(raw["response_body"]).to eq({ "ok" => true })
+      expect(raw["model"]).to eq("gpt-4o-mini")
+    end
+
+    it "replaces an oversized response body with the body_too_large marker" do
+      run_batch
+
+      raw = raw_for("r2")
+      expect(raw["response_body"]).to include("_coolhand_capture_skipped" => "body_too_large", "max_bytes" => 300)
+      expect(raw["request_body"]["messages"]).to eq([{ "role" => "user", "content" => "hi" }])
+    end
+
+    it "logs items within the cap in full" do
+      run_batch
+
+      raw = raw_for("r3")
+      expect(raw).to include("request_body" => { "n" => 1 }, "response_body" => { "ok" => "small" })
+    end
+
+    it "still logs every item" do
+      run_batch
+
+      expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r2", "r3")
+    end
+
+    it "caps items from a client that has already parsed the files" do
+      allow(Coolhand::ApiService).to receive(:new).and_call_original
+      allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+      allow(client).to receive_message_chain(:files, :content).with(id: "file-in").and_return(input_items)
+      allow(client).to receive_message_chain(:files, :content).with(id: "file-out").and_return(output_items)
+      stub_log_endpoint
+
+      described_class.new(event_data: { "id" => "batch_cap" }).call
+
+      expect(raw_for("r1")["request_body"]["_coolhand_capture_skipped"]).to eq("body_too_large")
+      expect(raw_for("r2")["response_body"]["_coolhand_capture_skipped"]).to eq("body_too_large")
+      expect(raw_for("r3")["request_body"]).to eq({ "n" => 1 })
+    end
+
+    it "logs everything in full when the cap is disabled" do
+      Coolhand.configuration.max_captured_body_bytes = nil
+      run_batch
+
+      expect(raw_for("r1")["request_body"]["messages"].first["content"]).to eq(big_text)
+      expect(raw_for("r2")["response_body"]).to eq({ "text" => big_text })
+    end
+
+    context "when the client returns the file as an IO" do
+      let(:input_content) { StringIO.new(input_items.map(&:to_json).join("\n")) }
+      let(:output_content) { StringIO.new(output_items.map(&:to_json).join("\n")) }
+
+      it "reads it a line at a time rather than all at once" do
+        allow(input_content).to receive(:read).and_raise("whole file read")
+        allow(output_content).to receive(:read).and_raise("whole file read")
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r2", "r3")
+        expect(raw_for("r1")["request_body"]["_coolhand_capture_skipped"]).to eq("body_too_large")
+      end
+    end
+
+    context "when the client returns a single parsed item (a one-line file)" do
+      let(:input_content) { input_items.first }
+      let(:output_content) { output_items.first }
+
+      it "treats it as a one-item file" do
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to eq(["r1"])
+      end
+    end
+
+    context "when a line is malformed partway through the output file" do
+      let(:output_content) { "#{output_items.first.to_json}\nnot json{{{\n#{output_items.last.to_json}" }
+
+      it "skips just that line, logs the lines around it, and reports the skip once" do
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r3")
+        expect(logger).to have_received(:error).with(a_string_including("skipped 1 malformed line")).once
+      end
+    end
+
+    context "when a line has invalid UTF-8" do
+      let(:output_content) do
+        bad = (+"{\"custom_id\":\"\xFF\"}").force_encoding(Encoding::UTF_8)
+        StringIO.new("#{output_items.first.to_json}\n#{bad}\n\n  \n#{output_items.last.to_json}\n")
+      end
+
+      it "skips that line, ignores blank ones, and still logs the lines after it" do
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r3")
+      end
+    end
+
+    context "when a line is valid JSON but not an object" do
+      let(:output_content) { "#{output_items.first.to_json}\n[1]\n42\n#{output_items.last.to_json}" }
+
+      it "treats it as malformed and still logs the other items" do
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r3")
+        expect(logger).to have_received(:error).with(a_string_including("skipped 2 malformed line(s)"))
+      end
+    end
+
+    context "when an input body cannot be serialized to measure it" do
+      let(:input_content) do
+        [input_items.first.to_json.sub('"messages"', '"n":1e400,"messages"'), input_items.last.to_json].join("\n")
+      end
+      let(:output_content) { output_items.values_at(0, 2).map(&:to_json).join("\n") }
+
+      it "logs a marker for that body and still logs the other items" do
+        run_batch
+
+        expect(raw_for("r1")["request_body"]).to eq("_coolhand_capture_skipped" => "unserializable_body")
+        expect(raw_for("r3")["request_body"]).to eq({ "n" => 1 })
       end
     end
   end
