@@ -11,7 +11,9 @@ module Coolhand
     # so `api_key`, `apiKey`, `API-Key` and `apikey` all match. Only String leaves are redacted:
     # a JSON Schema property named `api_key` has a Hash value and is left alone, as is a numeric
     # `usage.total_tokens`. Covers OpenAI Responses/Realtime MCP `tools[].authorization`, Anthropic
-    # `mcp_servers[].authorization_token`, and the legacy Realtime `client_secret` string form.
+    # `mcp_servers[].authorization_token`, and the legacy Realtime `client_secret` string form. Also
+    # covers `x-api-key`, AWS `aws_secret_access_key`/`secret_access_key`, `session_token`,
+    # `bearer_token` and any String under a generic `secret` key.
     CREDENTIAL_BODY_KEYS = %w[
       authorization authorizationtoken accesstoken refreshtoken idtoken
       apikey clientsecret privatekey secretkey password

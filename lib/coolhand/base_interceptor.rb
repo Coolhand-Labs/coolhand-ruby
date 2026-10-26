@@ -233,6 +233,8 @@ module Coolhand
     EMBEDDED_URL_PATTERN = %r{\A[a-z][a-z0-9+.-]*://\S+\z}i
 
     def redact_embedded_url_credentials(value)
+      # JSON.parse accepts invalid UTF-8, which would make the regexp raise and drop the whole log.
+      value = value.scrub unless value.valid_encoding?
       value.match?(EMBEDDED_URL_PATTERN) ? sanitize_url(value) : value
     end
 

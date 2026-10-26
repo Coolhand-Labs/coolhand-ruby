@@ -915,6 +915,22 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(redact("url" => "https://u:pw@h.example/p?a=%zz&key=S")["url"]).to eq("https://REDACTED@h.example/p")
     end
 
+    it "does not raise on a URL value with invalid UTF-8 bytes, and still scrubs it" do
+      url = "https://u:pw@h.example/p?key=ABC&a=\xFF".dup.force_encoding("UTF-8")
+
+      sanitized = nil
+      expect { sanitized = redact("url" => url) }.not_to raise_error
+      expect(sanitized["url"]).not_to include("pw@")
+      expect(sanitized["url"]).not_to include("ABC")
+    end
+
+    it "handles symbol keys and frozen strings" do
+      url = "https://u:pw@h.example/?key=ABC".freeze
+
+      expect(redact(server_url: url, secret: "s".freeze))
+        .to eq(server_url: "https://REDACTED@h.example/?key=%5BREDACTED%5D", secret: "[REDACTED]")
+    end
+
     it "redacts string values under the additional credential keys, in any case or separator style" do
       keys = %w[secret x-api-key X-Api-Key bearer_token bearerToken session_token sessionToken
                 aws_secret_access_key AWS_SECRET_ACCESS_KEY secret_access_key]
