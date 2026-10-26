@@ -157,6 +157,13 @@ module Coolhand
         modified = true
       end
 
+      # A fragment never reaches a server, but a caller-supplied URL can carry one (OAuth
+      # implicit flow puts `access_token=...` there), so drop it as the fallback below does.
+      unless uri.fragment.nil?
+        uri.fragment = nil
+        modified = true
+      end
+
       modified ? uri.to_s : url
     rescue URI::InvalidURIError
       # Fail closed: an unparseable URL can't be checked param-by-param, so drop everything

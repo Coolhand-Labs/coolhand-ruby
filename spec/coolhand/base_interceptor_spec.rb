@@ -400,11 +400,35 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(described_class.sanitize_url("https://h.example/a?%FF=2&ok=3")).to eq("https://h.example/a?%FF=2&ok=3")
     end
 
-    it "leaves fragments and relative URLs working" do
-      expect(described_class.sanitize_url("https://h.example/a?key=S#frag")).to eq(
-        "https://h.example/a?key=%5BREDACTED%5D#frag"
-      )
+    it "leaves relative URLs working" do
       expect(described_class.sanitize_url("/rel/path?code=S")).to eq("/rel/path?code=%5BREDACTED%5D")
+    end
+
+    describe "URL fragments" do
+      it "drops the fragment along with redacting the query" do
+        expect(described_class.sanitize_url("https://h.example/a?key=S#frag")).to eq(
+          "https://h.example/a?key=%5BREDACTED%5D"
+        )
+      end
+
+      it "drops a fragment that carries an OAuth implicit-flow token" do
+        sanitized = described_class.sanitize_url("https://h.example/cb#access_token=SECRET&token_type=bearer")
+
+        expect(sanitized).to eq("https://h.example/cb")
+      end
+
+      it "drops an empty fragment and a fragment on a relative URL" do
+        expect(described_class.sanitize_url("https://h.example/a#")).to eq("https://h.example/a")
+        expect(described_class.sanitize_url("/rel/path?code=S#access_token=SECRET")).to eq(
+          "/rel/path?code=%5BREDACTED%5D"
+        )
+      end
+
+      it "returns a URL without a fragment byte-for-byte" do
+        url = "https://h.example/a?alt=sse&n=1"
+
+        expect(described_class.sanitize_url(url)).to equal(url)
+      end
     end
 
     it "fails closed on bare query segments that have no '='" do
