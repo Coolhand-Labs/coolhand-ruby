@@ -693,12 +693,47 @@ RSpec.describe Coolhand::LoggerService do
           expect(result).to eq("x-webhook-id" => "wh_1", "content-type" => "text/plain")
         end
 
-        it "still drops dotted and CGI-denylist keys" do
-          result = service_with_private.sanitize_headers_public(
-            "x-webhook-id" => "wh_1", "rack.session" => "s", "REMOTE_ADDR" => "10.0.0.1"
-          )
-          expect(result).to eq("x-webhook-id" => "wh_1")
+      end
+
+      context "with a Rack env that also has undotted lowercase keys" do
+        it "still applies the allowlist when a key like warden or http_proxy is present" do
+          env = {
+            "REQUEST_METHOD" => "POST", "HTTP_X_WEBHOOK_ID" => "wh_1", "DATABASE_URL" => "postgres://u:pw@h/db",
+            "warden" => Object.new, "http_proxy" => "http://u:pw@p"
+          }
+          expect(service_with_private.sanitize_headers_public(env)).to eq("x-webhook-id" => "wh_1")
         end
+
+        it "drops HTTP_PROXY, which is the process env var rather than a client header" do
+          result = service_with_private.sanitize_headers_public("HTTP_X_ID" => "1", "HTTP_PROXY" => "http://u:pw@p")
+          expect(result).to eq("x-id" => "1")
+        end
+
+        it "treats a hash with a dotted Rack key as an env" do
+          result = service_with_private.sanitize_headers_public(
+            "x-webhook-id" => "wh_1", "HTTP_X_REQUEST_ID" => "r1", "rack.session" => "s"
+          )
+          expect(result).to eq("x-request-id" => "r1")
+        end
+      end
+
+      context "with an each-only headers object (ActionDispatch::Http::Headers shape)" do
+        it "applies the allowlist while iterating the object" do
+          env = Class.new do
+            def each
+              yield "HTTP_X_WEBHOOK_ID", "wh_1"
+              yield "DATABASE_URL", "postgres://u:pw@h/db"
+              yield nil, "orphan"
+              yield "REDIS_URL", nil
+            end
+          end.new
+          expect(service_with_private.sanitize_headers_public(env)).to eq("x-webhook-id" => "wh_1")
+        end
+      end
+
+      it "treats an all-uppercase header hash as a Rack env and drops names without HTTP_" do
+        result = service_with_private.sanitize_headers_public("X_HUB_SIGNATURE" => "abc", "HTTP_X_ID" => "1")
+        expect(result).to eq("x-id" => "1")
       end
 
       it "redacts sensitive headers" do
