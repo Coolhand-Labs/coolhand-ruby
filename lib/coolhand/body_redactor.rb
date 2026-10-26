@@ -28,6 +28,7 @@ module Coolhand
     URL_BODY_KEYS = %w[url serverurl imageurl fileurl endpoint].freeze
 
     def redact(body)
+      return StringBodyRedactor.redact(body) if body.is_a?(String)
       return body unless body.is_a?(Hash) || body.is_a?(Array)
 
       redact_body_node(body, 0)
