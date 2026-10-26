@@ -130,6 +130,8 @@ Coolhand.configure do |config|
 end
 ```
 
+Before `exclude_api_patterns` and path-anchored `intercept_addresses` entries (like `api.cohere.com/v2/chat`) are compared, the request path is normalized for matching only (the URL that is sent and logged is unchanged): repeated `/` are collapsed, `.` and `..` segments are resolved (never above the root), and percent-escapes of unreserved characters (`A-Z a-z 0-9 - . _ ~`) are decoded, so `/openai//files`, `/openai/./files` and `/openai/%66iles` are excluded just like `/openai/files`. Reserved escapes such as `%2F` stay encoded, and path matching remains case-sensitive.
+
 Unlike `intercept_addresses`, `exclude_api_patterns` genuinely supports `= []` — since it only narrows an allow-list that already passed, an empty deny-list just means "exclude nothing," which is safe.
 
 ## Capture Control
