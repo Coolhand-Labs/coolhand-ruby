@@ -156,6 +156,19 @@ RSpec.describe Coolhand::StringBodyRedactor do
       expect(result).to eq(%(data: {"password":"[REDACTED]","logprob":NaN,"n":-Infinity}\ndata: {"a":NaN}\n))
     end
 
+    it "does not let a duplicated key hide a credential from the redaction walk" do
+      stream = [
+        %(data: {"api_key":"sk-1","api_key":null}),
+        %(data: {"a":{"password":"p","password":{}},"b":[{"authorization":"x","authorization":1}]}),
+        %(data: {"ok":1,"ok":2})
+      ].join("\n")
+
+      result = described_class.redact(stream)
+
+      expect(result).not_to match(/sk-1|"p"|"x"/)
+      expect(result.lines.first).to eq(%(data: {"api_key":null}\n))
+    end
+
     it "fails closed with a marker for a body in an encoding Ruby cannot convert" do
       allow(Coolhand).to receive(:log)
 
@@ -222,14 +235,16 @@ RSpec.describe Coolhand::StringBodyRedactor do
         expect(JSON.parse(result)).to eq("event" => "x", "data" => { "password" => "[REDACTED]", "n" => 1 })
       end
 
-      it "returns the same String, formatting intact, when nothing needed redacting" do
-        pretty = %({\n  "a": 1\n}\n)
-
-        expect(described_class.redact(pretty)).to equal(pretty)
+      it "re-serializes JSON text compactly even when nothing needed redacting" do
+        expect(described_class.redact(%({\n  "a": 1\n}\n))).to eq(%({"a":1}))
       end
 
       it "redacts JSON text that starts with a byte order mark" do
         expect(JSON.parse(described_class.redact("\uFEFF{\"password\":\"p\"}"))).to eq("password" => "[REDACTED]")
+      end
+
+      it "does not let a duplicated key hide a credential in JSON text" do
+        expect(described_class.redact(%({"password":"hunter2","password":null}))).to eq(%({"password":null}))
       end
 
       it "leaves malformed JSON alone" do

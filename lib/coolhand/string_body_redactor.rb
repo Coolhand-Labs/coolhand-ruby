@@ -5,8 +5,9 @@ module Coolhand
   # (server-sent event) response arrives as one String of `data: {...}` lines, and a webhook body
   # may be raw JSON text. Each JSON object/array payload is parsed, run through BodyRedactor and
   # re-serialized; text that is not JSON (plain text, `[DONE]`, `event:` and comment lines, a
-  # payload that fails to parse) is left byte for byte. A payload is only rewritten when redaction
-  # actually changed it, so an untouched stream keeps its exact formatting.
+  # payload that fails to parse) is left byte for byte. A JSON payload is always re-serialized, even
+  # when nothing in it needed redacting: JSON.parse keeps only the last of a repeated key, so
+  # "nothing changed" cannot be trusted to mean "no credential in the original text".
   module StringBodyRedactor
     module_function
 
@@ -41,13 +42,14 @@ module Coolhand
       text.valid_encoding? ? text : text.scrub
     end
 
-    # One pass with gsub (linear in the body); the original String is returned when no line changed.
+    # One pass with gsub (linear in the body); the original String is returned when no line differs
+    # once re-serialized (providers emit compact JSON, so a clean stream usually round-trips as is).
     def redact_stream(body, text)
       changed = false
       redacted = text.gsub(DATA_LINE) do |line|
         match = Regexp.last_match
         payload = match[2].match?(JSON_CONTAINER) ? redacted_json(match[2]) : nil
-        next line unless payload
+        next line if payload.nil? || payload == match[2]
 
         changed = true
         "data:#{match[1]}#{payload}"
@@ -55,9 +57,9 @@ module Coolhand
       changed ? redacted : body
     end
 
-    # The re-serialized JSON when redaction changed it; nil when the text should stay as is
-    # (not a JSON object/array, unparsable, or nothing to redact). Anything else that goes wrong
-    # yields a `redaction_failed` marker rather than the unchecked text.
+    # The redacted, re-serialized JSON; nil when the text should stay as is (not a JSON
+    # object/array, or unparsable). Anything else that goes wrong yields a `redaction_failed`
+    # marker rather than the unchecked text.
     def redacted_json(text)
       # NaN/Infinity are not JSON, but some servers emit them; a payload that failed to parse
       # would be logged unredacted next to its credential-named fields.
@@ -65,14 +67,14 @@ module Coolhand
       return unless parsed.is_a?(Hash) || parsed.is_a?(Array)
 
       redacted = BodyRedactor.redact(parsed)
-      JSON.generate(redacted, allow_nan: true) unless redacted == parsed
+      JSON.generate(redacted, allow_nan: true)
     rescue JSON::NestingError
       JSON.generate(NESTING_MARKER)
     rescue JSON::ParserError
       nil
     rescue StandardError => e
-      # e.g. a number such as 1e999 that parses but cannot be serialized: fail closed for this
-      # payload alone so the rest of the body is still redacted.
+      # e.g. a string with a lone surrogate that parses but cannot be serialized: fail closed for
+      # this payload alone so the rest of the body is still redacted.
       Coolhand.log "❌ Error redacting JSON payload: #{e.class}"
       JSON.generate(FAILED_MARKER)
     end
