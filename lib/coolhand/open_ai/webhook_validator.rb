@@ -119,11 +119,7 @@ module Coolhand
         # An empty key (a bare "whsec_" secret) makes the HMAC forgeable by anyone, so never accept it.
         signature_valid = !secret_bytes.empty? && signature_matches?(webhook_signature, expected_signature)
 
-        unless signature_valid
-          @errors << "OpenAI webhook signature verification failed"
-          Rails.logger.error(@errors.last)
-          return false
-        end
+        return reject("OpenAI webhook signature verification failed") unless signature_valid
 
         return false unless timestamp_fresh?(webhook_timestamp)
         return false unless webhook_id_unused?(webhook_id)
@@ -151,9 +147,7 @@ module Coolhand
         age = (Time.now.to_i - webhook_timestamp.to_i).abs
         return true if age <= tolerance
 
-        @errors << "OpenAI webhook timestamp outside replay-protection tolerance window"
-        Rails.logger.error(@errors.last)
-        false
+        reject("OpenAI webhook timestamp outside replay-protection tolerance window")
       end
 
       # The timestamp check accepts anything within +/- tolerance of now, so a request stamped
@@ -166,9 +160,7 @@ module Coolhand
           return true
         end
 
-        @errors << "OpenAI webhook id already processed (replay protection)"
-        Rails.logger.error(@errors.last)
-        false
+        reject("OpenAI webhook id already processed (replay protection)")
       end
 
       def id_store
