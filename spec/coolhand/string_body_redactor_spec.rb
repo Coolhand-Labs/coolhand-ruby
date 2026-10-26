@@ -83,8 +83,16 @@ RSpec.describe Coolhand::StringBodyRedactor do
       expect(described_class.redact(cr)).to eq(%(data: {"api_key":"[REDACTED]"}\rdata: {"a":1}\r))
     end
 
-    it "keeps the absence of the optional space after the colon" do
+    it "keeps whatever whitespace follows the colon" do
       expect(described_class.redact(%(data:{"password":"p"}\n))).to eq(%(data:{"password":"[REDACTED]"}\n))
+      expect(described_class.redact(%(data:\t {"password":"p"}\n))).to eq(%(data:\t {"password":"[REDACTED]"}\n))
+    end
+
+    it "normalizes JSON values on re-serialization: big integers and unicode survive, floats go to double precision" do
+      big = 123_456_789_012_345_678_901_234_567_890
+      result = described_class.redact(%(data: {"password":"p","id":#{big},"t":"caf\\u00e9","f":1.10}))
+
+      expect(result).to eq(%(data: {"password":"[REDACTED]","id":#{big},"t":"café","f":1.1}))
     end
 
     it "leaves malformed and non-JSON data lines alone and still redacts the good ones" do
@@ -245,6 +253,12 @@ RSpec.describe Coolhand::StringBodyRedactor do
 
       it "does not let a duplicated key hide a credential in JSON text" do
         expect(described_class.redact(%({"password":"hunter2","password":null}))).to eq(%({"password":null}))
+      end
+
+      it "still scans data: lines when the body starts with { or [ but is not one JSON document" do
+        log_first = %([INFO] started\ndata: {"api_key":"sk-1"}\n)
+
+        expect(described_class.redact(log_first)).to eq(%([INFO] started\ndata: {"api_key":"[REDACTED]"}\n))
       end
 
       it "leaves malformed JSON alone" do

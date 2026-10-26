@@ -15,14 +15,15 @@ module Coolhand
     FAILED_MARKER = { "_coolhand_capture_skipped" => "redaction_failed" }.freeze
 
     # A `data:` field at the start of a line (LF, CRLF or bare CR), or after a byte order mark,
-    # which the SSE spec ignores. One space after the colon belongs to the SSE field syntax,
-    # so it is captured apart from the payload.
-    DATA_LINE = /(?<![^\r\n\uFEFF])data:( ?)([^\r\n]*)/
+    # which the SSE spec ignores. Whitespace after the colon is captured apart from the payload so
+    # a rewritten line keeps its own.
+    DATA_LINE = /(?<![^\r\n\uFEFF])data:([ \t]*)([^\r\n]*)/
     JSON_CONTAINER = /\A\uFEFF?\s*[\[{]/
 
     def redact(body)
       text = utf8_text(body)
-      text.match?(JSON_CONTAINER) ? (redacted_json(text) || body) : redact_stream(body, text)
+      json = redacted_json(text) if text.match?(JSON_CONTAINER)
+      json || redact_stream(body, text)
     rescue StandardError => e
       # Fail closed: never log a body that could not be checked. The message is left out because
       # a parser error can quote the payload.
