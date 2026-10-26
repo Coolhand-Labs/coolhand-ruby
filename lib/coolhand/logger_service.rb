@@ -18,6 +18,8 @@ module Coolhand
 
     # CGI-style env key: uppercase letters, digits and underscores (REQUEST_METHOD, DATABASE_URL).
     CGI_ENV_KEY_PATTERN = /\A[A-Z0-9_]+\z/
+    # Lowercase dotted Rack/Rails/server key: rack.session, action_dispatch.request.parameters, puma.config.
+    RACK_DOTTED_KEY_PATTERN = /\A[a-z0-9_]+(?:\.[a-z0-9_]+)+\z/
     RACK_ENV_HEADER_KEYS = %w[CONTENT_TYPE CONTENT_LENGTH].freeze
 
     def initialize
@@ -97,7 +99,8 @@ module Coolhand
     # so session/params data is never forwarded. Ordinary header names (including normalized
     # plain-Hash ones like "Content-Type" or "x-webhook-id") never match the denylist.
     # CGI/FastCGI handlers also put the process env (DATABASE_URL, REDIS_URL, ...) in the Rack
-    # env, so once the input looks like one, only HTTP_*, CONTENT_TYPE and CONTENT_LENGTH pass.
+    # env, so once the input looks like one, only HTTP_*, CONTENT_TYPE and CONTENT_LENGTH pass
+    # (a process env var that itself starts with HTTP_ still gets through; HTTP_PROXY is denied).
     def forwardable_header?(key, value, rack_env: false)
       return false unless key && value
 
@@ -107,13 +110,14 @@ module Coolhand
       !rack_env || name.start_with?("HTTP_") || RACK_ENV_HEADER_KEYS.include?(name)
     end
 
-    # A Rack env is recognised by a positive signal (a dotted key like rack.session, or a CGI
-    # key like REQUEST_METHOD), or by every key being env-shaped. Requiring only the latter
-    # would let a single lowercase key (Warden's "warden", a shell's http_proxy) switch the
-    # allowlist off for the whole env.
+    # A Rack env is recognised by a positive signal the Rack spec guarantees (REQUEST_METHOD, or
+    # a lowercase dotted key like rack.input), or by every key being env-shaped. Requiring only
+    # the latter would let a single lowercase key (Warden's "warden", a shell's http_proxy)
+    # switch the allowlist off for the whole env. Mixed-case dotted names ("X.Trace") are
+    # valid header names, so they are not a signal.
     def rack_env_shaped?(entries)
       keys = entries.filter_map { |key, _value| key&.to_s }
-      keys.any? { |name| name.include?(".") || RACK_ENV_CGI_KEYS.include?(name) } ||
+      keys.any? { |name| name == "REQUEST_METHOD" || name.match?(RACK_DOTTED_KEY_PATTERN) } ||
         (keys.any? && keys.all? { |name| name.match?(CGI_ENV_KEY_PATTERN) })
     end
 

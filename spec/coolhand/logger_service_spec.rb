@@ -678,14 +678,20 @@ RSpec.describe Coolhand::LoggerService do
           headers = {
             "Content-Type" => "application/json",
             "x-webhook-id" => "wh_1",
-            "X_CUSTOM" => "kept",
-            "DATABASE_URL" => "not-an-env-here"
+            "X_CUSTOM" => "kept"
           }
           result = service_with_private.sanitize_headers_public(headers)
           expect(result).to eq(
             "content-type" => "application/json", "x-webhook-id" => "wh_1",
-            "x-custom" => "kept", "database-url" => "not-an-env-here"
+            "x-custom" => "kept"
           )
+        end
+
+        it "only drops the dotted and CGI-named entries, keeping the other headers" do
+          result = service_with_private.sanitize_headers_public(
+            "Content-Type" => "a", "X.Trace" => "1", "HTTPS" => "on", "HTTP_VERSION" => "2"
+          )
+          expect(result).to eq("content-type" => "a")
         end
 
         it "keeps symbol-keyed headers" do
