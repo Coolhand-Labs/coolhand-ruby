@@ -86,7 +86,7 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
 
       it "sets appropriate error message" do
         validator.valid?
-        expect(validator.error_message).to include("Empty webhook payload")
+        expect(validator.error_message).to eq("Empty webhook payload - rejecting webhook")
       end
     end
 
@@ -406,6 +406,30 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         it "also allows the webhook through and warns instead of rejecting" do
           expect(Rails.logger).to receive(:warn).with(/skipping signature verification in test/)
           expect(validator.valid?).to be true
+        end
+      end
+
+      context "when the payload is nil and the secret is a blank string" do
+        let(:webhook_secret) { "   " }
+        let(:payload) { nil }
+        let(:request) do
+          instance_double("hash",
+            headers: {},
+            raw_post: nil,
+            body: instance_double("IO", read: nil))
+        end
+
+        it "is treated as an unconfigured secret: allowed with a warning in development" do
+          expect(Rails.logger).to receive(:warn).with(/allowing in development environment/)
+          expect(validator.valid?).to be true
+        end
+
+        it "is rejected under the allowlist message outside development/test" do
+          allow(Rails).to receive(:env).and_return("production")
+          allow(Rails.logger).to receive(:error)
+
+          expect(validator.valid?).to be false
+          expect(validator.error_message).to match(/Empty webhook payload - rejecting webhook \(Rails.env="production"/)
         end
       end
 

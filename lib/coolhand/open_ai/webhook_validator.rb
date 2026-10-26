@@ -77,10 +77,8 @@ module Coolhand
       # check is skipped with a warning.
       def enforce_or_allow(problem, allow_warning)
         if should_enforce_strict_validation?
-          @errors << "#{problem} - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
-                     "not in development/test allowlist)"
-          Rails.logger.error(@errors.last)
-          false
+          reject("#{problem} - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
+                 "not in development/test allowlist)")
         else
           Rails.logger.warn(allow_warning)
           true
@@ -105,8 +103,12 @@ module Coolhand
 
       # A secret is configured, so anything that can't be verified is rejected in every environment.
       def reject_unsigned(problem)
-        @errors << "#{problem} - rejecting webhook"
-        Rails.logger.error(@errors.last)
+        reject("#{problem} - rejecting webhook")
+      end
+
+      def reject(message)
+        @errors << message
+        Rails.logger.error(message)
         false
       end
 
