@@ -845,4 +845,110 @@ RSpec.describe Coolhand::BaseInterceptor do
           "jwt" => "[REDACTED]", "index_name" => "docs")
     end
   end
+
+  describe ".sanitize_body URL-valued fields and extra credential keys" do
+    def redact(body)
+      described_class.sanitize_body(body)
+    end
+
+    it "scrubs userinfo and key params from an MCP server_url and mcp_servers url" do
+      body = {
+        "tools" => [{ "type" => "mcp", "server_url" => "https://u:pw@h.example/x?key=ABC&v=1" }],
+        "mcp_servers" => [{ "type" => "url", "url" => "https://m.example/sse?api_key=ABC" }]
+      }
+
+      sanitized = redact(body)
+
+      expect(sanitized["tools"][0]["server_url"]).to eq("https://REDACTED@h.example/x?key=%5BREDACTED%5D&v=1")
+      expect(sanitized["mcp_servers"][0]["url"]).to eq("https://m.example/sse?api_key=%5BREDACTED%5D")
+    end
+
+    it "scrubs a presigned image_url in both the nested and string forms" do
+      presigned = "https://b.s3.amazonaws.com/a.png?X-Amz-Credential=AKIAXXX&X-Amz-Signature=abc123&X-Amz-Expires=60"
+      body = { "messages" => [{ "content" => [{ "type" => "image_url", "image_url" => { "url" => presigned } },
+                                              { "type" => "input_image", "image_url" => presigned }] }] }
+
+      parts = redact(body)["messages"][0]["content"]
+
+      [parts[0]["image_url"]["url"], parts[1]["image_url"]].each do |url|
+        expect(url).to start_with("https://b.s3.amazonaws.com/a.png?")
+        expect(url).not_to include("AKIAXXX")
+        expect(url).not_to include("abc123")
+        expect(url).to include("X-Amz-Expires=60")
+      end
+    end
+
+    it "scrubs file_url and endpoint, matching the key name like other body keys" do
+      url = "https://u:pw@h.example/f?sas=S"
+      body = { "file_url" => url, "endpoint" => url, "serverUrl" => url, "Image-URL" => url }
+
+      expect(redact(body).values.uniq).to eq(["https://REDACTED@h.example/f?sas=%5BREDACTED%5D"])
+    end
+
+    it "leaves a clean URL byte-for-byte unchanged" do
+      body = { "url" => "https://example.com/a%20b?x=1&y=2", "image_url" => "data:image/png;base64,AAAA" }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "leaves prose that contains a URL, relative paths and non-string values alone" do
+      body = {
+        "url" => "see https://u:pw@h.example/?key=ABC for details",
+        "endpoint" => "/v1/chat?key=ABC",
+        "server_url" => nil,
+        "image_url" => { "detail" => "low" },
+        "file_url" => 7
+      }
+      content = { "choices" => [{ "message" => { "content" => "Call https://u:pw@h.example/?key=ABC now" } }] }
+
+      expect(redact(body)).to eq(body)
+      expect(redact(content)).to eq(content)
+    end
+
+    it "does not touch URLs under keys that are not on the list" do
+      body = { "webhook" => "https://u:pw@h.example/?key=ABC", "link" => "https://h.example/?key=ABC" }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "fails closed on an unparseable URL value" do
+      expect(redact("url" => "https://u:pw@h.example/p?a=%zz&key=S")["url"]).to eq("https://REDACTED@h.example/p")
+    end
+
+    it "redacts string values under the additional credential keys, in any case or separator style" do
+      keys = %w[secret x-api-key X-Api-Key bearer_token bearerToken session_token sessionToken
+                aws_secret_access_key AWS_SECRET_ACCESS_KEY secret_access_key]
+
+      expect(redact(keys.to_h { |k| [k, "s3cret"] }).values.uniq).to eq(["[REDACTED]"])
+    end
+
+    it "keeps a bare token key (logprobs) and non-string values under the new keys" do
+      body = {
+        "logprobs" => { "content" => [{ "token" => "Hello", "top_logprobs" => [{ "token" => "Hi" }] }] },
+        "secret" => { "type" => "object" },
+        "session_token" => nil,
+        "credentials" => { "scheme" => "bearer" }
+      }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "does not mutate its input" do
+      body = { "tools" => [{ "server_url" => "https://u:pw@h.example/?key=ABC", "secret" => "s" }] }
+      snapshot = Marshal.load(Marshal.dump(body))
+
+      redact(body)
+
+      expect(body).to eq(snapshot)
+    end
+
+    it "still applies the depth guard around URL-valued fields" do
+      deep = { "url" => "https://u:pw@h.example/?key=ABC" }
+      500.times { deep = { "n" => deep } }
+
+      sanitized = nil
+      expect { sanitized = redact(deep) }.not_to raise_error
+      expect(sanitized.to_s).not_to include("pw@")
+    end
+  end
 end

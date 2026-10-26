@@ -15,7 +15,15 @@ module Coolhand
     CREDENTIAL_BODY_KEYS = %w[
       authorization authorizationtoken accesstoken refreshtoken idtoken
       apikey clientsecret privatekey secretkey password
+      xapikey secret secretaccesskey awssecretaccesskey sessiontoken bearertoken
     ].freeze
+
+    # Body keys whose *string* value is a URL that can carry credentials (MCP `server_url`, a
+    # presigned `image_url`/`file_url`, a datastore `endpoint`). Matched exactly like
+    # CREDENTIAL_BODY_KEYS, but the value is scrubbed with BaseInterceptor.sanitize_url instead of
+    # replaced, and only when it is a single absolute URL: prose that merely contains one is never
+    # touched. A bare `token` key is deliberately absent from both lists (logprobs use `{"token":"Hello"}`).
+    URL_BODY_KEYS = %w[url serverurl imageurl fileurl endpoint].freeze
 
     def redact(body)
       return body unless body.is_a?(Hash) || body.is_a?(Array)
@@ -45,8 +53,8 @@ module Coolhand
     def redact_body_entry(name, value, depth, context)
       if name == "datasources"
         BaseInterceptor.redact_sensitive_body_values(value, depth + 1)
-      elsif value.is_a?(String) && redact_string_leaf?(name, context)
-        BaseInterceptor::REDACTED
+      elsif value.is_a?(String)
+        redact_string_value(name, value, context)
       elsif name == "headers" && context[:mcp]
         redact_header_values(value, depth + 1)
       elsif name == "clientsecret" && value.is_a?(Hash)
@@ -54,6 +62,12 @@ module Coolhand
       else
         redact_body_node(value, depth + 1)
       end
+    end
+
+    def redact_string_value(name, value, context)
+      return BaseInterceptor::REDACTED if redact_string_leaf?(name, context)
+
+      URL_BODY_KEYS.include?(name) ? BaseInterceptor.redact_embedded_url_credentials(value) : value
     end
 
     def redact_string_leaf?(name, context)
