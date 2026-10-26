@@ -57,7 +57,7 @@ Limits:
 - A String JSON payload nested more than 100 levels deep is replaced with `{"_coolhand_capture_skipped": "nesting_too_deep"}` (as JSON text, since it replaces text). If redacting a payload (or a whole String body) fails for any reason, it is replaced with `{"_coolhand_capture_skipped": "redaction_failed"}` rather than logged unchecked.
 - Streamed bodies are capped by `max_captured_body_bytes` (see [Body Capture Limits](#body-capture-limits)) before redaction, so an over-limit stream is logged as the `body_too_large` placeholder and never scanned.
 
-Webhooks sent with `Coolhand.forward_webhook` get the same redaction on `webhook_body` and `response_body`, after the existing binary-field filtering. Webhook bodies are not subject to the capture cap.
+Webhooks sent with `Coolhand.logger_service.forward_webhook` get the same redaction on `webhook_body` and `response_body`, after the existing binary-field filtering. Webhook bodies are not subject to the capture cap.
 
 ## Asynchronous Logging
 
