@@ -491,6 +491,14 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(params["note"]).to eq("see https://example.com/?token=abc for details")
     end
 
+    it "drops a fragment from a URL value under data_sources" do
+      body = { "data_sources" => [{ "parameters" => { "endpoint" => "https://search.example.net/#access_token=S" } }] }
+
+      params = described_class.sanitize_body(body)["data_sources"][0]["parameters"]
+
+      expect(params["endpoint"]).to eq("https://search.example.net/")
+    end
+
     it "does not touch URL strings outside data_sources, such as prompt content" do
       body = { "messages" => [{ "role" => "user", "content" => "https://u:p@h.example/?token=abc" }] }
 

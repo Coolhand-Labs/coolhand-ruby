@@ -159,7 +159,7 @@ module Coolhand
 
       # A fragment never reaches a server, but a caller-supplied URL can carry one (OAuth
       # implicit flow puts `access_token=...` there), so drop it as the fallback below does.
-      unless uri.fragment.nil?
+      if uri.fragment
         uri.fragment = nil
         modified = true
       end
