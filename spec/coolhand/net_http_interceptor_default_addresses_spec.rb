@@ -177,6 +177,126 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(intercepted?("https://api.openai.com.evil.net./v1/chat/completions")).to be false
   end
 
+  describe "path normalization before exclude and anchor matching" do
+    azure = "https://my.openai.azure.com"
+    cohere = "https://api.cohere.com"
+
+    it "still excludes the plain Azure control-plane path" do
+      expect(intercepted?("#{azure}/openai/files")).to be false
+    end
+
+    {
+      "repeated slashes" => "/openai//files",
+      "a dot segment" => "/openai/./files",
+      "an unreserved percent-escape" => "/openai/%66iles",
+      "an escaped leading segment" => "/%6fpenai/files",
+      "an encoded dot segment" => "/openai/%2e/files",
+      "a parent segment" => "/openai/chat/../files",
+      "a parent segment past the root" => "/../../openai/files",
+      "a trailing dot segment" => "/openai/files/."
+    }.each do |label, path|
+      it "excludes #{path} (#{label})" do
+        expect(intercepted?("#{azure}#{path}")).to be false
+      end
+    end
+
+    it "fails closed: a raw path that matches an exclude pattern stays excluded even if it normalizes away" do
+      expect(intercepted?("#{azure}/openai/files/../deployments/gpt/chat/completions")).to be false
+    end
+
+    it "compares exclude patterns literally against the raw and the normalized path" do
+      Coolhand.configuration.exclude_api_patterns = ["/openai//files"]
+      expect(intercepted?("#{azure}/openai//files")).to be false
+      expect(intercepted?("#{azure}/openai/files")).to be true
+    end
+
+    it "normalizes the path for the Google intercept_path_patterns check too" do
+      host = "https://us-central1-prediction.googleapis.com"
+      expect(intercepted?("#{host}/v1/models/x/./y:generateContent")).to be true
+      expect(intercepted?("#{host}//v1/models/x//y:generateContent")).to be true
+      expect(intercepted?("#{host}/v1/models/x/y%3AgenerateContent")).to be false
+    end
+
+    it "matches a port-pinned path anchor through a normalized path" do
+      Coolhand.configuration.intercept_addresses = ["localhost:11434/api/chat"]
+      expect(intercepted?("http://localhost:11434//api/./chat")).to be true
+      expect(intercepted?("http://localhost:11434/api/chat/../tags")).to be false
+    end
+
+    it "does not match a Cohere anchor through a parent-segment walk to another endpoint" do
+      expect(intercepted?("#{cohere}/v2/chat/../../v1/rerank")).to be false
+      expect(intercepted?("#{cohere}/v2/chat/../rerank")).to be false
+    end
+
+    it "matches a Cohere anchor reached through sloppy but equivalent paths" do
+      expect(intercepted?("#{cohere}//v2/chat")).to be true
+      expect(intercepted?("#{cohere}/%76%32/chat")).to be true
+      expect(intercepted?("#{cohere}/v1/../v2/chat")).to be true
+      expect(intercepted?("#{cohere}/v2/./chat")).to be true
+    end
+
+    it "leaves reserved escapes encoded so %2F cannot forge a segment boundary" do
+      expect(intercepted?("#{azure}/openai%2Ffiles")).to be true
+      expect(intercepted?("#{cohere}/v2%2Fchat")).to be false
+    end
+
+    it "decodes only one level, so a double-encoded dot stays literal" do
+      expect(intercepted?("#{azure}/openai/%252e/files")).to be true
+    end
+
+    it "keeps normal paths unchanged" do
+      expect(intercepted?("#{azure}/openai/deployments/gpt/chat/completions")).to be true
+      expect(intercepted?("#{cohere}/v2/chat")).to be true
+      expect(intercepted?("#{cohere}/v2/chat/")).to be true
+      expect(intercepted?("#{cohere}/v1/rerank")).to be false
+    end
+
+    it "does not treat the query string as part of the path" do
+      expect(intercepted?("#{azure}/openai/deployments/x?next=/openai//files")).to be true
+      expect(intercepted?("#{cohere}/v1/rerank?x=/v2/chat")).to be false
+      expect(intercepted?("#{cohere}/v2/chat?x=../../v1/rerank")).to be true
+    end
+
+    it "does not create false exclusions from near-miss paths" do
+      expect(intercepted?("#{azure}/openai/deployments/files-and-more/chat")).to be true
+      expect(intercepted?("#{azure}/openai/%66ile/chat")).to be true
+    end
+
+    it "keeps path matching case-sensitive" do
+      expect(intercepted?("#{azure}/OpenAI/files")).to be true
+      expect(intercepted?("#{cohere}/V2/chat")).to be false
+    end
+
+    describe "Helpers.normalize_path" do
+      it "normalizes without touching the trailing slash" do
+        expect(interceptor.normalize_path("/a//b/./c/../d/")).to eq("/a/b/d/")
+        expect(interceptor.normalize_path("/a/b/..")).to eq("/a/")
+        expect(interceptor.normalize_path("/")).to eq("/")
+        expect(interceptor.normalize_path("/..")).to eq("/")
+      end
+
+      it "decodes unreserved escapes in any hex case and leaves other escapes alone" do
+        expect(interceptor.normalize_path("/%41%7e%5f%2D%2e/%2f%3a%20")).to eq("/A~_-./%2f%3a%20")
+      end
+
+      it "leaves malformed escapes as they are instead of raising" do
+        expect(interceptor.normalize_path("/a/%zz/%4/%")).to eq("/a/%zz/%4/%")
+      end
+
+      it "handles empty, NUL, high-byte and invalid-byte input without raising" do
+        expect(interceptor.normalize_path("")).to eq("/")
+        expect(interceptor.normalize_path("/a/%00/%ff")).to eq("/a/%00/%ff")
+        expect { interceptor.normalize_path("/a/\xFF/../b".b) }.not_to raise_error
+        expect { interceptor.normalize_path("/a/\xFF//b") }.not_to raise_error
+      end
+
+      it "falls back to the raw path if normalization fails" do
+        bad = Class.new(String) { def gsub(*) = raise(ArgumentError, "boom") }.new("/a//b")
+        expect(interceptor.normalize_path(bad)).to equal(bad)
+      end
+    end
+  end
+
   describe "misconfigured rules never break the host request" do
     let(:http) { Net::HTTP.new("api.openai.com", 443).tap { |h| h.use_ssl = true } }
 
