@@ -820,22 +820,33 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(captured).to eq({ "streamed" => "this payload is well over ten bytes long" })
     end
 
-    it "falls back to reading the stream when no Content-Length is declared (cap_and_parse still applies)" do
+    it "taps the stream instead of reading it when no Content-Length is declared" do
       stream = StringIO.new(content)
+      allow(stream).to receive(:read).and_call_original
       req = stream_request(stream, content_length: nil)
 
       captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
 
-      expect(captured["_coolhand_capture_skipped"]).to eq("body_too_large")
-      expect(captured["size_bytes"]).to eq(content.bytesize)
+      expect(stream).not_to have_received(:read)
+      expect(captured).to be_a(Coolhand::NetHttpInterceptor::BodyStreamTap)
+      expect(req.body_stream).to equal(captured)
+      expect(captured.source).to equal(stream)
     end
 
-    it "does not raise on a malformed Content-Length, and still falls back to reading the stream" do
+    it "does not raise on a malformed Content-Length, and taps the stream rather than trusting it" do
       req = stream_request(StringIO.new(content), content_length: "not-a-number")
 
       captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
 
-      expect(captured["_coolhand_capture_skipped"]).to eq("body_too_large")
+      expect(captured).to be_a(Coolhand::NetHttpInterceptor::BodyStreamTap)
+    end
+
+    it "ignores a Content-Length header on a chunked request, as Net::HTTP does" do
+      req = stream_request(StringIO.new(content), content_length: "5")
+      req["Transfer-Encoding"] = "chunked"
+
+      expect(Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil))
+        .to be_a(Coolhand::NetHttpInterceptor::BodyStreamTap)
     end
 
     it "does not pre-check when the cap is disabled" do

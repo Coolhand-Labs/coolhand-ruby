@@ -6,6 +6,8 @@ require "stringio"
 require "timeout"
 require "zlib"
 
+require_relative "body_stream_tap"
+
 module Coolhand
   module NetHttpInterceptor
     # Response streaming interceptor nested under NetHttpInterceptor
@@ -147,7 +149,7 @@ module Coolhand
           method: req.method,
           url: url,
           request_headers: BaseInterceptor.sanitize_headers(req),
-          request_body: captured_body,
+          request_body: Helpers.finalize_request_body(captured_body, req),
           response_headers: BaseInterceptor.sanitize_headers(response),
           response_body: response_body,
           status_code: status_code,
@@ -226,17 +228,31 @@ module Coolhand
 
         content = body || req.body
         if content.nil? && req.respond_to?(:body_stream) && req.body_stream
-          # A declared Content-Length over the cap means we never need the bytes: skip
-          # before .read so a huge stream is not buffered just to be discarded.
-          too_large = oversized_declared_length(req)
-          return too_large if too_large
+          result = capture_body_stream(req)
+          return result unless result.is_a?(String)
 
-          content = req.body_stream.read
-          req.body_stream = StringIO.new(content)
+          content = result
         end
         return nil if content.nil?
 
         cap_and_parse(content, req)
+      end
+
+      # A body_stream request: the log body (a marker, or the BodyStreamTap resolved after the send),
+      # or the stream's content as a String when it was read here and still needs cap_and_parse.
+      def capture_body_stream(req)
+        # A declared Content-Length over the cap means we never need the bytes: skip
+        # before .read so a huge stream is not buffered just to be discarded.
+        too_large = oversized_declared_length(req)
+        return too_large if too_large
+
+        # No usable Content-Length (chunked): the size is unknown, so don't read ahead. Tap the
+        # stream instead and build the log body once Net::HTTP has sent it (finalize_request_body).
+        return tap_body_stream(req) unless declared_content_length(req)
+
+        content = req.body_stream.read
+        req.body_stream = StringIO.new(content)
+        content
       end
 
       # The effective cap: nil disables it; a non-Integer or negative value (e.g. an unparsed
@@ -258,17 +274,48 @@ module Coolhand
       end
 
       # Returns a body_too_large marker when the request declares a Content-Length above the
-      # cap, else nil. Chunked/absent/malformed lengths return nil (the caller then reads the
-      # stream and cap_and_parse still enforces the cap on the real size).
+      # cap, else nil. Chunked/absent/malformed lengths return nil (the caller then taps the
+      # stream, which enforces the cap on the bytes actually sent).
       def oversized_declared_length(req)
         length = declared_content_length(req)
         body_too_large_marker(req, length) if length && over_capture_limit?(length)
       end
 
+      # Net::HTTP sends a chunked body without regard to any Content-Length header, so it is not a
+      # declaration of what goes on the wire then.
       def declared_content_length(req)
-        req.content_length if req.respond_to?(:content_length)
+        req.content_length if req.respond_to?(:content_length) && !req.chunked?
       rescue StandardError
         nil
+      end
+
+      def tap_body_stream(req)
+        tap = BodyStreamTap.new(req.body_stream)
+        req.body_stream = tap
+        tap
+      end
+
+      # The request body for the log. A tapped body_stream (see tap_body_stream) only has its
+      # content once the request has been attempted, so it is resolved here and the host's own
+      # stream is put back on the request. Runs in #request's ensure: it must not raise.
+      def finalize_request_body(captured, req)
+        return captured unless captured.is_a?(BodyStreamTap)
+
+        req.body_stream = captured.source if req.body_stream.equal?(captured)
+        tapped_body_for_log(captured, req)
+      rescue StandardError => e
+        Coolhand.log "❌ Error capturing request body: #{e.message}"
+        nil
+      end
+
+      # Over the cap is known from the bytes seen so far, even if the stream was not fully sent.
+      # Otherwise a stream that never reached its end (the request failed first) has no complete body.
+      def tapped_body_for_log(tap, req)
+        return if tap.failed?
+        return body_too_large_marker(req, tap.bytes_seen) if tap.overflowed?
+        return skipped_capture_marker(req, "body_stream_incomplete", size_bytes: tap.bytes_seen) unless tap.eof?
+
+        BaseInterceptor.parse_json(tap.body)
       end
 
       # Appends a streamed response chunk to the thread-local capture buffer, up to the cap.

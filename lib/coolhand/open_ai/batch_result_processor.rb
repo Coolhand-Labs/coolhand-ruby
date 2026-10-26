@@ -58,13 +58,14 @@ module Coolhand
         window = batch_window
         return unless window
 
-        request_items_by_id = download_batch_results(input_file_id).each_with_object({}) do |item, index|
-          index[item["custom_id"]] ||= item
+        request_items_by_id = {}
+        each_batch_result(input_file_id) do |item, line_size|
+          request_items_by_id[item["custom_id"]] ||= request_entry(item, line_size)
         end
 
-        download_batch_results(output_file_id).each do |response_item|
+        each_batch_result(output_file_id) do |response_item, line_size|
           request_item = request_items_by_id[response_item["custom_id"]]
-          send_item_log(request_item, response_item, window) if request_item
+          send_item_log(request_item, response_item, window, line_size) if request_item
         end
 
         Rails.logger.info("[Interceptor] Successfully processed OpenAI batch #{batch_info['id']}")
@@ -82,10 +83,19 @@ module Coolhand
         [input_file_id, output_file_id]
       end
 
-      def send_item_log(request_item, response_item, window)
-        send_complete_request_log(request_item: request_item, response_item: response_item, window: window)
+      def send_item_log(request_item, response_item, window, line_size)
+        send_complete_request_log(request_item: request_item, response_item: response_item, window: window,
+          line_size: line_size)
       rescue StandardError => e
         Rails.logger.error("[Interceptor] Failed to send request log: #{e.message}")
+      end
+
+      # What is kept of each input item while the output file is read: only the fields that get
+      # logged, with the body capped (see BatchBodyCap) so the index stays small. The model is read
+      # from the full body first, since a capped body is just a marker.
+      def request_entry(item, line_size)
+        { "method" => item["method"], "url" => item["url"], "model" => item_model(item["body"]),
+          "body" => BatchBodyCap.cap(item["body"], max_size: line_size) }
       end
 
       # Returns [start_time, end_time] or nil (after logging) when OpenAI didn't report usable
@@ -116,31 +126,44 @@ module Coolhand
         false
       end
 
-      def download_batch_results(file_id)
-        file_content = client.files.content(id: file_id)
+      # Yields each item of a batch input/output file with the byte size of the JSONL line it came
+      # from (nil when the client had already parsed it). A String/StringIO/IO result is read a line
+      # at a time, so only one parsed item exists at once instead of the whole file split into lines.
+      # A client that returns the whole file already parsed (an Array, or a Hash for a one-line file)
+      # has loaded it already; that is out of reach here.
+      def each_batch_result(file_id, &block)
+        file_content = download_batch_file(file_id)
 
-        # Handle both string and array responses from the OpenAI client
-        if file_content.is_a?(Array)
-          # Client already parsed the JSONL into an array
-          file_content
-        else
-          # Parse JSONL response manually
-          file_content.split("\n").filter_map do |line|
-            line.strip!
-            next if line.empty?
-
-            JSON.parse(line)
-          end
+        case file_content
+        when nil then nil
+        when Array then file_content.each { |item| yield(item, nil) }
+        when Hash then yield(file_content, nil)
+        else each_jsonl_item(file_content, &block)
         end
-      rescue JSON::ParserError => e
-        Rails.logger.error("[Interceptor] Failed to parse OpenAI batch results: #{e.message}")
-        []
-      rescue StandardError => e
-        Rails.logger.error("[Interceptor] Failed to download OpenAI batch results: #{e.message}")
-        []
       end
 
-      def send_complete_request_log(request_item:, response_item:, window:)
+      def download_batch_file(file_id)
+        client.files.content(id: file_id)
+      rescue StandardError => e
+        Rails.logger.error("[Interceptor] Failed to download OpenAI batch results: #{e.message}")
+        nil
+      end
+
+      # A malformed line ends the file (as it did when the whole file was parsed up front).
+      def each_jsonl_item(file_content)
+        file_content.each_line do |line|
+          size = line.bytesize
+          line = line.strip
+          next if line.empty?
+
+          yield(JSON.parse(line), size)
+        rescue JSON::ParserError => e
+          Rails.logger.error("[Interceptor] Failed to parse OpenAI batch results: #{e.message}")
+          break
+        end
+      end
+
+      def send_complete_request_log(request_item:, response_item:, window:, line_size:)
         start_time, end_time = window
         response = response_item["response"]
         BaseInterceptor.send_complete_request_log(
@@ -148,11 +171,11 @@ module Coolhand
           method: request_item["method"],
           url: absolute_url(request_item["url"]),
           source_api: SOURCE_API,
-          model: item_model(request_item["body"], response["body"]),
+          model: request_item["model"] || item_model(response["body"]),
           request_headers: {},
           request_body: request_item["body"],
           response_headers: {},
-          response_body: response["body"],
+          response_body: BatchBodyCap.cap(response["body"], max_size: line_size),
           status_code: response["status_code"],
           start_time: start_time,
           end_time: end_time,
