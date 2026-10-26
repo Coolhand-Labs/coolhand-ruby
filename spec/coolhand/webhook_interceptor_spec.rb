@@ -184,7 +184,8 @@ RSpec.describe Coolhand::WebhookInterceptor do
 
     context "when a host controller re-defines the helpers as public" do
       # Stand-in for AbstractController::Base, whose action_methods is every
-      # public instance method (the real one returns a Set of strings).
+      # public instance method (the real one returns a Set of strings; actionpack
+      # isn't a dependency of this gem, so the contract is mirrored, not loaded).
       let(:framework_base) do
         Class.new do
           def self.action_methods
@@ -206,11 +207,9 @@ RSpec.describe Coolhand::WebhookInterceptor do
         end
       end
 
-      it "makes the overrides public again, as plain Ruby visibility rules dictate" do
-        expect(host_class.new.public_methods).to include(:webhook_secret, :process_event)
-      end
-
       it "still excludes every helper from action_methods so none is routable" do
+        # Plain Ruby visibility: the public re-definitions are public again.
+        expect(host_class.new.public_methods).to include(:webhook_secret, :process_event)
         expect(host_class.action_methods).to contain_exactly("openai")
       end
 
@@ -219,7 +218,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
         expect(subclass.action_methods).not_to include(*helpers.map(&:to_s))
       end
 
-      it "still honours the public override when the interceptor calls it" do
+      it "passes the host's public webhook_secret override to the validator" do
         host = host_class.new
         allow(Coolhand::OpenAi::WebhookValidator).to receive(:new).with(anything, "public_secret").and_return(validator)
         allow(host).to receive_messages(head: nil, controller_name: "w", action_name: "a", request: double)

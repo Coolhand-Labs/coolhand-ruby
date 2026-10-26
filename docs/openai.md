@@ -53,7 +53,7 @@ rescue StandardError => e
   head :internal_server_error
 end
 
-private
+private # keep helpers like this below your public actions
 
 def webhook_secret
   Rails.application.credentials.openai_webhook_secret
@@ -61,7 +61,7 @@ end
 # ...existing code...
 ```
 
-`intercept_batch_request`, `webhook_secret` and `process_event` are private in `Coolhand::WebhookInterceptor`, so Rails doesn't treat them as controller actions. `before_action :intercept_batch_request` works with a private method. If your controller re-defines `webhook_secret` or `process_event` as public, they are public methods again, but `Coolhand::WebhookInterceptor` still removes all three from the controller's `action_methods`, so they stay unroutable. Prefer defining them under `private` anyway.
+`intercept_batch_request`, `webhook_secret` and `process_event` are private in `Coolhand::WebhookInterceptor`, so Rails doesn't treat them as controller actions. `before_action :intercept_batch_request` works with a private method. If your controller re-defines `webhook_secret` or `process_event` as public, they are public methods again, but `Coolhand::WebhookInterceptor` still removes all three from the controller's `action_methods`, so they stay unroutable. Prefer defining them under `private` anyway. These three names are reserved: a controller action with one of those names would not be routable. Because they are private, code outside the controller can no longer call them directly (it gets `NoMethodError`); `super` from your own override still works.
 
 ## What gets logged for a completed batch
 
