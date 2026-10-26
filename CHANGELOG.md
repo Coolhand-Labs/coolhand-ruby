@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.10.1] - 2026-10-25
+## [0.10.1] - 2026-10-26
 
 ### Added
 - **Amazon Bedrock FIPS, dual-stack and China-partition endpoints are now captured** ([#168](https://github.com/Coolhand-Labs/coolhand-ruby/pull/168)). The default intercept list held only `bedrock-runtime.*.amazonaws.com`, so calls to the FIPS hosts (`bedrock-runtime-fips.<region>.amazonaws.com`, the common case for GovCloud callers), the dual-stack IPv6 hosts (`bedrock-runtime.<region>.api.aws` and the FIPS variant) and the China partition (`bedrock-runtime.<region>.amazonaws.com.cn`) were silently not captured. A wildcard entry is an exact host match with no implicit subdomains, so each variant needs its own entry.
