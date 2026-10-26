@@ -29,7 +29,9 @@ module Coolhand
         secret_bytes = extract_secret_bytes
         webhook_signature, webhook_timestamp, webhook_id = extract_webhook_headers
 
-        return reject_missing_headers unless webhook_signature && webhook_timestamp && webhook_id
+        unless webhook_signature && webhook_timestamp && webhook_id
+          return reject_unsigned("Missing OpenAI webhook signature, timestamp, or id headers")
+        end
 
         verify_signature(webhook_signature, webhook_timestamp, webhook_id, secret_bytes)
       end
@@ -56,8 +58,11 @@ module Coolhand
 
       attr_reader :webhook_secret
 
+      # Only a nil payload counts as missing. An empty string is a real (empty) body, so it continues
+      # to the signature check, where it is accepted only if it was actually signed.
       def payload_valid?
         return true if @payload
+        return reject_unsigned("Empty webhook payload") if Coolhand.required_field?(webhook_secret)
 
         enforce_or_allow("Empty webhook payload",
           "Empty webhook payload - allowing in #{Rails.env} environment")
@@ -72,10 +77,8 @@ module Coolhand
       # check is skipped with a warning.
       def enforce_or_allow(problem, allow_warning)
         if should_enforce_strict_validation?
-          @errors << "#{problem} - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
-                     "not in development/test allowlist)"
-          Rails.logger.error(@errors.last)
-          false
+          reject("#{problem} - rejecting webhook (Rails.env=#{Rails.env.inspect} " \
+                 "not in development/test allowlist)")
         else
           Rails.logger.warn(allow_warning)
           true
@@ -98,10 +101,14 @@ module Coolhand
         [webhook_signature, webhook_timestamp, webhook_id]
       end
 
-      # A secret is configured, so unsigned requests are rejected in every environment.
-      def reject_missing_headers
-        @errors << "Missing OpenAI webhook signature, timestamp, or id headers - rejecting webhook"
-        Rails.logger.error(@errors.last)
+      # A secret is configured, so anything that can't be verified is rejected in every environment.
+      def reject_unsigned(problem)
+        reject("#{problem} - rejecting webhook")
+      end
+
+      def reject(message)
+        @errors << message
+        Rails.logger.error(message)
         false
       end
 
@@ -112,11 +119,7 @@ module Coolhand
         # An empty key (a bare "whsec_" secret) makes the HMAC forgeable by anyone, so never accept it.
         signature_valid = !secret_bytes.empty? && signature_matches?(webhook_signature, expected_signature)
 
-        unless signature_valid
-          @errors << "OpenAI webhook signature verification failed"
-          Rails.logger.error(@errors.last)
-          return false
-        end
+        return reject("OpenAI webhook signature verification failed") unless signature_valid
 
         return false unless timestamp_fresh?(webhook_timestamp)
         return false unless webhook_id_unused?(webhook_id)
@@ -144,9 +147,7 @@ module Coolhand
         age = (Time.now.to_i - webhook_timestamp.to_i).abs
         return true if age <= tolerance
 
-        @errors << "OpenAI webhook timestamp outside replay-protection tolerance window"
-        Rails.logger.error(@errors.last)
-        false
+        reject("OpenAI webhook timestamp outside replay-protection tolerance window")
       end
 
       # The timestamp check accepts anything within +/- tolerance of now, so a request stamped
@@ -159,9 +160,7 @@ module Coolhand
           return true
         end
 
-        @errors << "OpenAI webhook id already processed (replay protection)"
-        Rails.logger.error(@errors.last)
-        false
+        reject("OpenAI webhook id already processed (replay protection)")
       end
 
       def id_store
