@@ -14,9 +14,9 @@ RSpec.describe Coolhand::NetHttpInterceptor::BodyStreamTap do
 
     expect(tap.read(3)).to eq("hel")
     expect(tap.read(3)).to eq("lo")
-    expect(tap.eof?).to be false
+    expect(tap.reached_end?).to be false
     expect(tap.read(3)).to be_nil
-    expect(tap).to be_eof
+    expect(tap).to be_reached_end
     expect(tap.body).to eq("hello")
     expect(tap.bytes_seen).to eq(5)
   end
@@ -34,7 +34,7 @@ RSpec.describe Coolhand::NetHttpInterceptor::BodyStreamTap do
     tap = described_class.new(StringIO.new("hello"))
 
     expect(tap.read).to eq("hello")
-    expect(tap).to be_eof
+    expect(tap).to be_reached_end
   end
 
   it "drops the buffer once the cap is crossed and only counts from then on" do
@@ -93,7 +93,7 @@ RSpec.describe Coolhand::NetHttpInterceptor::BodyStreamTap do
 
       expect(tap.readpartial(10)).to eq("abc")
       expect { tap.readpartial(10) }.to raise_error(EOFError)
-      expect(tap).to be_eof
+      expect(tap).to be_reached_end
       expect(tap.body).to eq("abc")
     ensure
       reader.close

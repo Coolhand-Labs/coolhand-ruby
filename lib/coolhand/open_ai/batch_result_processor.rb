@@ -149,7 +149,7 @@ module Coolhand
         nil
       end
 
-      # A malformed line ends the file (as it did when the whole file was parsed up front).
+      # A malformed line ends the file: the items before it are kept, the rest are not read.
       def each_jsonl_item(file_content)
         file_content.each_line do |line|
           size = line.bytesize

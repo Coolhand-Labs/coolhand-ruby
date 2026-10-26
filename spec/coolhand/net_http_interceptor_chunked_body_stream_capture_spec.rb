@@ -4,7 +4,9 @@ require "spec_helper"
 require "webmock/rspec"
 require "net/http"
 require "socket"
+require "pathname"
 require "stringio"
+require "tempfile"
 
 # Chunked (no Content-Length) body_stream requests over a real socket: WebMock's adapter reads the
 # whole stream itself, so it can't show what Net::HTTP actually puts on the wire or how the stream
@@ -172,6 +174,35 @@ RSpec.describe Coolhand::NetHttpInterceptor, "chunked body_stream capture" do # 
     expect(logs.first[:raw_request][:request_body]).to include(
       "_coolhand_capture_skipped" => "body_stream_incomplete", "size_bytes" => 0
     )
+    expect(req.body_stream).to equal(stream)
+  end
+
+  it "sends a Pathname or path String source untouched (copy_stream reads those by path) and logs a marker" do
+    body = '{"streamed":"from a path"}'
+    Tempfile.create("coolhand-chunked-path") do |file|
+      file.write(body)
+      file.flush
+
+      [Pathname.new(file.path), file.path].each do |source|
+        logs.clear
+        _response, (_head, _sizes, wire_body) = send_chunked(source)
+
+        expect(wire_body).to eq(body)
+        expect(logs.first[:raw_request][:request_body])
+          .to include("_coolhand_capture_skipped" => "unsupported_body_stream")
+      end
+    end
+  end
+
+  it "puts the host's stream back even when building the log entry fails" do
+    stream = StringIO.new('{"a":1}')
+    req = chunked_post(stream)
+    served = serve_one_chunked_request
+    allow(Coolhand::BaseInterceptor).to receive(:sanitize_headers).and_raise("boom")
+
+    expect { http_class.new("127.0.0.1", port).request(req) }.to raise_error("boom")
+    served.join
+
     expect(req.body_stream).to equal(stream)
   end
 

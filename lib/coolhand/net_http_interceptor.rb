@@ -136,6 +136,8 @@ module Coolhand
         status_code, response_body = Helpers.error_details(e, host_block_errors)
         raise
       ensure
+        # First, so the host's own stream is back on its request whatever fails below.
+        request_body = Helpers.finalize_request_body(captured_body, req)
         active.delete(self)
         Thread.current[:coolhand_stream_buffer] = previous_stream_buffer
         Thread.current[:coolhand_capturing_stream] = previous_capturing_stream
@@ -149,7 +151,7 @@ module Coolhand
           method: req.method,
           url: url,
           request_headers: BaseInterceptor.sanitize_headers(req),
-          request_body: Helpers.finalize_request_body(captured_body, req),
+          request_body: request_body,
           response_headers: BaseInterceptor.sanitize_headers(response),
           response_body: response_body,
           status_code: status_code,
@@ -248,7 +250,11 @@ module Coolhand
 
         # No usable Content-Length (chunked): the size is unknown, so don't read ahead. Tap the
         # stream instead and build the log body once Net::HTTP has sent it (finalize_request_body).
-        return tap_body_stream(req) unless declared_content_length(req)
+        unless declared_content_length(req)
+          return skipped_capture_marker(req, "unsupported_body_stream") unless BodyStreamTap.tappable?(req.body_stream)
+
+          return BodyStreamTap.install(req)
+        end
 
         content = req.body_stream.read
         req.body_stream = StringIO.new(content)
@@ -289,33 +295,17 @@ module Coolhand
         nil
       end
 
-      def tap_body_stream(req)
-        tap = BodyStreamTap.new(req.body_stream)
-        req.body_stream = tap
-        tap
-      end
-
-      # The request body for the log. A tapped body_stream (see tap_body_stream) only has its
+      # The request body for the log. A tapped body_stream (see BodyStreamTap.install) only has its
       # content once the request has been attempted, so it is resolved here and the host's own
       # stream is put back on the request. Runs in #request's ensure: it must not raise.
       def finalize_request_body(captured, req)
         return captured unless captured.is_a?(BodyStreamTap)
 
-        req.body_stream = captured.source if req.body_stream.equal?(captured)
-        tapped_body_for_log(captured, req)
+        captured.restore_stream(req)
+        captured.body_for_log(req)
       rescue StandardError => e
         Coolhand.log "❌ Error capturing request body: #{e.message}"
         nil
-      end
-
-      # Over the cap is known from the bytes seen so far, even if the stream was not fully sent.
-      # Otherwise a stream that never reached its end (the request failed first) has no complete body.
-      def tapped_body_for_log(tap, req)
-        return if tap.failed?
-        return body_too_large_marker(req, tap.bytes_seen) if tap.overflowed?
-        return skipped_capture_marker(req, "body_stream_incomplete", size_bytes: tap.bytes_seen) unless tap.eof?
-
-        BaseInterceptor.parse_json(tap.body)
       end
 
       # Appends a streamed response chunk to the thread-local capture buffer, up to the cap.

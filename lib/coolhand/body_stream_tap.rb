@@ -14,6 +14,19 @@ module Coolhand
     class BodyStreamTap
       attr_reader :source, :bytes_seen
 
+      # IO.copy_stream also accepts a path (String) or a Pathname as its source, reading the file
+      # itself; the tap only offers #read, which those don't support, so they are left untouched.
+      def self.tappable?(stream)
+        stream.respond_to?(:read) && !stream.is_a?(String) &&
+          (stream.respond_to?(:to_io) || !stream.respond_to?(:to_path))
+      end
+
+      def self.install(req)
+        tap = new(req.body_stream)
+        req.body_stream = tap
+        tap
+      end
+
       def initialize(source)
         @source = source
         @buffer = +"".b
@@ -29,7 +42,8 @@ module Coolhand
         data
       end
 
-      def eof?
+      # Whether the source has been read to its end (not IO#eof?: false until a read hits the end).
+      def reached_end?
         @eof
       end
 
@@ -46,7 +60,28 @@ module Coolhand
         @buffer&.dup&.force_encoding(Encoding::UTF_8)
       end
 
+      # Puts the host's own stream back, unless something else has replaced the tap since.
+      def restore_stream(req)
+        req.body_stream = @source if req.body_stream.equal?(self)
+      end
+
+      # The request body for the log once the request has been attempted. Over the cap is known
+      # from the bytes seen so far, even if the stream was not fully sent. Otherwise a stream that
+      # never reached its end (the request failed first) has no complete body.
+      def body_for_log(req)
+        helpers = NetHttpInterceptor::Helpers
+        return if failed?
+        return helpers.body_too_large_marker(req, bytes_seen) if overflowed?
+        return incomplete_marker(req) unless reached_end?
+
+        BaseInterceptor.parse_json(body)
+      end
+
       private
+
+      def incomplete_marker(req)
+        NetHttpInterceptor::Helpers.skipped_capture_marker(req, "body_stream_incomplete", size_bytes: bytes_seen)
+      end
 
       def read_partial(*args)
         data = @source.readpartial(*args)

@@ -16,6 +16,10 @@ module Coolhand
 
       size = JSON.generate(body).bytesize
       helpers.over_capture_limit?(size) ? helpers.body_too_large_marker(nil, size) : body
+    rescue JSON::JSONError
+      # NaN/Infinity or nesting too deep to serialize: it can't be logged either, and must not
+      # fail the other items of the batch.
+      helpers.skipped_capture_marker(nil, "unserializable_body")
     end
 
     def helpers

@@ -50,6 +50,12 @@ RSpec.describe Coolhand::BatchBodyCap do
       .to eq("body_too_large")
   end
 
+  it "replaces a body that cannot be serialized with a marker instead of raising" do
+    expect(described_class.cap({ "n" => Float::INFINITY })).to eq("_coolhand_capture_skipped" => "unserializable_body")
+    deep = (1..150).reduce("x") { |inner, _| [inner] }
+    expect(described_class.cap(deep)).to eq("_coolhand_capture_skipped" => "unserializable_body")
+  end
+
   it "leaves every body alone when the cap is disabled" do
     Coolhand.configuration.max_captured_body_bytes = nil
     body = { "text" => "x" * 100 }
