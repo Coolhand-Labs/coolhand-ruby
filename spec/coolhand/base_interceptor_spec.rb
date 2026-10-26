@@ -749,6 +749,77 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(redact(body)["request"]["data_sources"][0]["parameters"]["key"]).to eq("[REDACTED]")
     end
 
+    describe "data_sources at any depth" do
+      let(:source) do
+        { "type" => "azure_search",
+          "parameters" => { "authentication" => { "type" => "api_key", "key" => "sk-search" },
+                            "endpoint" => "https://u:P@h.example/?sas=S", "index_name" => "docs" } }
+      end
+
+      it "redacts credentials and URL leaves in a data_sources key nested several levels deep" do
+        sanitized = redact("input" => { "request" => { "data_sources" => [source] } })
+
+        params = sanitized["input"]["request"]["data_sources"][0]["parameters"]
+        expect(params["authentication"]).to eq("type" => "api_key", "key" => "[REDACTED]")
+        expect(params["endpoint"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+        expect(params["index_name"]).to eq("docs")
+      end
+
+      it "redacts a dataSources key inside each object of an array, such as batch items" do
+        item = { "body" => { "dataSources" => [source] } }
+        body = { "requests" => [item, item] }
+
+        sanitized = redact(body)
+
+        sanitized["requests"].each do |item|
+          params = item["body"]["dataSources"][0]["parameters"]
+          expect(params["authentication"]["key"]).to eq("[REDACTED]")
+          expect(params["endpoint"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+        end
+      end
+
+      it "treats a top-level data_sources key exactly as before" do
+        sanitized = redact("data_sources" => [source])
+
+        expect(sanitized["data_sources"][0]["parameters"]["authentication"]["key"]).to eq("[REDACTED]")
+      end
+
+      it "does not raise when a nested data_sources value is not an Array" do
+        items = [{ "data_sources" => nil }, { "data_sources" => 3 }]
+        body = { "input" => { "data_sources" => "none", "items" => items } }
+
+        expect(redact(body)).to eq(body)
+      end
+
+      it "leaves URL strings and key-like names outside data_sources untouched at the same depth" do
+        body = { "input" => { "note" => "https://u:P@h.example/?sas=S", "metadata" => { "key" => "visible" },
+                              "data_sources" => [source] } }
+
+        sanitized = redact(body)
+
+        expect(sanitized["input"]["note"]).to eq("https://u:P@h.example/?sas=S")
+        expect(sanitized["input"]["metadata"]).to eq("key" => "visible")
+      end
+
+      it "does not mutate the input when data_sources is nested" do
+        body = { "input" => [{ "data_sources" => [source] }] }
+        snapshot = Marshal.load(Marshal.dump(body))
+
+        redact(body)
+
+        expect(body).to eq(snapshot)
+      end
+
+      it "applies the depth guard to a nested data_sources subtree" do
+        deep = { "leaf" => "visible" }
+        500.times { deep = { "n" => deep } }
+
+        sanitized = nil
+        expect { sanitized = redact("input" => { "data_sources" => deep }) }.not_to raise_error
+        expect(sanitized.to_s).not_to include("visible")
+      end
+    end
+
     it "replaces subtrees nested deeper than 100 levels instead of recursing without bound" do
       deep = { "api_key" => "x", "secret_holder" => "y" }
       1000.times { deep = { "n" => deep } }
