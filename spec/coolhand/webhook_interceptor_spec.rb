@@ -25,6 +25,8 @@ RSpec.describe Coolhand::WebhookInterceptor do
         @head_status = status
       end
 
+      private
+
       def webhook_secret
         "test_secret"
       end
@@ -60,7 +62,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
           .with(event_data: { "id" => "batch_1" })
           .and_return(processor)
 
-        controller.intercept_batch_request
+        controller.send(:intercept_batch_request)
 
         expect(processor).to have_received(:call)
       end
@@ -69,7 +71,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
         allow(Coolhand::OpenAi::BatchResultProcessor).to receive(:new)
           .and_return(instance_double(Coolhand::OpenAi::BatchResultProcessor, call: nil))
 
-        controller.intercept_batch_request
+        controller.send(:intercept_batch_request)
 
         expect(validator).not_to have_received(:release_claim!)
       end
@@ -81,20 +83,20 @@ RSpec.describe Coolhand::WebhookInterceptor do
       it "responds unauthorized and never dispatches to BatchResultProcessor" do
         expect(Coolhand::OpenAi::BatchResultProcessor).not_to receive(:new)
 
-        controller.intercept_batch_request
+        controller.send(:intercept_batch_request)
 
         expect(controller.head_status).to eq(:unauthorized)
       end
 
       it "does not release any claim" do
-        controller.intercept_batch_request
+        controller.send(:intercept_batch_request)
 
         expect(validator).not_to have_received(:release_claim!)
       end
 
       it "logs the validator's error message" do
         expect(Rails.logger).to receive(:info).with(a_string_including("signature invalid"))
-        controller.intercept_batch_request
+        controller.send(:intercept_batch_request)
       end
     end
 
@@ -104,7 +106,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
       it "logs and returns without raising" do
         expect(Coolhand::OpenAi::BatchResultProcessor).not_to receive(:new)
         expect(Rails.logger).to receive(:info).with(a_string_including("Unhandled OpenAI webhook event type"))
-        expect { controller.intercept_batch_request }.not_to raise_error
+        expect { controller.send(:intercept_batch_request) }.not_to raise_error
       end
     end
 
@@ -113,14 +115,14 @@ RSpec.describe Coolhand::WebhookInterceptor do
         allow(controller).to receive(:process_event).and_raise(StandardError, "boom")
         expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request: boom"))
 
-        expect { controller.intercept_batch_request }.not_to raise_error
+        expect { controller.send(:intercept_batch_request) }.not_to raise_error
         expect(controller.head_status).to eq(:unauthorized)
       end
 
       it "releases the webhook-id claim so the sender's retry isn't rejected as a replay" do
         allow(controller).to receive(:process_event).and_raise(StandardError, "boom")
 
-        controller.intercept_batch_request
+        controller.send(:intercept_batch_request)
 
         expect(validator).to have_received(:release_claim!)
       end
@@ -141,7 +143,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
         expect(Coolhand::OpenAi::BatchResultProcessor).not_to receive(:new)
         expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request"))
 
-        expect(controller.intercept_batch_request).to be false
+        expect(controller.send(:intercept_batch_request)).to be false
         expect(controller.head_status).to eq(:unauthorized)
       end
     end
@@ -153,7 +155,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
         expect(Rails.logger).to receive(:error).with(a_string_including("Failed to intercept batch request"))
         expect(controller).not_to receive(:process_event)
 
-        expect { controller.intercept_batch_request }.not_to raise_error
+        expect { controller.send(:intercept_batch_request) }.not_to raise_error
         expect(controller.head_status).to eq(:unauthorized)
       end
     end
@@ -162,7 +164,67 @@ RSpec.describe Coolhand::WebhookInterceptor do
   describe "#webhook_secret" do
     it "raises NotImplementedError when the including class doesn't override it" do
       bare_class = Class.new { include Coolhand::WebhookInterceptor }
-      expect { bare_class.new.webhook_secret }.to raise_error(NotImplementedError, /must implement #webhook_secret/)
+      expect { bare_class.new.send(:webhook_secret) }
+        .to raise_error(NotImplementedError, /must implement #webhook_secret/)
+    end
+
+    it "uses a subclass override" do
+      expect(controller.send(:webhook_secret)).to eq("test_secret")
+    end
+  end
+
+  describe "helper method visibility" do
+    let(:helpers) { %i[intercept_batch_request webhook_secret process_event] }
+    let(:plain_class) { Class.new { include Coolhand::WebhookInterceptor } }
+
+    it "keeps the helpers out of the including class's public methods" do
+      expect(plain_class.new.public_methods).not_to include(*helpers)
+      expect(plain_class.new.private_methods).to include(*helpers)
+    end
+
+    context "when a host controller re-defines the helpers as public" do
+      # Stand-in for AbstractController::Base, whose action_methods is every
+      # public instance method (the real one returns a Set of strings; actionpack
+      # isn't a dependency of this gem, so the contract is mirrored, not loaded).
+      let(:framework_base) do
+        Class.new do
+          def self.action_methods
+            Set.new((public_instance_methods(true) - Object.public_instance_methods).map(&:to_s))
+          end
+        end
+      end
+      let(:host_class) do
+        Class.new(framework_base) do
+          include Coolhand::WebhookInterceptor
+
+          def openai; end
+
+          def webhook_secret
+            "public_secret"
+          end
+
+          def process_event(_payload); end
+        end
+      end
+
+      it "still excludes every helper from action_methods so none is routable" do
+        # Plain Ruby visibility: the public re-definitions are public again.
+        expect(host_class.new.public_methods).to include(:webhook_secret, :process_event)
+        expect(host_class.action_methods).to contain_exactly("openai")
+      end
+
+      it "applies to subclasses of the host controller" do
+        subclass = Class.new(host_class) { def other; end }
+        expect(subclass.action_methods).not_to include(*helpers.map(&:to_s))
+      end
+
+      it "passes the host's public webhook_secret override to the validator" do
+        host = host_class.new
+        allow(Coolhand::OpenAi::WebhookValidator).to receive(:new).with(anything, "public_secret").and_return(validator)
+        allow(host).to receive_messages(head: nil, controller_name: "w", action_name: "a", request: double)
+        host.send(:intercept_batch_request)
+        expect(Coolhand::OpenAi::WebhookValidator).to have_received(:new).with(anything, "public_secret")
+      end
     end
   end
 

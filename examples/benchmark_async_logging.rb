@@ -215,7 +215,7 @@ def live_providers
     require "openai"
     openai = OpenAI::Client.new(access_token: ENV.fetch("OPENAI_API_KEY"))
     providers["openai"] = lambda do
-      openai.chat(parameters: { model: "gpt-3.5-turbo", max_tokens: 8,
+      openai.chat(parameters: { model: "gpt-4o-mini", max_tokens: 8,
                                 messages: [{ role: "user", content: "Reply with one word." }] })
     end
   end

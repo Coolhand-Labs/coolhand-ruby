@@ -7,13 +7,21 @@ module Coolhand
     # CGI/Rack/Rails/app-server variables that show up in a Rails `request.headers` iteration
     # (it walks the whole Rack env) but are not HTTP headers. CONTENT_TYPE and
     # CONTENT_LENGTH are real headers and are deliberately absent. ORIGINAL_FULLPATH and
-    # REQUEST_PATH carry the query string, so they must never be forwarded.
+    # REQUEST_PATH carry the query string, so they must never be forwarded. HTTP_PROXY is the
+    # process env var (it may embed credentials), never a client header (the "httpoxy" case).
     RACK_ENV_CGI_KEYS = %w[
-      AUTH_TYPE GATEWAY_INTERFACE HTTPS HTTP_VERSION ORIGINAL_FULLPATH ORIGINAL_SCRIPT_NAME
+      AUTH_TYPE GATEWAY_INTERFACE HTTPS HTTP_PROXY HTTP_VERSION ORIGINAL_FULLPATH ORIGINAL_SCRIPT_NAME
       PATH_INFO PATH_TRANSLATED QUERY_STRING REMOTE_ADDR REMOTE_HOST REMOTE_IDENT REMOTE_PORT
       REMOTE_USER REQUEST_METHOD REQUEST_PATH REQUEST_URI SCRIPT_NAME SERVER_ADDR SERVER_NAME
       SERVER_PORT SERVER_PROTOCOL SERVER_SOFTWARE
     ].freeze
+
+    # CGI-style env key: uppercase letters, digits and underscores (REQUEST_METHOD, DATABASE_URL).
+    CGI_ENV_KEY_PATTERN = /\A[A-Z0-9_]+\z/
+    # Lowercase dotted Rack/Rails/server key: rack.session, action_dispatch.request.parameters, puma.config.
+    RACK_DOTTED_KEY_PATTERN = /\A[a-z0-9_]+(?:\.[a-z0-9_]+)+\z/
+    RACK_ENV_HEADER_KEYS = %w[CONTENT_TYPE CONTENT_LENGTH].freeze
+    private_constant :CGI_ENV_KEY_PATTERN, :RACK_DOTTED_KEY_PATTERN, :RACK_ENV_HEADER_KEYS
 
     def initialize
       super("v2/llm_request_logs")
@@ -37,8 +45,8 @@ module Coolhand
         method: options[:method] || "POST",
         url: BaseInterceptor.sanitize_url(options[:url] || build_webhook_url(source, event_type)),
         headers: sanitize_headers(headers),
-        request_body: clean_webhook_body(webhook_body, source),
-        response_body: options[:response_body],
+        request_body: BodyRedactor.redact(clean_webhook_body(webhook_body, source)),
+        response_body: BodyRedactor.redact(options[:response_body]),
         response_headers: options[:response_headers] && sanitize_headers(options[:response_headers]),
         status_code: options[:status_code] || 200,
         source: "#{source}_webhook"
@@ -69,9 +77,12 @@ module Coolhand
       return {} unless headers.respond_to?(:each)
 
       # Handle Rails request headers or plain hash
+      entries = headers.enum_for(:each).to_a
+      rack_env = rack_env_shaped?(entries)
+
       clean_headers = {}
-      headers.each do |key, value|
-        next unless forwardable_header?(key, value)
+      entries.each do |key, value|
+        next unless forwardable_header?(key, value, rack_env: rack_env)
 
         # Convert Rails HTTP_ prefix headers
         clean_key = key.to_s.gsub(/^HTTP_/, "").tr("_", "-").downcase
@@ -87,12 +98,28 @@ module Coolhand
     # Rails' request.headers#each yields the whole Rack env, not just headers. Drop the
     # non-header entries (rack.session, action_dispatch.*, REQUEST_METHOD, QUERY_STRING, ...)
     # so session/params data is never forwarded. Ordinary header names (including normalized
-    # plain-Hash ones like "Content-Type" or "x-webhook-id") never match; only dotted keys do.
-    def forwardable_header?(key, value)
+    # plain-Hash ones like "Content-Type" or "x-webhook-id") never match the denylist.
+    # CGI/FastCGI handlers also put the process env (DATABASE_URL, REDIS_URL, ...) in the Rack
+    # env, so once the input looks like one, only HTTP_*, CONTENT_TYPE and CONTENT_LENGTH pass
+    # (a process env var that itself starts with HTTP_ still gets through; HTTP_PROXY is denied).
+    def forwardable_header?(key, value, rack_env: false)
       return false unless key && value
 
       name = key.to_s
-      !(name.include?(".") || RACK_ENV_CGI_KEYS.include?(name))
+      return false if name.include?(".") || RACK_ENV_CGI_KEYS.include?(name)
+
+      !rack_env || name.start_with?("HTTP_") || RACK_ENV_HEADER_KEYS.include?(name)
+    end
+
+    # A Rack env is recognised by a positive signal the Rack spec guarantees (REQUEST_METHOD, or
+    # a lowercase dotted key like rack.input), or by every key being env-shaped. Requiring only
+    # the latter would let a single lowercase key (Warden's "warden", a shell's http_proxy)
+    # switch the allowlist off for the whole env. Mixed-case dotted names ("X.Trace") are
+    # valid header names, so they are not a signal.
+    def rack_env_shaped?(entries)
+      keys = entries.filter_map { |key, _value| key&.to_s }
+      keys.any? { |name| name == "REQUEST_METHOD" || name.match?(RACK_DOTTED_KEY_PATTERN) } ||
+        (keys.any? && keys.all? { |name| name.match?(CGI_ENV_KEY_PATTERN) })
     end
 
     def clean_webhook_body(body, source)

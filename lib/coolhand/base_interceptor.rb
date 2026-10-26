@@ -59,7 +59,7 @@ module Coolhand
         headers.each { |k, v| h[k.to_s] = normalize_header_value(v) }
         h
       else
-        { "raw" => headers.to_s }
+        {} # fail closed: an unrecognised shape can't be checked header-by-header
       end
 
       raw ||= {} # in case to_hash raised and nothing was built
@@ -100,13 +100,16 @@ module Coolhand
     # credential params used by AWS (X-Amz-Signature, X-Amz-Credential,
     # X-Amz-Security-Token) and Google Cloud (X-Goog-Signature,
     # X-Goog-Credential) storage APIs.
-    SENSITIVE_QUERY_PARAM_PATTERN = /key|token|secret|sig|credential|password|auth/i
+    SENSITIVE_QUERY_PARAM_PATTERN = Regexp.new(
+      %w[key token secret sig credential password auth jwt bearer session cookie passphrase ticket assertion].join("|"),
+      Regexp::IGNORECASE
+    )
 
     # Param names that are sensitive but too short or generic to match as a substring without
     # over-matching (`code` would hit `encoding`, `country_code`). Matched by whole name,
     # case-insensitively: `code` (Azure Functions keys, OAuth authorization codes), `sas` (Azure
     # SAS tokens), and `pwd`/`passwd`, which the `password` substring above does not cover.
-    SENSITIVE_QUERY_PARAM_EXACT_NAMES = %w[code sas pwd passwd].freeze
+    SENSITIVE_QUERY_PARAM_EXACT_NAMES = %w[code sas pwd passwd pass sid otp].freeze
 
     # Percent-encoded "[REDACTED]", the form the placeholder takes once inside a URL.
     REDACTED_URL_VALUE = "%5BREDACTED%5D"
@@ -151,6 +154,13 @@ module Coolhand
       query = uri.query && redact_query(uri.query)
       if query != uri.query
         uri.query = query
+        modified = true
+      end
+
+      # A fragment never reaches a server, but a caller-supplied URL can carry one (OAuth
+      # implicit flow puts `access_token=...` there), so drop it as the fallback below does.
+      if uri.fragment
+        uri.fragment = nil
         modified = true
       end
 
@@ -225,11 +235,13 @@ module Coolhand
     end
 
     # A single whitespace-free absolute URL, e.g. an Azure `endpoint` of `https://u:PASS@h/?sas=...`.
-    # Only applied to data_sources config (never prompt content), where a URL value is a datastore
-    # address that can carry userinfo or a SAS/key query param in the string itself.
+    # Only applied to data_sources config and to the exact URL-valued body keys in BodyRedactor
+    # (never free text), where a URL value can carry userinfo or a SAS/key query param itself.
     EMBEDDED_URL_PATTERN = %r{\A[a-z][a-z0-9+.-]*://\S+\z}i
 
     def redact_embedded_url_credentials(value)
+      # JSON.parse accepts invalid UTF-8, which would make the regexp raise and drop the whole log.
+      value = value.scrub unless value.valid_encoding?
       value.match?(EMBEDDED_URL_PATTERN) ? sanitize_url(value) : value
     end
 
@@ -266,6 +278,9 @@ module Coolhand
 
     def parse_json(string)
       JSON.parse(string)
+    rescue JSON::NestingError
+      # Too deep to walk for redaction; logging the raw string would skip BodyRedactor entirely.
+      { "_coolhand_capture_skipped" => "nesting_too_deep" }
     rescue JSON::ParserError, TypeError
       string
     end

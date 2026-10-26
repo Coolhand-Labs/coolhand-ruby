@@ -53,6 +53,23 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(raw).not_to have_key(:model)
   end
 
+  it "redacts credential-named fields in the data lines of a streamed (SSE) response body" do
+    sse = [
+      "event: message_start",
+      %(data: {"type":"message_start","mcp_servers":[{"authorization_token":"tok-LIVE"}]}\n),
+      %(data: {"choices":[{"delta":{"content":"hi"}}]}\n),
+      "data: [DONE]\n\n"
+    ].join("\n")
+    stub_request(:post, "https://api.test.com/stream")
+      .to_return(status: 200, body: sse, headers: { "Content-Type" => "text/event-stream" })
+
+    Net::HTTP.post(URI("https://api.test.com/stream"), "{}", "Content-Type" => "application/json")
+    sleep 0.05
+
+    logged = @captured_log[:raw_request][:response_body]
+    expect(logged).to eq(sse.sub("tok-LIVE", "[REDACTED]"))
+  end
+
   describe "Net::HTTP method pollution" do
     it "adds nothing but #request to Net::HTTP" do
       expect(described_class.public_instance_methods(false)).to eq([:request])
@@ -820,22 +837,33 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(captured).to eq({ "streamed" => "this payload is well over ten bytes long" })
     end
 
-    it "falls back to reading the stream when no Content-Length is declared (cap_and_parse still applies)" do
+    it "taps the stream instead of reading it when no Content-Length is declared" do
       stream = StringIO.new(content)
+      allow(stream).to receive(:read).and_call_original
       req = stream_request(stream, content_length: nil)
 
       captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
 
-      expect(captured["_coolhand_capture_skipped"]).to eq("body_too_large")
-      expect(captured["size_bytes"]).to eq(content.bytesize)
+      expect(stream).not_to have_received(:read)
+      expect(captured).to be_a(Coolhand::NetHttpInterceptor::BodyStreamTap)
+      expect(req.body_stream).to equal(captured)
+      expect(captured.source).to equal(stream)
     end
 
-    it "does not raise on a malformed Content-Length, and still falls back to reading the stream" do
+    it "does not raise on a malformed Content-Length, and taps the stream rather than trusting it" do
       req = stream_request(StringIO.new(content), content_length: "not-a-number")
 
       captured = Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil)
 
-      expect(captured["_coolhand_capture_skipped"]).to eq("body_too_large")
+      expect(captured).to be_a(Coolhand::NetHttpInterceptor::BodyStreamTap)
+    end
+
+    it "ignores a Content-Length header on a chunked request, as Net::HTTP does" do
+      req = stream_request(StringIO.new(content), content_length: "5")
+      req["Transfer-Encoding"] = "chunked"
+
+      expect(Coolhand::NetHttpInterceptor::Helpers.capture_request_body(req, nil))
+        .to be_a(Coolhand::NetHttpInterceptor::BodyStreamTap)
     end
 
     it "does not pre-check when the cap is disabled" do
@@ -895,6 +923,22 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       intercepted_request(Net::HTTP::Get, "https://api.test.com/hello")
 
       expect(@captured_log[:raw_request][:response_body]).to eq({ "msg" => "hi" })
+    end
+
+    describe "capture failures never reach the host" do
+      it "buffer_stream_chunk logs and swallows an error instead of raising into read_body" do
+        expect(Coolhand).to receive(:log).with(a_string_including("Error buffering streamed response chunk"))
+
+        expect { helpers.buffer_stream_chunk(nil) }.not_to raise_error
+      end
+
+      it "capture_response logs and returns nils when building the log body raises" do
+        response = instance_double(Net::HTTPResponse, code: "200", body: "ok")
+        allow(helpers).to receive(:response_body_for_log).and_raise(StandardError, "boom")
+        expect(Coolhand).to receive(:log).with(a_string_including("Error capturing response: boom"))
+
+        expect(helpers.capture_response(response)).to eq([nil, nil])
+      end
     end
 
     describe ".buffer_stream_chunk" do

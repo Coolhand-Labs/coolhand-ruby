@@ -12,7 +12,7 @@ Requires Rails — `Coolhand::WebhookInterceptor` and `Coolhand::OpenAi::BatchRe
 - Include the interceptor in your controller: `include Coolhand::WebhookInterceptor`
 - Add the `before_action` to validate and populate the `@validator` payload: `before_action :intercept_batch_request, only: :openai`
 - Ensure you skip CSRF for the webhook endpoint: `skip_before_action :verify_authenticity_token`
-- Override the `webhook_secret` method to return your OpenAI webhook secret
+- Override the `webhook_secret` method to return your OpenAI webhook secret. Define it under `private` so it can't be routed as an action
 
 `intercept_batch_request` already validates the webhook and, for `batch.completed`/`batch.failed`/`batch.expired`/`batch.cancelled` events, calls `Coolhand::OpenAi::BatchResultProcessor` — that part requires no code in your controller action. The batch's status is checked inline in the `before_action`, but for a completed batch the two JSONL file downloads and the one-request-log-per-item sends run on Coolhand's [background log thread](configuration.md#asynchronous-logging), so a large batch doesn't hold up your webhook response. (With `config.async_logging = false` this all runs inline, and a large batch can trip your webhook endpoint's timeout and OpenAI's retry behavior.) The example below shows a controller action doing additional, app-specific work on top of that (e.g. updating your own `BatchApiRequest` record and enqueuing your own background job), which is optional.
 
@@ -53,15 +53,23 @@ rescue StandardError => e
   head :internal_server_error
 end
 
+private # keep helpers like this below your public actions
+
 def webhook_secret
   Rails.application.credentials.openai_webhook_secret
 end
 # ...existing code...
 ```
 
+`intercept_batch_request`, `webhook_secret` and `process_event` are private in `Coolhand::WebhookInterceptor`, so Rails doesn't treat them as controller actions, and `before_action :intercept_batch_request` works with a private method. Code outside the controller can no longer call them directly (it gets `NoMethodError`); `super` from your own override still works.
+
+If your controller re-defines `webhook_secret` or `process_event` as public, they are public methods again, but `Coolhand::WebhookInterceptor` still removes all three names from the controller's `action_methods`, so they stay unroutable. That also means these names are reserved: a controller action with one of those names would not be routable. Defining your overrides under `private` is still the recommended form.
+
 ## What gets logged for a completed batch
 
 Each batch item is logged with `source_api: "openai"` and the `model` from the item's request body (falling back to the response body). Batch input files use relative URLs such as `/v1/chat/completions`; these are logged as `https://api.openai.com/v1/chat/completions` (the host is not configurable, so Azure OpenAI or proxy batches are logged with that host too). The batch's `in_progress_at` and `completed_at` timestamps become each log's start and completion times; if OpenAI reports either as missing, the whole batch is skipped with an error in `Rails.logger` rather than logged with bogus times. If `completed_at` is earlier than `in_progress_at`, a warning is logged and `duration_ms` is clamped to 0.
+
+Each item's request body and response body are capped separately by [`max_captured_body_bytes`](configuration.md#body-capture-limits): one over the limit is logged as a `{"_coolhand_capture_skipped" => "body_too_large", ...}` placeholder (the item itself is still logged, and `model` is still taken from the full request body). See [Body Capture Limits](configuration.md#body-capture-limits) for the other placeholders. When the OpenAI client returns a result file as a String or IO, it is read and parsed one JSONL line at a time; a client that returns the file already parsed (`ruby-openai` does) has loaded it in full before Coolhand sees it. A malformed line is skipped and counted in an error log, and the other lines are still processed.
 
 The batch ID from the webhook payload and the batch's input/output file IDs are used in calls to the OpenAI API with your `OPENAI_API_KEY`, so they are format-checked first (`batch_...` and `file-...`/`file_...`, letters, digits, `_` and `-` only). An event or batch whose IDs don't match is ignored with an error in `Rails.logger`.
 
@@ -73,7 +81,9 @@ The `webhook-signature` header may carry several space-separated signatures (`v1
 
 Signature headers (`webhook-signature`, `webhook-timestamp`, `webhook-id`) are required whenever a webhook secret is configured, in every `Rails.env`, including `development` and `test`. A request missing any of them is rejected, so your controller responds with 401. Earlier versions let unsigned requests through in development and test, which meant an app running with `RAILS_ENV=development` on a reachable host accepted forged webhooks.
 
-Signature verification is skipped (with a logged warning) only when no secret is configured at all, and only in `development` and `test`. Every other environment rejects the request.
+The same applies to a missing (`nil`) request body: with a secret configured it is rejected in every `Rails.env`, since there is nothing to verify the signature against. An empty-string body is not treated as missing; it goes through the normal signature check and passes only if it was actually signed.
+
+Signature verification (and the missing-body check) is skipped, with a logged warning, only when no secret is configured at all, and only in `development` and `test`. Every other environment rejects the request.
 
 If you post unsigned test payloads to a local app that has a secret set, pick one of these:
 

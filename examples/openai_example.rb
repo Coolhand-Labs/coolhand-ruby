@@ -32,7 +32,7 @@ client = OpenAI::Client.new(access_token: ENV.fetch("OPENAI_API_KEY"))
 
 response = client.chat(
   parameters: {
-    model: "gpt-3.5-turbo",
+    model: "gpt-4o-mini",
     messages: [{ role: "user", content: "Reply with a single short word." }],
     temperature: 0.7
   }

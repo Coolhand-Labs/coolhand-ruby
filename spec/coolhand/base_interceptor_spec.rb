@@ -221,13 +221,13 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized).to eq("Cookie" => "[REDACTED]", "Accept" => "*/*")
     end
 
-    it "falls back to a raw string for an object that supports no header enumeration" do
+    it "fails closed for an object that supports no header enumeration, never logging its to_s" do
       headers = Object.new
       def headers.to_s
-        "opaque-headers"
+        "Authorization: Bearer sk-secret"
       end
 
-      expect(described_class.sanitize_headers(headers)).to eq("raw" => "opaque-headers")
+      expect(described_class.sanitize_headers(headers)).to eq({})
     end
   end
 
@@ -400,11 +400,35 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(described_class.sanitize_url("https://h.example/a?%FF=2&ok=3")).to eq("https://h.example/a?%FF=2&ok=3")
     end
 
-    it "leaves fragments and relative URLs working" do
-      expect(described_class.sanitize_url("https://h.example/a?key=S#frag")).to eq(
-        "https://h.example/a?key=%5BREDACTED%5D#frag"
-      )
+    it "leaves relative URLs working" do
       expect(described_class.sanitize_url("/rel/path?code=S")).to eq("/rel/path?code=%5BREDACTED%5D")
+    end
+
+    describe "URL fragments" do
+      it "drops the fragment along with redacting the query" do
+        expect(described_class.sanitize_url("https://h.example/a?key=S#frag")).to eq(
+          "https://h.example/a?key=%5BREDACTED%5D"
+        )
+      end
+
+      it "drops a fragment that carries an OAuth implicit-flow token" do
+        sanitized = described_class.sanitize_url("https://h.example/cb#access_token=SECRET&token_type=bearer")
+
+        expect(sanitized).to eq("https://h.example/cb")
+      end
+
+      it "drops an empty fragment and a fragment on a relative URL" do
+        expect(described_class.sanitize_url("https://h.example/a#")).to eq("https://h.example/a")
+        expect(described_class.sanitize_url("/rel/path?code=S#access_token=SECRET")).to eq(
+          "/rel/path?code=%5BREDACTED%5D"
+        )
+      end
+
+      it "returns a URL without a fragment byte-for-byte" do
+        url = "https://h.example/a?alt=sse&n=1"
+
+        expect(described_class.sanitize_url(url)).to equal(url)
+      end
     end
 
     it "fails closed on bare query segments that have no '='" do
@@ -429,6 +453,21 @@ RSpec.describe Coolhand::BaseInterceptor do
     end
   end
 
+  describe "query-name and nesting-depth hardening" do
+    it "redacts jwt, session, pass, sid and otp query params" do
+      url = described_class.sanitize_url("https://h.example/a?jwt=J1&session=S1&pass=P1&sid=I1&otp=O1&page=2")
+
+      expect(url).not_to match(/J1|S1|P1|I1|O1/)
+      expect(url).to include("page=2")
+    end
+
+    it "does not log a body nested past the JSON depth limit as a raw string" do
+      deep = "#{'[' * 101}{\"authorization\":\"Bearer sk-SECRET\"}#{']' * 101}"
+
+      expect(described_class.parse_json(deep)).to eq("_coolhand_capture_skipped" => "nesting_too_deep")
+    end
+  end
+
   describe ".sanitize_body" do
     it "redacts credentials embedded in URL string values under data_sources" do
       body = {
@@ -450,6 +489,14 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(params["index_name"]).to eq("docs")
       # Prose containing a URL is not a bare URL value, so it is left alone.
       expect(params["note"]).to eq("see https://example.com/?token=abc for details")
+    end
+
+    it "drops a fragment from a URL value under data_sources" do
+      body = { "data_sources" => [{ "parameters" => { "endpoint" => "https://search.example.net/#access_token=S" } }] }
+
+      params = described_class.sanitize_body(body)["data_sources"][0]["parameters"]
+
+      expect(params["endpoint"]).to eq("https://search.example.net/")
     end
 
     it "does not touch URL strings outside data_sources, such as prompt content" do
@@ -720,18 +767,110 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(body).to eq(snapshot)
     end
 
-    it "passes nil, strings (including streamed SSE) and other non-JSON bodies through unchanged" do
-      sse = "data: {\"api_key\":\"sk-live\"}\n\n"
-
+    it "passes nil, plain-text strings and other non-JSON bodies through unchanged" do
       expect(redact(nil)).to be_nil
-      expect(redact(sse)).to eq(sse)
+      expect(redact("raw string body")).to eq("raw string body")
       expect(redact(42)).to eq(42)
+    end
+
+    it "redacts JSON payloads in the data lines of a streamed (SSE) String body" do
+      sse = "data: {\"api_key\":\"sk-live\"}\n\ndata: [DONE]\n\n"
+
+      expect(redact(sse)).to eq("data: {\"api_key\":\"[REDACTED]\"}\n\ndata: [DONE]\n\n")
     end
 
     it "keeps redacting data_sources credentials when they are nested under other keys" do
       body = { "request" => { "data_sources" => [{ "parameters" => { "key" => "k" } }] } }
 
       expect(redact(body)["request"]["data_sources"][0]["parameters"]["key"]).to eq("[REDACTED]")
+    end
+
+    describe "data_sources at any depth" do
+      let(:source) do
+        { "type" => "azure_search",
+          "parameters" => { "authentication" => { "type" => "api_key", "key" => "sk-search" },
+                            "endpoint" => "https://u:P@h.example/?sas=S", "index_name" => "docs" } }
+      end
+
+      it "redacts credentials and URL leaves in a data_sources key nested several levels deep" do
+        sanitized = redact("input" => { "request" => { "data_sources" => [source] } })
+
+        params = sanitized["input"]["request"]["data_sources"][0]["parameters"]
+        expect(params["authentication"]).to eq("type" => "api_key", "key" => "[REDACTED]")
+        expect(params["endpoint"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+        expect(params["index_name"]).to eq("docs")
+      end
+
+      it "redacts a dataSources key inside each object of an array, such as batch items" do
+        item = { "body" => { "dataSources" => [source] } }
+        body = { "requests" => [item, item] }
+
+        sanitized = redact(body)
+
+        sanitized["requests"].each do |entry|
+          params = entry["body"]["dataSources"][0]["parameters"]
+          expect(params["authentication"]["key"]).to eq("[REDACTED]")
+          expect(params["endpoint"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+        end
+      end
+
+      it "treats a top-level data_sources key exactly as before" do
+        sanitized = redact("data_sources" => [source])
+
+        expect(sanitized["data_sources"][0]["parameters"]["authentication"]["key"]).to eq("[REDACTED]")
+      end
+
+      it "does not raise when a nested data_sources value is not an Array" do
+        items = [{ "data_sources" => nil }, { "data_sources" => 3 }]
+        body = { "input" => { "data_sources" => "none", "items" => items } }
+        snapshot = Marshal.load(Marshal.dump(body))
+
+        expect(redact(body)).to eq(snapshot)
+        expect(body).to eq(snapshot)
+      end
+
+      it "scrubs a URL string given directly as a nested data_sources value" do
+        sanitized = redact("input" => { "data_sources" => "https://u:P@h.example/?sas=S" })
+
+        expect(sanitized["input"]["data_sources"]).to eq("https://REDACTED@h.example/?sas=%5BREDACTED%5D")
+      end
+
+      it "handles symbol keys and arrays nested inside arrays" do
+        symbol_source = { parameters: { authentication: { key: "sk-search" }, index_name: "docs" } }
+
+        sanitized = redact(input: [[{ dataSources: [symbol_source] }]])
+
+        expect(sanitized[:input][0][0][:dataSources][0][:parameters])
+          .to eq(authentication: { key: "[REDACTED]" }, index_name: "docs")
+      end
+
+      it "leaves URL strings and key-like names outside data_sources untouched at the same depth" do
+        body = { "input" => { "note" => "https://u:P@h.example/?sas=S", "metadata" => { "key" => "visible" },
+                              "data_sources" => [source] } }
+
+        sanitized = redact(body)
+
+        expect(sanitized["input"]["note"]).to eq("https://u:P@h.example/?sas=S")
+        expect(sanitized["input"]["metadata"]).to eq("key" => "visible")
+      end
+
+      it "does not mutate the input when data_sources is nested" do
+        body = { "input" => [{ "data_sources" => [source] }] }
+        snapshot = Marshal.load(Marshal.dump(body))
+
+        redact(body)
+
+        expect(body).to eq(snapshot)
+      end
+
+      it "applies the depth guard to a nested data_sources subtree" do
+        deep = { "leaf" => "visible" }
+        500.times { deep = { "n" => deep } }
+
+        sanitized = nil
+        expect { sanitized = redact("input" => { "data_sources" => deep }) }.not_to raise_error
+        expect(sanitized.to_s).not_to include("visible")
+      end
     end
 
     it "replaces subtrees nested deeper than 100 levels instead of recursing without bound" do
@@ -828,6 +967,128 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized["data_sources"][0]["parameters"])
         .to eq("pwd" => "[REDACTED]", "passwd" => "[REDACTED]", "bearer_value" => "[REDACTED]",
           "jwt" => "[REDACTED]", "index_name" => "docs")
+    end
+  end
+
+  describe ".sanitize_body URL-valued fields and extra credential keys" do
+    def redact(body)
+      described_class.sanitize_body(body)
+    end
+
+    it "scrubs userinfo and key params from an MCP server_url and mcp_servers url" do
+      body = {
+        "tools" => [{ "type" => "mcp", "server_url" => "https://u:pw@h.example/x?key=ABC&v=1" }],
+        "mcp_servers" => [{ "type" => "url", "url" => "https://m.example/sse?api_key=ABC" }]
+      }
+
+      sanitized = redact(body)
+
+      expect(sanitized["tools"][0]["server_url"]).to eq("https://REDACTED@h.example/x?key=%5BREDACTED%5D&v=1")
+      expect(sanitized["mcp_servers"][0]["url"]).to eq("https://m.example/sse?api_key=%5BREDACTED%5D")
+    end
+
+    it "scrubs a presigned image_url in both the nested and string forms" do
+      presigned = "https://b.s3.amazonaws.com/a.png?X-Amz-Credential=AKIAXXX&X-Amz-Signature=abc123&X-Amz-Expires=60"
+      body = { "messages" => [{ "content" => [{ "type" => "image_url", "image_url" => { "url" => presigned } },
+                                              { "type" => "input_image", "image_url" => presigned }] }] }
+
+      parts = redact(body)["messages"][0]["content"]
+
+      [parts[0]["image_url"]["url"], parts[1]["image_url"]].each do |url|
+        expect(url).to start_with("https://b.s3.amazonaws.com/a.png?")
+        expect(url).not_to include("AKIAXXX")
+        expect(url).not_to include("abc123")
+        expect(url).to include("X-Amz-Expires=60")
+      end
+    end
+
+    it "scrubs file_url and endpoint, matching the key name like other body keys" do
+      url = "https://u:pw@h.example/f?sas=S"
+      body = { "file_url" => url, "endpoint" => url, "serverUrl" => url, "Image-URL" => url }
+
+      expect(redact(body).values.uniq).to eq(["https://REDACTED@h.example/f?sas=%5BREDACTED%5D"])
+    end
+
+    it "leaves a clean URL byte-for-byte unchanged" do
+      body = { "url" => "https://example.com/a%20b?x=1&y=2", "image_url" => "data:image/png;base64,AAAA" }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "leaves prose that contains a URL, relative paths and non-string values alone" do
+      body = {
+        "url" => "see https://u:pw@h.example/?key=ABC for details",
+        "endpoint" => "/v1/chat?key=ABC",
+        "server_url" => nil,
+        "image_url" => { "detail" => "low" },
+        "file_url" => 7
+      }
+      content = { "choices" => [{ "message" => { "content" => "Call https://u:pw@h.example/?key=ABC now" } }] }
+
+      expect(redact(body)).to eq(body)
+      expect(redact(content)).to eq(content)
+    end
+
+    it "does not touch URLs under keys that are not on the list" do
+      body = { "webhook" => "https://u:pw@h.example/?key=ABC", "link" => "https://h.example/?key=ABC" }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "fails closed on an unparseable URL value" do
+      expect(redact("url" => "https://u:pw@h.example/p?a=%zz&key=S")["url"]).to eq("https://REDACTED@h.example/p")
+    end
+
+    it "does not raise on a URL value with invalid UTF-8 bytes, and still scrubs it" do
+      url = +"https://u:pw@h.example/p?key=ABC&a=\xFF"
+
+      sanitized = nil
+      expect { sanitized = redact("url" => url) }.not_to raise_error
+      expect(sanitized["url"]).not_to include("pw@")
+      expect(sanitized["url"]).not_to include("ABC")
+    end
+
+    it "handles symbol keys and frozen strings" do
+      url = "https://u:pw@h.example/?key=ABC"
+
+      expect(redact(server_url: url, secret: "s"))
+        .to eq(server_url: "https://REDACTED@h.example/?key=%5BREDACTED%5D", secret: "[REDACTED]")
+    end
+
+    it "redacts string values under the additional credential keys, in any case or separator style" do
+      keys = %w[secret x-api-key X-Api-Key bearer_token bearerToken session_token sessionToken
+                aws_secret_access_key AWS_SECRET_ACCESS_KEY secret_access_key]
+
+      expect(redact(keys.to_h { |k| [k, "s3cret"] }).values.uniq).to eq(["[REDACTED]"])
+    end
+
+    it "keeps a bare token key (logprobs) and non-string values under the new keys" do
+      body = {
+        "logprobs" => { "content" => [{ "token" => "Hello", "top_logprobs" => [{ "token" => "Hi" }] }] },
+        "secret" => { "type" => "object" },
+        "session_token" => nil,
+        "credentials" => { "scheme" => "bearer" }
+      }
+
+      expect(redact(body)).to eq(body)
+    end
+
+    it "does not mutate its input" do
+      body = { "tools" => [{ "server_url" => "https://u:pw@h.example/?key=ABC", "secret" => "s" }] }
+      snapshot = Marshal.load(Marshal.dump(body))
+
+      redact(body)
+
+      expect(body).to eq(snapshot)
+    end
+
+    it "still applies the depth guard around URL-valued fields" do
+      deep = { "url" => "https://u:pw@h.example/?key=ABC" }
+      500.times { deep = { "n" => deep } }
+
+      sanitized = nil
+      expect { sanitized = redact(deep) }.not_to raise_error
+      expect(sanitized.to_s).not_to include("pw@")
     end
   end
 end
