@@ -589,6 +589,19 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
       end
     end
 
+    context "when a line has invalid UTF-8" do
+      let(:output_content) do
+        bad = (+"{\"custom_id\":\"\xFF\"}").force_encoding(Encoding::UTF_8)
+        StringIO.new("#{output_items.first.to_json}\n#{bad}\n\n  \n#{output_items.last.to_json}\n")
+      end
+
+      it "skips that line, ignores blank ones, and still logs the lines after it" do
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r3")
+      end
+    end
+
     context "when a line is valid JSON but not an object" do
       let(:output_content) { "#{output_items.first.to_json}\n[1]\n42\n#{output_items.last.to_json}" }
 

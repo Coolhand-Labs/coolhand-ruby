@@ -154,8 +154,7 @@ module Coolhand
         skipped = 0
         file_content.each_line do |line|
           size = line.bytesize
-          line = line.strip
-          next if line.empty?
+          next unless line.b.match?(/\S/) # byte-wise: String#strip raises on invalid UTF-8
 
           item = parse_jsonl_line(line)
           item ? yield(item, size) : skipped += 1
@@ -169,7 +168,7 @@ module Coolhand
       def parse_jsonl_line(line)
         item = JSON.parse(line)
         item if item.is_a?(Hash)
-      rescue JSON::ParserError
+      rescue JSON::ParserError, EncodingError
         nil
       end
 
