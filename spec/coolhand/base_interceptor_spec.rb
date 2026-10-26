@@ -916,7 +916,7 @@ RSpec.describe Coolhand::BaseInterceptor do
     end
 
     it "does not raise on a URL value with invalid UTF-8 bytes, and still scrubs it" do
-      url = "https://u:pw@h.example/p?key=ABC&a=\xFF".dup.force_encoding("UTF-8")
+      url = +"https://u:pw@h.example/p?key=ABC&a=\xFF"
 
       sanitized = nil
       expect { sanitized = redact("url" => url) }.not_to raise_error
@@ -925,9 +925,9 @@ RSpec.describe Coolhand::BaseInterceptor do
     end
 
     it "handles symbol keys and frozen strings" do
-      url = "https://u:pw@h.example/?key=ABC".freeze
+      url = "https://u:pw@h.example/?key=ABC"
 
-      expect(redact(server_url: url, secret: "s".freeze))
+      expect(redact(server_url: url, secret: "s"))
         .to eq(server_url: "https://REDACTED@h.example/?key=%5BREDACTED%5D", secret: "[REDACTED]")
     end
 
