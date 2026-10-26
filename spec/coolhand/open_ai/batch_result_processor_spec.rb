@@ -581,11 +581,25 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
     context "when a line is malformed partway through the output file" do
       let(:output_content) { "#{output_items.first.to_json}\nnot json{{{\n#{output_items.last.to_json}" }
 
-      it "logs the items before it, reports the parse error, and stops reading the file" do
+      it "skips just that line, logs the lines around it, and reports the skip once" do
         run_batch
 
-        expect(wire_raw_requests.map { |raw| raw["id"] }).to eq(["r1"])
-        expect(logger).to have_received(:error).with(a_string_including("Failed to parse OpenAI batch results"))
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r3")
+        expect(logger).to have_received(:error).with(a_string_including("skipped 1 malformed line")).once
+      end
+    end
+
+    context "when an input body cannot be serialized to measure it" do
+      let(:input_content) do
+        [input_items.first.to_json.sub('"messages"', '"n":1e400,"messages"'), input_items.last.to_json].join("\n")
+      end
+      let(:output_content) { output_items.values_at(0, 2).map(&:to_json).join("\n") }
+
+      it "logs a marker for that body and still logs the other items" do
+        run_batch
+
+        expect(raw_for("r1")["request_body"]).to eq("_coolhand_capture_skipped" => "unserializable_body")
+        expect(raw_for("r3")["request_body"]).to eq({ "n" => 1 })
       end
     end
   end

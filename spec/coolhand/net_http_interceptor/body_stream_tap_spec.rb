@@ -21,6 +21,20 @@ RSpec.describe Coolhand::NetHttpInterceptor::BodyStreamTap do
     expect(tap.bytes_seen).to eq(5)
   end
 
+  it "treats an empty read for a positive length as the end, as IO.copy_stream does" do
+    source = Object.new
+    pieces = ["ab", ""]
+    source.define_singleton_method(:read) { |*_args| pieces.shift }
+    tap = described_class.new(source)
+
+    tap.read(16)
+    expect(tap.reached_end?).to be false
+    tap.read(16)
+
+    expect(tap).to be_reached_end
+    expect(tap.body).to eq("ab")
+  end
+
   it "fills a caller-supplied buffer and returns it, as IO#read does" do
     tap = described_class.new(StringIO.new("hello"))
     buffer = +""

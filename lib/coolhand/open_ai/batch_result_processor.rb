@@ -95,7 +95,7 @@ module Coolhand
       # from the full body first, since a capped body is just a marker.
       def request_entry(item, line_size)
         { "method" => item["method"], "url" => item["url"], "model" => item_model(item["body"]),
-          "body" => BatchBodyCap.cap(item["body"], max_size: line_size) }
+          "body" => BatchBodyCap.cap(item["body"], source_size: line_size) }
       end
 
       # Returns [start_time, end_time] or nil (after logging) when OpenAI didn't report usable
@@ -149,18 +149,26 @@ module Coolhand
         nil
       end
 
-      # A malformed line ends the file: the items before it are kept, the rest are not read.
+      # A malformed line is skipped (JSONL lines are independent) and reported once at the end.
       def each_jsonl_item(file_content)
+        skipped = 0
         file_content.each_line do |line|
           size = line.bytesize
           line = line.strip
           next if line.empty?
 
-          yield(JSON.parse(line), size)
-        rescue JSON::ParserError => e
-          Rails.logger.error("[Interceptor] Failed to parse OpenAI batch results: #{e.message}")
-          break
+          item = parse_jsonl_line(line)
+          item ? yield(item, size) : skipped += 1
         end
+        return if skipped.zero?
+
+        Rails.logger.error("[Interceptor] Failed to parse OpenAI batch results: skipped #{skipped} malformed line(s)")
+      end
+
+      def parse_jsonl_line(line)
+        JSON.parse(line)
+      rescue JSON::ParserError
+        nil
       end
 
       def send_complete_request_log(request_item:, response_item:, window:, line_size:)
@@ -175,7 +183,7 @@ module Coolhand
           request_headers: {},
           request_body: request_item["body"],
           response_headers: {},
-          response_body: BatchBodyCap.cap(response["body"], max_size: line_size),
+          response_body: BatchBodyCap.cap(response["body"], source_size: line_size),
           status_code: response["status_code"],
           start_time: start_time,
           end_time: end_time,

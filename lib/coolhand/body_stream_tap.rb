@@ -9,8 +9,8 @@ module Coolhand
     # stays bounded however large the upload is.
     #
     # Deliberately exposes nothing but #read (and #readpartial, only when the source has it): a
-    # delegating wrapper would also expose #to_io, which lets IO.copy_stream bypass the tap and read
-    # the underlying file directly.
+    # delegating wrapper would also expose #to_io/#to_path, which IO.copy_stream uses to read the
+    # underlying file directly, bypassing the tap.
     class BodyStreamTap
       attr_reader :source, :bytes_seen
 
@@ -38,7 +38,7 @@ module Coolhand
 
       def read(*args)
         data = @source.read(*args)
-        record(data, finished: args.empty? || args.first.nil? || data.nil?)
+        record(data, finished: end_of_stream?(args, data))
         data
       end
 
@@ -69,7 +69,6 @@ module Coolhand
       # from the bytes seen so far, even if the stream was not fully sent. Otherwise a stream that
       # never reached its end (the request failed first) has no complete body.
       def body_for_log(req)
-        helpers = NetHttpInterceptor::Helpers
         return if failed?
         return helpers.body_too_large_marker(req, bytes_seen) if overflowed?
         return incomplete_marker(req) unless reached_end?
@@ -79,8 +78,19 @@ module Coolhand
 
       private
 
+      # Reading everything, or getting nothing back from a read for a positive length (IO.copy_stream
+      # also treats an empty String there as the end).
+      def end_of_stream?(args, data)
+        length = args.first
+        length.nil? || data.nil? || (length.positive? && data.empty?)
+      end
+
+      def helpers
+        NetHttpInterceptor::Helpers
+      end
+
       def incomplete_marker(req)
-        NetHttpInterceptor::Helpers.skipped_capture_marker(req, "body_stream_incomplete", size_bytes: bytes_seen)
+        helpers.skipped_capture_marker(req, "body_stream_incomplete", size_bytes: bytes_seen)
       end
 
       def read_partial(*args)
@@ -100,7 +110,7 @@ module Coolhand
         @bytes_seen += data.bytesize
         return unless @buffer
 
-        @buffer = NetHttpInterceptor::Helpers.over_capture_limit?(@bytes_seen) ? nil : @buffer << data.b
+        @buffer = helpers.over_capture_limit?(@bytes_seen) ? nil : @buffer << data.b
       rescue StandardError => e
         @failed = true
         @buffer = nil

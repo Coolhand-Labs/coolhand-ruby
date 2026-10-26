@@ -7,18 +7,24 @@ module Coolhand
   module BatchBodyCap
     module_function
 
-    # Returns the body, or the marker when its JSON size is over the cap. `max_size` is an upper
-    # bound on the body's size when the caller has one (e.g. the byte length of the JSONL line the
-    # body was parsed from); a bound within the cap lets us skip serializing the body to measure it.
-    def cap(body, max_size: nil)
-      return body if body.nil? || (max_size && !helpers.over_capture_limit?(max_size))
-      return body if helpers.capture_limit.nil?
+    # Re-serializing a parsed number can write more bytes than the source had ("1e15" becomes
+    # "1000000000000000.0"), by at most this factor.
+    SERIALIZED_GROWTH = 5
+
+    # Returns the body, or the marker when its JSON size is over the cap. `source_size` is the byte
+    # size of the JSON the body was parsed from, when the caller has it (e.g. a JSONL line): a body
+    # that small even after SERIALIZED_GROWTH is within the cap without serializing it to measure.
+    def cap(body, source_size: nil)
+      return body if body.nil? || helpers.capture_limit.nil?
+      return body if source_size && !helpers.over_capture_limit?(source_size * SERIALIZED_GROWTH)
 
       size = JSON.generate(body).bytesize
       helpers.over_capture_limit?(size) ? helpers.body_too_large_marker(nil, size) : body
+    rescue JSON::NestingError
+      helpers.skipped_capture_marker(nil, "nesting_too_deep")
     rescue JSON::JSONError
-      # NaN/Infinity or nesting too deep to serialize: it can't be logged either, and must not
-      # fail the other items of the batch.
+      # NaN/Infinity or invalid UTF-8: it can't be logged either, and must not fail the other
+      # items of the batch.
       helpers.skipped_capture_marker(nil, "unserializable_body")
     end
 
