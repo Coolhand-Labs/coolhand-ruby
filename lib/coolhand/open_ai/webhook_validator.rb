@@ -29,7 +29,9 @@ module Coolhand
         secret_bytes = extract_secret_bytes
         webhook_signature, webhook_timestamp, webhook_id = extract_webhook_headers
 
-        return reject_missing_headers unless webhook_signature && webhook_timestamp && webhook_id
+        unless webhook_signature && webhook_timestamp && webhook_id
+          return reject_unsigned("Missing OpenAI webhook signature, timestamp, or id headers")
+        end
 
         verify_signature(webhook_signature, webhook_timestamp, webhook_id, secret_bytes)
       end
@@ -56,8 +58,11 @@ module Coolhand
 
       attr_reader :webhook_secret
 
+      # Only a nil payload counts as missing. An empty string is a real (empty) body, so it continues
+      # to the signature check, where it is accepted only if it was actually signed.
       def payload_valid?
         return true if @payload
+        return reject_unsigned("Empty webhook payload") if Coolhand.required_field?(webhook_secret)
 
         enforce_or_allow("Empty webhook payload",
           "Empty webhook payload - allowing in #{Rails.env} environment")
@@ -98,9 +103,9 @@ module Coolhand
         [webhook_signature, webhook_timestamp, webhook_id]
       end
 
-      # A secret is configured, so unsigned requests are rejected in every environment.
-      def reject_missing_headers
-        @errors << "Missing OpenAI webhook signature, timestamp, or id headers - rejecting webhook"
+      # A secret is configured, so anything that can't be verified is rejected in every environment.
+      def reject_unsigned(problem)
+        @errors << "#{problem} - rejecting webhook"
         Rails.logger.error(@errors.last)
         false
       end

@@ -73,7 +73,9 @@ The `webhook-signature` header may carry several space-separated signatures (`v1
 
 Signature headers (`webhook-signature`, `webhook-timestamp`, `webhook-id`) are required whenever a webhook secret is configured, in every `Rails.env`, including `development` and `test`. A request missing any of them is rejected, so your controller responds with 401. Earlier versions let unsigned requests through in development and test, which meant an app running with `RAILS_ENV=development` on a reachable host accepted forged webhooks.
 
-Signature verification is skipped (with a logged warning) only when no secret is configured at all, and only in `development` and `test`. Every other environment rejects the request.
+The same applies to a missing (`nil`) request body: with a secret configured it is rejected in every `Rails.env`, since there is nothing to verify the signature against. An empty-string body is not treated as missing; it goes through the normal signature check and passes only if it was actually signed.
+
+Signature verification (and the missing-body check) is skipped, with a logged warning, only when no secret is configured at all, and only in `development` and `test`. Every other environment rejects the request.
 
 If you post unsigned test payloads to a local app that has a secret set, pick one of these:
 

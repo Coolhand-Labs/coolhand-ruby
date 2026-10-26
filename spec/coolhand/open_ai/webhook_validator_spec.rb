@@ -409,7 +409,8 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
         end
       end
 
-      context "when the payload is empty" do
+      context "when the payload is empty and no secret is configured" do
+        let(:webhook_secret) { nil }
         let(:payload) { nil }
         let(:request) do
           headers_hash = {
@@ -458,6 +459,48 @@ RSpec.describe Coolhand::OpenAi::WebhookValidator do
             expect(validator.error_message).to eq(
               "Missing OpenAI webhook signature, timestamp, or id headers - rejecting webhook"
             )
+          end
+
+          it "rejects a nil payload even when the headers are present" do
+            request = instance_double("hash",
+              headers: full_headers,
+              raw_post: nil,
+              body: instance_double("IO", read: nil))
+            validator = described_class.new(request, webhook_secret)
+
+            expect(Rails.logger).to receive(:error).with(/Empty webhook payload - rejecting webhook/)
+            expect(validator.valid?).to be false
+            expect(validator.error_message).to eq("Empty webhook payload - rejecting webhook")
+          end
+
+          it "does not claim the webhook id when the payload is nil" do
+            request = instance_double("hash",
+              headers: full_headers,
+              raw_post: nil,
+              body: instance_double("IO", read: nil))
+            validator = described_class.new(request, webhook_secret)
+
+            expect(Coolhand.configuration.webhook_id_store).not_to receive(:claim!)
+            validator.valid?
+          end
+
+          context "when the body is an empty string" do
+            let(:payload) { "" }
+
+            it "still runs the signature check and accepts a correctly signed empty body" do
+              expect(validator.valid?).to be true
+            end
+
+            it "rejects an unsigned empty body on the signature check, not as a missing payload" do
+              request = instance_double("hash",
+                headers: full_headers.merge("webhook-signature" => "v1,#{Base64.strict_encode64('bogus')}"),
+                raw_post: "",
+                body: instance_double("IO", read: ""))
+              validator = described_class.new(request, webhook_secret)
+
+              expect(validator.valid?).to be false
+              expect(validator.error_message).to eq("OpenAI webhook signature verification failed")
+            end
           end
 
           full_headers_keys = %w[webhook-signature webhook-timestamp webhook-id]
