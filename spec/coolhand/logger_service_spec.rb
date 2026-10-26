@@ -692,7 +692,6 @@ RSpec.describe Coolhand::LoggerService do
           result = service_with_private.sanitize_headers_public("x-webhook-id": "wh_1", "Content-Type": "text/plain")
           expect(result).to eq("x-webhook-id" => "wh_1", "content-type" => "text/plain")
         end
-
       end
 
       context "with a Rack env that also has undotted lowercase keys" do
