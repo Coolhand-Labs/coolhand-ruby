@@ -12,7 +12,7 @@ Requires Rails — `Coolhand::WebhookInterceptor` and `Coolhand::OpenAi::BatchRe
 - Include the interceptor in your controller: `include Coolhand::WebhookInterceptor`
 - Add the `before_action` to validate and populate the `@validator` payload: `before_action :intercept_batch_request, only: :openai`
 - Ensure you skip CSRF for the webhook endpoint: `skip_before_action :verify_authenticity_token`
-- Override the `webhook_secret` method to return your OpenAI webhook secret
+- Override the `webhook_secret` method to return your OpenAI webhook secret. Define it under `private` so it can't be routed as an action
 
 `intercept_batch_request` already validates the webhook and, for `batch.completed`/`batch.failed`/`batch.expired`/`batch.cancelled` events, calls `Coolhand::OpenAi::BatchResultProcessor` — that part requires no code in your controller action. The batch's status is checked inline in the `before_action`, but for a completed batch the two JSONL file downloads and the one-request-log-per-item sends run on Coolhand's [background log thread](configuration.md#asynchronous-logging), so a large batch doesn't hold up your webhook response. (With `config.async_logging = false` this all runs inline, and a large batch can trip your webhook endpoint's timeout and OpenAI's retry behavior.) The example below shows a controller action doing additional, app-specific work on top of that (e.g. updating your own `BatchApiRequest` record and enqueuing your own background job), which is optional.
 
@@ -53,11 +53,17 @@ rescue StandardError => e
   head :internal_server_error
 end
 
+private # keep helpers like this below your public actions
+
 def webhook_secret
   Rails.application.credentials.openai_webhook_secret
 end
 # ...existing code...
 ```
+
+`intercept_batch_request`, `webhook_secret` and `process_event` are private in `Coolhand::WebhookInterceptor`, so Rails doesn't treat them as controller actions, and `before_action :intercept_batch_request` works with a private method. Code outside the controller can no longer call them directly (it gets `NoMethodError`); `super` from your own override still works.
+
+If your controller re-defines `webhook_secret` or `process_event` as public, they are public methods again, but `Coolhand::WebhookInterceptor` still removes all three names from the controller's `action_methods`, so they stay unroutable. That also means these names are reserved: a controller action with one of those names would not be routable. Defining your overrides under `private` is still the recommended form.
 
 ## What gets logged for a completed batch
 

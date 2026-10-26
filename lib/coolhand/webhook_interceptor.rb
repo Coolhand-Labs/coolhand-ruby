@@ -5,6 +5,27 @@ require_relative "open_ai/batch_result_processor"
 
 module Coolhand
   module WebhookInterceptor
+    # Helpers that must never be routable as controller actions.
+    HELPER_METHODS = %w[intercept_batch_request webhook_secret process_event].freeze
+    private_constant :HELPER_METHODS
+
+    # `private` below only covers the definitions in this module. A host that
+    # re-defines `webhook_secret` or `process_event` as public would make them
+    # public again, and Rails would then count them as action methods. Filtering
+    # them out of `action_methods` keeps them unroutable either way, without this
+    # gem depending on Rails (`super` is Rails' own `action_methods`).
+    module ClassMethods
+      def action_methods
+        super - HELPER_METHODS
+      end
+    end
+
+    def self.included(base)
+      base.extend(ClassMethods)
+    end
+
+    private
+
     def intercept_batch_request
       Rails.logger.info("[Interceptor] #{controller_name}##{action_name}")
 
