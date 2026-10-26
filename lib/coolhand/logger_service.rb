@@ -15,6 +15,10 @@ module Coolhand
       SERVER_PORT SERVER_PROTOCOL SERVER_SOFTWARE
     ].freeze
 
+    # CGI-style env key: uppercase letters, digits and underscores (REQUEST_METHOD, DATABASE_URL).
+    CGI_ENV_KEY_PATTERN = /\A[A-Z0-9_]+\z/
+    RACK_ENV_HEADER_KEYS = %w[CONTENT_TYPE CONTENT_LENGTH].freeze
+
     def initialize
       super("v2/llm_request_logs")
     end
@@ -69,9 +73,12 @@ module Coolhand
       return {} unless headers.respond_to?(:each)
 
       # Handle Rails request headers or plain hash
+      entries = headers.enum_for(:each).to_a
+      rack_env = rack_env_shaped?(entries)
+
       clean_headers = {}
-      headers.each do |key, value|
-        next unless forwardable_header?(key, value)
+      entries.each do |key, value|
+        next unless forwardable_header?(key, value, rack_env: rack_env)
 
         # Convert Rails HTTP_ prefix headers
         clean_key = key.to_s.gsub(/^HTTP_/, "").tr("_", "-").downcase
@@ -88,11 +95,20 @@ module Coolhand
     # non-header entries (rack.session, action_dispatch.*, REQUEST_METHOD, QUERY_STRING, ...)
     # so session/params data is never forwarded. Ordinary header names (including normalized
     # plain-Hash ones like "Content-Type" or "x-webhook-id") never match; only dotted keys do.
-    def forwardable_header?(key, value)
+    # A whole Rack env (CGI/FastCGI handlers put the process env in it: DATABASE_URL,
+    # REDIS_URL, ...) is recognised by its key shape and gets an allowlist instead.
+    def forwardable_header?(key, value, rack_env: false)
       return false unless key && value
 
       name = key.to_s
-      !(name.include?(".") || RACK_ENV_CGI_KEYS.include?(name))
+      return false if name.include?(".") || RACK_ENV_CGI_KEYS.include?(name)
+
+      !rack_env || name.start_with?("HTTP_") || RACK_ENV_HEADER_KEYS.include?(name)
+    end
+
+    def rack_env_shaped?(entries)
+      keys = entries.filter_map { |key, _value| key&.to_s }
+      keys.any? && keys.all? { |name| name.include?(".") || name.match?(CGI_ENV_KEY_PATTERN) }
     end
 
     def clean_webhook_body(body, source)
