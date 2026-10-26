@@ -11,11 +11,13 @@ module Coolhand
     module_function
 
     NESTING_MARKER = { "_coolhand_capture_skipped" => "nesting_too_deep" }.freeze
+    FAILED_MARKER = { "_coolhand_capture_skipped" => "redaction_failed" }.freeze
 
-    # A `data:` field at the start of a line (LF, CRLF or bare CR). One space after the colon
-    # belongs to the SSE field syntax, so it is captured apart from the payload.
-    DATA_LINE = /(?<![^\r\n])data:( ?)([^\r\n]*)/
-    JSON_CONTAINER = /\A\s*[\[{]/
+    # A `data:` field at the start of a line (LF, CRLF or bare CR), or after a leading byte order
+    # mark, which the SSE spec ignores. One space after the colon belongs to the SSE field syntax,
+    # so it is captured apart from the payload.
+    DATA_LINE = /(?<![^\r\n\uFEFF])data:( ?)([^\r\n]*)/
+    JSON_CONTAINER = /\A\uFEFF?\s*[\[{]/
 
     def redact(body)
       text = utf8_text(body)
@@ -24,13 +26,18 @@ module Coolhand
       # Fail closed: never log a body that could not be checked. The message is left out because
       # a parser error can quote the payload.
       Coolhand.log "❌ Error redacting string body: #{e.class}"
-      { "_coolhand_capture_skipped" => "redaction_failed" }
+      FAILED_MARKER
     end
 
-    # Streamed bodies are captured as UTF-8, but a binary-tagged or invalid-UTF-8 String is not
-    # worth a failure: scrub a working copy so every line can still be inspected.
+    # Captured bodies are UTF-8, but a binary-tagged, other-encoded or invalid-UTF-8 String (a
+    # webhook body can be any of them) is not worth a failure: inspect a UTF-8 working copy, with
+    # invalid bytes replaced, so every line can still be checked.
     def utf8_text(body)
-      text = body.encoding == Encoding::UTF_8 ? body : body.dup.force_encoding(Encoding::UTF_8)
+      text = case body.encoding
+             when Encoding::UTF_8 then body
+             when Encoding::BINARY then body.dup.force_encoding(Encoding::UTF_8)
+             else body.encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
+      end
       text.valid_encoding? ? text : text.scrub
     end
 
@@ -49,9 +56,10 @@ module Coolhand
     end
 
     # The re-serialized JSON when redaction changed it; nil when the text should stay as is
-    # (not a JSON object/array, unparsable, or nothing to redact).
+    # (not a JSON object/array, unparsable, or nothing to redact). Anything else that goes wrong
+    # yields a `redaction_failed` marker rather than the unchecked text.
     def redacted_json(text)
-      parsed = JSON.parse(text)
+      parsed = JSON.parse(text.delete_prefix("\uFEFF"))
       return unless parsed.is_a?(Hash) || parsed.is_a?(Array)
 
       redacted = BodyRedactor.redact(parsed)
@@ -60,6 +68,11 @@ module Coolhand
       JSON.generate(NESTING_MARKER)
     rescue JSON::ParserError
       nil
+    rescue StandardError => e
+      # e.g. a number such as 1e999 that parses but cannot be serialized: fail closed for this
+      # payload alone so the rest of the body is still redacted.
+      Coolhand.log "❌ Error redacting JSON payload: #{e.class}"
+      JSON.generate(FAILED_MARKER)
     end
   end
 end

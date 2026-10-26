@@ -136,14 +136,48 @@ RSpec.describe Coolhand::StringBodyRedactor do
       expect(described_class.redact(body)).to equal(body)
     end
 
-    it "fails closed with a marker if redaction itself raises" do
-      allow(Coolhand::BodyRedactor).to receive(:redact).and_raise(StandardError, "boom api_key=sk-1")
+    it "fails closed per payload if redacting it raises, keeping the rest of the stream redacted" do
+      allow(Coolhand).to receive(:log)
+      stream = %(data: {"api_key":"sk-1","n":1e999}\ndata: {"password":"p"}\n)
+
+      result = described_class.redact(stream)
+
+      expect(result).to eq(%(data: {"_coolhand_capture_skipped":"redaction_failed"}\ndata: {"password":"[REDACTED]"}\n))
+      expect(Coolhand).to have_received(:log).with(satisfy { |m| m.include?("GeneratorError") && !m.include?("sk-1") })
+    end
+
+    it "fails closed with a marker for the whole body if the scan itself raises" do
+      allow(described_class).to receive(:redact_stream).and_raise(StandardError, "boom api_key=sk-1")
       allow(Coolhand).to receive(:log)
 
       result = described_class.redact(%(data: {"api_key":"sk-1"}))
 
       expect(result).to eq("_coolhand_capture_skipped" => "redaction_failed")
       expect(Coolhand).to have_received(:log).with(satisfy { |m| m.include?("StandardError") && !m.include?("sk-1") })
+    end
+
+    it "redacts a stream that starts with a byte order mark" do
+      result = described_class.redact("\uFEFFdata: {\"api_key\":\"sk-1\"}\n\ndata: {\"a\":1}\n")
+
+      expect(result).to eq("\uFEFFdata: {\"api_key\":\"[REDACTED]\"}\n\ndata: {\"a\":1}\n")
+    end
+
+    it "redacts a body in a non-UTF-8 encoding without mangling its other characters" do
+      latin1 = %(data: {"api_key":"sk-1","t":"caf\u00E9"}\n).encode(Encoding::ISO_8859_1)
+      utf16 = %(data: {"api_key":"sk-1"}\n).encode(Encoding::UTF_16LE)
+
+      expect(described_class.redact(latin1)).to eq(%(data: {"api_key":"[REDACTED]","t":"caf\u00E9"}\n))
+      expect(described_class.redact(utf16)).to eq(%(data: {"api_key":"[REDACTED]"}\n))
+    end
+
+    it "does not mutate a binary-tagged input that has to be scrubbed" do
+      input = "data: {\"api_key\":\"sk-1\",\"t\":\"\xFF\"}\n".b
+      snapshot = input.dup
+
+      described_class.redact(input)
+
+      expect(input).to eq(snapshot)
+      expect(input.encoding).to eq(Encoding::BINARY)
     end
 
     it "scales linearly on a large stream" do
@@ -174,6 +208,10 @@ RSpec.describe Coolhand::StringBodyRedactor do
         pretty = %({\n  "a": 1\n}\n)
 
         expect(described_class.redact(pretty)).to equal(pretty)
+      end
+
+      it "redacts JSON text that starts with a byte order mark" do
+        expect(JSON.parse(described_class.redact("\uFEFF{\"password\":\"p\"}"))).to eq("password" => "[REDACTED]")
       end
 
       it "leaves malformed JSON alone" do
