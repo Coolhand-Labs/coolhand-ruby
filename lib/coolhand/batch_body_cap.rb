@@ -7,9 +7,10 @@ module Coolhand
   module BatchBodyCap
     module_function
 
-    # Re-serializing a parsed number can write more bytes than the source had ("1e15" becomes
-    # "1000000000000000.0"), by at most this factor.
-    SERIALIZED_GROWTH = 5
+    # Re-serializing a parsed number can write more bytes than the source had (depending on the json
+    # version, "1e9" becomes "1000000000.0" and "7e22" becomes "7.0000000000000004e+22"). Counting
+    # the separators around them, a body grows by well under this factor.
+    SERIALIZED_GROWTH = 6
 
     # Returns the body, or the marker when its JSON size is over the cap. `source_size` is the byte
     # size of the JSON the body was parsed from, when the caller has it (e.g. a JSONL line): a body

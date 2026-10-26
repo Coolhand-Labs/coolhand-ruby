@@ -589,6 +589,17 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
       end
     end
 
+    context "when a line is valid JSON but not an object" do
+      let(:output_content) { "#{output_items.first.to_json}\n[1]\n42\n#{output_items.last.to_json}" }
+
+      it "treats it as malformed and still logs the other items" do
+        run_batch
+
+        expect(wire_raw_requests.map { |raw| raw["id"] }).to contain_exactly("r1", "r3")
+        expect(logger).to have_received(:error).with(a_string_including("skipped 2 malformed line(s)"))
+      end
+    end
+
     context "when an input body cannot be serialized to measure it" do
       let(:input_content) do
         [input_items.first.to_json.sub('"messages"', '"n":1e400,"messages"'), input_items.last.to_json].join("\n")

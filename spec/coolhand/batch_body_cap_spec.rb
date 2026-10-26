@@ -40,12 +40,12 @@ RSpec.describe Coolhand::BatchBodyCap do
     body = { "a" => "b" }
     allow(JSON).to receive(:generate).and_call_original
 
-    expect(described_class.cap(body, source_size: 10)).to equal(body)
+    expect(described_class.cap(body, source_size: 8)).to equal(body)
     expect(JSON).not_to have_received(:generate)
   end
 
   it "still measures the body when the source size could re-serialize to more than the cap" do
-    expect(described_class.cap({ "a" => "b" }, source_size: 11)).to eq({ "a" => "b" })
+    expect(described_class.cap({ "a" => "b" }, source_size: 9)).to eq({ "a" => "b" })
     expect(described_class.cap({ "text" => "x" * 100 }, source_size: 120)["_coolhand_capture_skipped"])
       .to eq("body_too_large")
   end

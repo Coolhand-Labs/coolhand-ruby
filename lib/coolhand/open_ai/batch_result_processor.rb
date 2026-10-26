@@ -136,7 +136,7 @@ module Coolhand
 
         case file_content
         when nil then nil
-        when Array then file_content.each { |item| yield(item, nil) }
+        when Array then file_content.each { |item| yield(item, nil) if item.is_a?(Hash) }
         when Hash then yield(file_content, nil)
         else each_jsonl_item(file_content, &block)
         end
@@ -165,8 +165,10 @@ module Coolhand
         Rails.logger.error("[Interceptor] Failed to parse OpenAI batch results: skipped #{skipped} malformed line(s)")
       end
 
+      # Only a JSON object is an item; any other valid JSON (a number, an array) counts as malformed.
       def parse_jsonl_line(line)
-        JSON.parse(line)
+        item = JSON.parse(line)
+        item if item.is_a?(Hash)
       rescue JSON::ParserError
         nil
       end

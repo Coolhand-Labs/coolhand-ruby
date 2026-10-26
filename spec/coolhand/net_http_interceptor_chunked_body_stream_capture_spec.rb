@@ -206,6 +206,18 @@ RSpec.describe Coolhand::NetHttpInterceptor, "chunked body_stream capture" do # 
     expect(req.body_stream).to equal(stream)
   end
 
+  it "logs a chunked body_stream under WebMock, which consumes the stream itself and leaves it unset" do
+    WebMock.enable!
+    stub_request(:post, "http://127.0.0.1/upload").with(body: '{"a":1}')
+      .to_return(status: 200, body: '{"ok":true}', headers: { "Content-Type" => "application/json" })
+    req = chunked_post(StringIO.new('{"a":1}'))
+
+    Net::HTTP.new("127.0.0.1", 80).request(req)
+
+    expect(logs.first[:raw_request][:request_body]).to eq({ "a" => 1 })
+    expect(req.body_stream).to be_nil
+  end
+
   it "lets an error raised by the host's stream reach the host exactly as without the gem" do
     failing = Object.new
     def failing.read(*) = raise(IOError, "disk gone")
