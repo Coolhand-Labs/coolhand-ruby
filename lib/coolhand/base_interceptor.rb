@@ -235,11 +235,13 @@ module Coolhand
     end
 
     # A single whitespace-free absolute URL, e.g. an Azure `endpoint` of `https://u:PASS@h/?sas=...`.
-    # Only applied to data_sources config (never prompt content), where a URL value is a datastore
-    # address that can carry userinfo or a SAS/key query param in the string itself.
+    # Only applied to data_sources config and to the exact URL-valued body keys in BodyRedactor
+    # (never free text), where a URL value can carry userinfo or a SAS/key query param itself.
     EMBEDDED_URL_PATTERN = %r{\A[a-z][a-z0-9+.-]*://\S+\z}i
 
     def redact_embedded_url_credentials(value)
+      # JSON.parse accepts invalid UTF-8, which would make the regexp raise and drop the whole log.
+      value = value.scrub unless value.valid_encoding?
       value.match?(EMBEDDED_URL_PATTERN) ? sanitize_url(value) : value
     end
 
