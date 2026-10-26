@@ -344,10 +344,11 @@ module Coolhand
         uri = safe_parse(url)
         return false unless uri&.host
 
-        return false if excluded_by_pattern?(uri)
+        raw_path = uri.path.to_s
+        path = normalize_path(raw_path)
+        return false if excluded_by_pattern?(uri, raw_path, path)
 
         host = uri.host.downcase.chomp(".")
-        path = normalize_path(uri.path.to_s)
         addresses = Coolhand.configuration.intercept_addresses
         authorities = [host, "#{host}:#{uri.port}"]
         return true if addresses.any? { |a| authorities.any? { |authority| address_matches?(authority, path, a) } }
@@ -368,12 +369,13 @@ module Coolhand
         nil
       end
 
-      def excluded_by_pattern?(uri)
+      # The deny-list fails closed: a pattern that matches either the raw or the normalized path
+      # excludes the request, so normalization can only add exclusions, never lift one.
+      def excluded_by_pattern?(uri, raw_path, path)
         patterns = Coolhand.configuration.exclude_api_patterns
         return false if patterns.nil? || patterns.empty?
 
-        path = normalize_path(uri.path.to_s)
-        matched = patterns.find { |pattern| path.include?(pattern) }
+        matched = patterns.find { |pattern| path.include?(pattern) || raw_path.include?(pattern) }
         if matched && Coolhand.configuration.debug_mode
           Coolhand.log "🚫 Skipping capture for #{BaseInterceptor.sanitize_url(uri.to_s)} " \
                        "(matched exclude_api_pattern: \"#{matched}\")"
@@ -390,7 +392,8 @@ module Coolhand
       # Decodes unreserved-character escapes (%2F and other reserved escapes stay encoded, and
       # decoding is one pass, so "%252e" stays literal), collapses repeated "/", and resolves
       # "." and ".." segments without ever climbing above the root. Case is left as is. A path
-      # that can't be normalized falls back to the raw one rather than raising.
+      # that can't be normalized falls back to the raw one rather than raising, and an empty
+      # path comes back as "/".
       def normalize_path(path)
         decoded = path.gsub(/%\h\h/) do |escape|
           char = escape[1, 2].hex.chr

@@ -200,8 +200,27 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       end
     end
 
-    it "does not let ../ climb out of the excluded prefix into inference paths" do
-      expect(intercepted?("#{azure}/openai/files/../deployments/gpt/chat/completions")).to be true
+    it "fails closed: a raw path that matches an exclude pattern stays excluded even if it normalizes away" do
+      expect(intercepted?("#{azure}/openai/files/../deployments/gpt/chat/completions")).to be false
+    end
+
+    it "compares exclude patterns literally against the raw and the normalized path" do
+      Coolhand.configuration.exclude_api_patterns = ["/openai//files"]
+      expect(intercepted?("#{azure}/openai//files")).to be false
+      expect(intercepted?("#{azure}/openai/files")).to be true
+    end
+
+    it "normalizes the path for the Google intercept_path_patterns check too" do
+      host = "https://us-central1-prediction.googleapis.com"
+      expect(intercepted?("#{host}/v1/models/x/./y:generateContent")).to be true
+      expect(intercepted?("#{host}//v1/models/x//y:generateContent")).to be true
+      expect(intercepted?("#{host}/v1/models/x/y%3AgenerateContent")).to be false
+    end
+
+    it "matches a port-pinned path anchor through a normalized path" do
+      Coolhand.configuration.intercept_addresses = ["localhost:11434/api/chat"]
+      expect(intercepted?("http://localhost:11434//api/./chat")).to be true
+      expect(intercepted?("http://localhost:11434/api/chat/../tags")).to be false
     end
 
     it "does not match a Cohere anchor through a parent-segment walk to another endpoint" do
@@ -264,8 +283,15 @@ RSpec.describe Coolhand::NetHttpInterceptor do
         expect(interceptor.normalize_path("/a/%zz/%4/%")).to eq("/a/%zz/%4/%")
       end
 
+      it "handles empty, NUL, high-byte and invalid-byte input without raising" do
+        expect(interceptor.normalize_path("")).to eq("/")
+        expect(interceptor.normalize_path("/a/%00/%ff")).to eq("/a/%00/%ff")
+        expect { interceptor.normalize_path("/a/\xFF/../b".b) }.not_to raise_error
+        expect { interceptor.normalize_path("/a/\xFF//b") }.not_to raise_error
+      end
+
       it "falls back to the raw path if normalization fails" do
-        bad = Object.new.tap { |o| o.define_singleton_method(:gsub) { |*| raise ArgumentError, "boom" } }
+        bad = Class.new(String) { def gsub(*) = raise(ArgumentError, "boom") }.new("/a//b")
         expect(interceptor.normalize_path(bad)).to equal(bad)
       end
     end
