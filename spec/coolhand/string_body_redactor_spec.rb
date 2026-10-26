@@ -138,12 +138,30 @@ RSpec.describe Coolhand::StringBodyRedactor do
 
     it "fails closed per payload if redacting it raises, keeping the rest of the stream redacted" do
       allow(Coolhand).to receive(:log)
-      stream = %(data: {"api_key":"sk-1","n":1e999}\ndata: {"password":"p"}\n)
+      allow(Coolhand::BodyRedactor).to receive(:redact).and_call_original
+      allow(Coolhand::BodyRedactor).to receive(:redact).with({ "boom" => "sk-1" }).and_raise(StandardError, "sk-1")
+      stream = %(data: {"boom":"sk-1"}\ndata: {"password":"p"}\n)
 
       result = described_class.redact(stream)
 
       expect(result).to eq(%(data: {"_coolhand_capture_skipped":"redaction_failed"}\ndata: {"password":"[REDACTED]"}\n))
-      expect(Coolhand).to have_received(:log).with(satisfy { |m| m.include?("GeneratorError") && !m.include?("sk-1") })
+      expect(Coolhand).to have_received(:log).with(satisfy { |m| m.include?("StandardError") && !m.include?("sk-1") })
+    end
+
+    it "redacts a payload that contains NaN or Infinity, which strict JSON would reject" do
+      stream = %(data: {"password":"p","logprob":NaN,"n":-Infinity}\ndata: {"a":NaN}\n)
+
+      result = described_class.redact(stream)
+
+      expect(result).to eq(%(data: {"password":"[REDACTED]","logprob":NaN,"n":-Infinity}\ndata: {"a":NaN}\n))
+    end
+
+    it "fails closed with a marker for a body in an encoding Ruby cannot convert" do
+      allow(Coolhand).to receive(:log)
+
+      result = described_class.redact((+%(data: {"api_key":"sk-1"})).force_encoding("UTF-7"))
+
+      expect(result).to eq("_coolhand_capture_skipped" => "redaction_failed")
     end
 
     it "fails closed with a marker for the whole body if the scan itself raises" do

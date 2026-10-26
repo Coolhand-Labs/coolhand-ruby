@@ -13,8 +13,8 @@ module Coolhand
     NESTING_MARKER = { "_coolhand_capture_skipped" => "nesting_too_deep" }.freeze
     FAILED_MARKER = { "_coolhand_capture_skipped" => "redaction_failed" }.freeze
 
-    # A `data:` field at the start of a line (LF, CRLF or bare CR), or after a leading byte order
-    # mark, which the SSE spec ignores. One space after the colon belongs to the SSE field syntax,
+    # A `data:` field at the start of a line (LF, CRLF or bare CR), or after a byte order mark,
+    # which the SSE spec ignores. One space after the colon belongs to the SSE field syntax,
     # so it is captured apart from the payload.
     DATA_LINE = /(?<![^\r\n\uFEFF])data:( ?)([^\r\n]*)/
     JSON_CONTAINER = /\A\uFEFF?\s*[\[{]/
@@ -59,11 +59,13 @@ module Coolhand
     # (not a JSON object/array, unparsable, or nothing to redact). Anything else that goes wrong
     # yields a `redaction_failed` marker rather than the unchecked text.
     def redacted_json(text)
-      parsed = JSON.parse(text.delete_prefix("\uFEFF"))
+      # NaN/Infinity are not JSON, but some servers emit them; a payload that failed to parse
+      # would be logged unredacted next to its credential-named fields.
+      parsed = JSON.parse(text.delete_prefix("\uFEFF"), allow_nan: true)
       return unless parsed.is_a?(Hash) || parsed.is_a?(Array)
 
       redacted = BodyRedactor.redact(parsed)
-      JSON.generate(redacted) unless redacted == parsed
+      JSON.generate(redacted, allow_nan: true) unless redacted == parsed
     rescue JSON::NestingError
       JSON.generate(NESTING_MARKER)
     rescue JSON::ParserError
