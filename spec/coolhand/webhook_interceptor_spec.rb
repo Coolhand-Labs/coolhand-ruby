@@ -189,7 +189,7 @@ RSpec.describe Coolhand::WebhookInterceptor do
       let(:framework_base) do
         Class.new do
           def self.action_methods
-            Set.new(public_instance_methods(false).map(&:to_s))
+            Set.new((public_instance_methods(true) - Object.public_instance_methods).map(&:to_s))
           end
         end
       end

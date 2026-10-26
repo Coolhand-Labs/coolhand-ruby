@@ -7,6 +7,7 @@ module Coolhand
   module WebhookInterceptor
     # Helpers that must never be routable as controller actions.
     HELPER_METHODS = %w[intercept_batch_request webhook_secret process_event].freeze
+    private_constant :HELPER_METHODS
 
     # `private` below only covers the definitions in this module. A host that
     # re-defines `webhook_secret` or `process_event` as public would make them
