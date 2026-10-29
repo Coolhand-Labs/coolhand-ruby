@@ -45,7 +45,7 @@ and `search_logs`.
 ## `get_step_template(id, include_metrics: nil)`
 
 `id` is the Integer `:id` from the list (not a hashid). Anything that is not a positive Integer raises
-`ArgumentError` before any request. Unlike the list, `:metrics` is included by default; pass
+`Coolhand::Error` before any request. Unlike the list, `:metrics` is included by default; pass
 `include_metrics: false` to skip the metrics queries.
 
 ## Fields

@@ -36,7 +36,7 @@ module Coolhand
 
     # Carries `metrics` unless `include_metrics: false`, the opposite default from the list.
     def get_step_template(id, include_metrics: nil)
-      raise ArgumentError, INVALID_ID_MESSAGE unless id.is_a?(Integer) && id.positive?
+      raise Error, INVALID_ID_MESSAGE unless id.is_a?(Integer) && id.positive?
 
       query = { include_metrics: include_metrics }.compact
       get_json(resource_url(id.to_s, INVALID_ID_MESSAGE, query), ERROR_NOUN)

@@ -221,9 +221,9 @@ RSpec.describe Coolhand::StepTemplateService do
       expect(WebMock).to have_requested(:get, "#{endpoint}/14").with(query: { "include_metrics" => "false" })
     end
 
-    it "rejects anything but a positive Integer with ArgumentError and no request" do
+    it "rejects anything but a positive Integer with Coolhand::Error and no request" do
       ["14", nil, 0, -3, 1.5, true, []].each do |bad|
-        expect { service.get_step_template(bad) }.to raise_error(ArgumentError, /get_step_template: id/)
+        expect { service.get_step_template(bad) }.to raise_error(Coolhand::Error, /get_step_template: id/)
       end
       expect(WebMock).not_to have_requested(:get, /step_templates/)
     end

@@ -81,9 +81,9 @@ came back full. Pass `include_total: true` when you need real totals.
 | `:cost_breakdown` | Hash or nil: `:total_cost`, `:input_cost`, `:output_cost`, `:cached_input_cost`, `:cache_creation_input_cost`, `:reasoning_output_cost` |
 
 `section` (`"full"`, `"beginning"`, `"end"`), `max_chars` and `search_query` bound or search the content;
-`include_thinking` adds `:thinking_response`, and `include_turn_metrics: true` adds `:turn_metrics`. Truncation and search are reported back as `:truncated`,
-`:total_chars`, `:search_query` and `:matches`. Only directly-collected logs are fetchable; internally
-generated records are a `404`.
+`include_thinking` adds `:thinking_response`, and `include_turn_metrics: true` adds `:turn_metrics`.
+Truncation and search are reported back as `:truncated`, `:total_chars`, `:search_query` and `:matches`.
+Only directly-collected logs are fetchable; internally generated records are a `404`.
 
 `:turn_metrics` is the per-turn breakdown of a captured agent session: an Array with one Hash per user
 message, `{ index, human, started_at, ended_at, assistant_requests, tool_calls, input_tokens,
