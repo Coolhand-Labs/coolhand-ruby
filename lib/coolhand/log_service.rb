@@ -52,9 +52,12 @@ module Coolhand
 
     # The full log, with `cost` and `cost_breakdown`. Both are nil when the log has no tokens or its
     # model has no pricing.
-    def get_log(id, section: nil, max_chars: nil, search_query: nil, include_thinking: nil)
+    # `turn_metrics` is added only when `include_turn_metrics: true`; it is nil for a log that is not a
+    # captured agent session.
+    def get_log(id, section: nil, max_chars: nil, search_query: nil, include_thinking: nil,
+      include_turn_metrics: nil)
       query = { section: section, max_chars: max_chars, search_query: search_query,
-                include_thinking: include_thinking }.compact
+                include_thinking: include_thinking, include_turn_metrics: include_turn_metrics }.compact
       get_json(resource_url(id, BLANK_ID_MESSAGE, query), ERROR_NOUN)
     end
   end
