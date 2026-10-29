@@ -213,6 +213,27 @@ RSpec.describe Coolhand::LogService do
       })
     end
 
+    it "sends include_turn_metrics and returns turn_metrics, null included" do
+      stub_request(:get, %r{llm_request_logs/l1}).to_return(
+        status: 200,
+        body: JSON.generate(log_row.merge(turn_metrics: [{ index: 0, human: true, started_at: nil, tool_calls: 2 }]))
+      )
+
+      result = service.get_log("l1", include_turn_metrics: true)
+
+      expect(WebMock).to have_requested(:get, "#{endpoint}/l1").with(query: { "include_turn_metrics" => "true" })
+      expect(result[:turn_metrics]).to eq([{ index: 0, human: true, started_at: nil, tool_calls: 2 }])
+    end
+
+    it "does not send include_turn_metrics unless given, and the key stays absent" do
+      stub_request(:get, %r{llm_request_logs/l1}).to_return(status: 200, body: JSON.generate(log_row))
+
+      result = service.get_log("l1")
+
+      expect(WebMock).to have_requested(:get, "#{endpoint}/l1").with(query: {})
+      expect(result).not_to have_key(:turn_metrics)
+    end
+
     it "keeps a null cost and cost_breakdown as nil" do
       stub_request(:get, %r{llm_request_logs/l1})
         .to_return(status: 200, body: JSON.generate(log_row.merge(cost: nil, cost_breakdown: nil)))

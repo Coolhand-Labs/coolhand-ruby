@@ -69,7 +69,7 @@ array, never wrapped. Rows are Symbol-keyed Hashes: `:id`, `:collector`, `:sourc
 `total_pages` are lower bounds the gem derives, not counts, and `has_next_page` is true when the page
 came back full. Pass `include_total: true` when you need real totals.
 
-## `get_log(id, section: nil, max_chars: nil, search_query: nil, include_thinking: nil)`
+## `get_log(id, section: nil, max_chars: nil, search_query: nil, include_thinking: nil, include_turn_metrics: nil)`
 
 `id` is the log hashid. Returns the full log as a Symbol-keyed Hash: the list fields plus the prompts and
 `:output`, and:
@@ -81,9 +81,15 @@ came back full. Pass `include_total: true` when you need real totals.
 | `:cost_breakdown` | Hash or nil: `:total_cost`, `:input_cost`, `:output_cost`, `:cached_input_cost`, `:cache_creation_input_cost`, `:reasoning_output_cost` |
 
 `section` (`"full"`, `"beginning"`, `"end"`), `max_chars` and `search_query` bound or search the content;
-`include_thinking` adds `:thinking_response`. Truncation and search are reported back as `:truncated`,
-`:total_chars`, `:search_query` and `:matches`. Only directly-collected logs are fetchable; internally
-generated records are a `404`.
+`include_thinking` adds `:thinking_response`, and `include_turn_metrics: true` adds `:turn_metrics`.
+Truncation and search are reported back as `:truncated`, `:total_chars`, `:search_query` and `:matches`.
+Only directly-collected logs are fetchable; internally generated records are a `404`.
+
+`:turn_metrics` is the per-turn breakdown of a captured agent session: an Array with one Hash per user
+message, `{ index, human, started_at, ended_at, assistant_requests, tool_calls, input_tokens,
+output_tokens, cache_read_tokens, cache_creation_tokens }`. The timestamps and the four token counts
+are nil when unknown. It is `nil` for a log that is not a captured session, and the key is absent
+unless you ask for it. It holds no content, so it is still returned after the content scrub.
 
 ## Errors
 

@@ -103,6 +103,20 @@ Search is a parameter on the list endpoint, not a route of its own, and the `Unm
 
 For the full filter reference, pagination, and error handling, see [Reading Templates →](docs/template-search.md).
 
+### Step templates
+
+`Coolhand.step_template_service` reads the skills and other recurring steps Coolhand detects in your captured agent sessions, with the same private API key. `include_metrics: true` adds run, turn, tool and efficiency figures.
+
+```ruby
+steps = Coolhand.step_template_service
+
+result = steps.list_step_templates(step_type: 'prompt_step', include_metrics: true)
+step = steps.get_step_template(result.step_templates.first[:id])
+step[:metrics][:notes]
+```
+
+For the parameters, `metrics` fields and errors, see [Reading Step Templates →](docs/step-templates.md).
+
 ### Cost and performance metrics
 
 Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it.
@@ -507,13 +521,14 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
+- The read methods (`search_templates`, `get_template`, `list_step_templates`, `get_step_template`, `search_workloads`, `search_logs`, `get_log`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Step Templates →](docs/step-templates.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
 
 ## Documentation
 
 - **[Configuration](docs/configuration.md)** — Self-hosted deployments, base_url rules, debug mode, custom intercept addresses
 - **[Feedback API](docs/feedback.md)** — Full field reference, matching strategies, sentiment values
 - **[Reading Templates](docs/template-search.md)** — Search LLM request templates and fetch a single one, prompt patterns included, using the private API key
+- **[Reading Step Templates](docs/step-templates.md)** — List the skills and recurring steps detected in captured agent sessions, with run and efficiency metrics, using the private API key
 - **[Reading Workloads](docs/workload-search.md)** — List workloads with optional cost and performance metrics over a rolling or explicit time window
 - **[Reading Logs](docs/log-search.md)** — Search logs with per-log cost, filter and sort by cost, and fetch one log with its cost breakdown
 - **[Reading the Help Center](docs/help-center.md)** — Search and read Coolhand's help center articles and list its sections, with no API key required
