@@ -128,7 +128,6 @@ module Coolhand
       response = nil
       status_code = nil
       response_body = nil
-      completed = false
 
       # Save/restore rather than just nil-ing: a request made from inside
       # this request's own streaming block (nested interception) would
@@ -146,7 +145,6 @@ module Coolhand
       begin
         response = super(req, body, &tracked_block)
         status_code, response_body = Helpers.capture_response(response)
-        completed = true
       rescue StandardError => e
         status_code, response_body = Helpers.error_details(e, host_block_errors)
         raise
@@ -154,9 +152,9 @@ module Coolhand
         # First, so the host's own stream is back on its request whatever fails below.
         request_body = Helpers.finalize_request_body(captured_body, req)
         stream_incomplete = StreamRead.incomplete?
-        # A stream abandoned by break, throw or raise never reached the capture above, so what was
-        # buffered so far is logged instead of the error (or nothing).
-        if stream_incomplete && !completed
+        # A stream abandoned by break, throw or raise: what was buffered so far is logged (cleaned of a
+        # split multibyte character) instead of the error, or of the capture above after a break.
+        if stream_incomplete
           response = Thread.current[:coolhand_capturing_stream]
           status_code, response_body = StreamRead.partial_response(response)
         end
