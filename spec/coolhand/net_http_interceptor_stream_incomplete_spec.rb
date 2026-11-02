@@ -277,7 +277,9 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
 
     stream_request do |res|
       res.read_body do |_chunk|
-        http_class.new("127.0.0.1", nested.addr[1]).request(Net::HTTP::Get.new("/inner"))
+        http_class.new("127.0.0.1", nested.addr[1]).request(Net::HTTP::Get.new("/inner")) do |inner_res|
+          inner_res.read_body { |_inner_chunk| nil }
+        end
         break
       end
     end

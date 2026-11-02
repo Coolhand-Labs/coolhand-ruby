@@ -17,12 +17,11 @@ module Coolhand
       # buffered, but it was not read to the end: the read was cut short (break, throw, raise, dropped
       # connection). With nothing buffered there is no partial body to mark, so the log is unchanged.
       # A body Net::HTTP read to its end is complete even if the host then raised.
-      def incomplete?(completed)
+      def incomplete?
         thread = Thread.current
         return false unless thread[:coolhand_capturing_stream] && thread[:coolhand_stream_buffer]
 
-        read = thread[:coolhand_stream_read]
-        read == :abandoned || (read.nil? && !completed)
+        thread[:coolhand_stream_read] == :abandoned
       end
 
       # [status_code, response_body] for an abandoned stream: what was buffered so far.

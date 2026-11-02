@@ -157,7 +157,7 @@ module Coolhand
       ensure
         # First, so the host's own stream is back on its request whatever fails below.
         request_body = Helpers.finalize_request_body(captured_body, req)
-        stream_incomplete = StreamRead.incomplete?(completed)
+        stream_incomplete = StreamRead.incomplete?
         # A stream abandoned by break, throw or raise never reached the capture above, so what was
         # buffered so far is logged instead of the error (or nothing).
         if stream_incomplete && !completed
