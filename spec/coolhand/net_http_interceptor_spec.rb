@@ -183,6 +183,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     after do
       Thread.current[:coolhand_stream_buffer] = nil
       Thread.current[:coolhand_capturing_stream] = nil
+      Thread.current[:coolhand_stream_read] = nil
     end
 
     it "accumulates yielded chunks into the thread-local buffer while a request is capturing, " \
@@ -220,6 +221,46 @@ RSpec.describe Coolhand::NetHttpInterceptor do
 
       expect(response.read_body).to eq("unblocked-body")
       expect(Thread.current[:coolhand_stream_buffer]).to be_nil
+    end
+
+    it "records a read_body that ran to its end as complete" do
+      Thread.current[:coolhand_capturing_stream] = response
+
+      response.read_body { |_chunk| nil }
+
+      expect(Thread.current[:coolhand_stream_read]).to eq(:complete)
+    end
+
+    it "records a read_body left by break, throw or raise as abandoned, and keeps what was buffered" do
+      Thread.current[:coolhand_capturing_stream] = response
+      response.read_body { |_chunk| break }
+      expect(Thread.current[:coolhand_stream_read]).to eq(:abandoned)
+      expect(Thread.current[:coolhand_stream_buffer]).to eq("chunk1")
+
+      Thread.current[:coolhand_stream_read] = nil
+      catch(:stop) { response.read_body { |_chunk| throw :stop } }
+      expect(Thread.current[:coolhand_stream_read]).to eq(:abandoned)
+
+      Thread.current[:coolhand_stream_read] = nil
+      expect { response.read_body { |_chunk| raise "boom" } }.to raise_error("boom")
+      expect(Thread.current[:coolhand_stream_read]).to eq(:abandoned)
+    end
+
+    it "keeps the first outcome when read_body is called again, as Net::HTTP does after a break" do
+      Thread.current[:coolhand_capturing_stream] = response
+      response.read_body { |_chunk| break }
+
+      response.read_body
+
+      expect(Thread.current[:coolhand_stream_read]).to eq(:abandoned)
+    end
+
+    it "does not record anything for a response that is not the one being captured" do
+      Thread.current[:coolhand_capturing_stream] = response_class.new
+
+      response.read_body { |_chunk| break }
+
+      expect(Thread.current[:coolhand_stream_read]).to be_nil
     end
   end
 
@@ -328,7 +369,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(bodies).to contain_exactly("outer-body", "NESTED-SECRET")
     end
 
-    it "logs only the class of an error raised in the host's streaming block, never its message" do
+    it "logs the partial body, not the exception, when the host's streaming block raises mid-stream" do
       logs = []
       allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
 
@@ -338,13 +379,30 @@ RSpec.describe Coolhand::NetHttpInterceptor do
         end
       end.to raise_error(ArgumentError, "app-level secret: user 42")
 
-      error = logs.first[:raw_request][:response_body]["error"]
-      expect(error["class"]).to eq("ArgumentError")
-      expect(error["message"]).to eq("[redacted: raised in host streaming block]")
+      raw = logs.first[:raw_request]
+      expect(raw[:response_body]).to eq("outer-body")
+      expect(raw[:stream_incomplete]).to be true
+      expect(logs.first.to_s).not_to include("app-level secret")
+      expect(logs.first.to_s).not_to include("ArgumentError")
+    end
+
+    it "keeps the error record, with only the exception class, when the host raises before any of the body was read" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      expect do
+        stream_get("/outer") { |_res| raise ArgumentError, "app-level secret: user 42" }
+      end.to raise_error(ArgumentError)
+
+      raw = logs.first[:raw_request]
+      expect(raw).not_to have_key(:stream_incomplete)
+      expect(raw[:response_body]["error"]).to eq(
+        "class" => "ArgumentError", "message" => "[redacted: raised in host streaming block]"
+      )
       expect(logs.first.to_s).not_to include("app-level secret")
     end
 
-    it "keeps the message of a transport error that surfaces inside the host's streaming block" do
+    it "logs the partial body, not the exception message, when an IOError surfaces inside the host's streaming block" do
       logs = []
       allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
 
@@ -352,16 +410,29 @@ RSpec.describe Coolhand::NetHttpInterceptor do
         stream_get("/outer") { |res| res.read_body { |_c| raise IOError, "closed stream" } }
       end.to raise_error(IOError)
 
-      error = logs.first[:raw_request][:response_body]["error"]
-      expect(error["message"]).to eq("closed stream")
+      raw = logs.first[:raw_request]
+      expect(raw[:response_body]).to eq("outer-body")
+      expect(raw[:stream_incomplete]).to be true
     end
 
-    it "derives no status code from a host-block error" do
+    it "takes the status code from the response, never from a host-block error, when the host raises mid-stream" do
       logs = []
       allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
 
       expect do
         stream_get("/outer") { |res| res.read_body { |_c| raise ArgumentError, "upstream status=502" } }
+      end.to raise_error(ArgumentError)
+
+      expect(logs.first[:raw_request][:status_code]).to eq(200)
+      expect(logs.first.to_s).not_to include("upstream status=502")
+    end
+
+    it "derives no status code from a host-block error raised before the response was handed over" do
+      logs = []
+      allow(api_service_instance).to receive(:send_llm_request_log) { |arg| logs << arg }
+
+      expect do
+        stream_get("/outer") { |_res| raise ArgumentError, "upstream status=502" }
       end.to raise_error(ArgumentError)
 
       expect(logs.first[:raw_request][:status_code]).to be_nil

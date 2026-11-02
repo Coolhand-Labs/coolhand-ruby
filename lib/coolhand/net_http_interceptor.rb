@@ -8,6 +8,7 @@ require "zlib"
 
 require_relative "body_stream_tap"
 require_relative "path_normalizer"
+require_relative "stream_read"
 
 module Coolhand
   module NetHttpInterceptor
@@ -20,11 +21,24 @@ module Coolhand
         # intercepted, such as a nested request made from inside the host's
         # streaming block) accumulates into a thread-local that's never
         # freed, and leaks one request's chunks into another's log.
-        return super unless block && Thread.current[:coolhand_capturing_stream].equal?(self)
+        return super unless Thread.current[:coolhand_capturing_stream].equal?(self)
 
-        super do |chunk|
-          Helpers.buffer_stream_chunk(chunk)
-          yield(chunk)
+        finished = false
+        begin
+          result = if block
+            super do |chunk|
+              Helpers.buffer_stream_chunk(chunk)
+              yield(chunk)
+            end
+          else
+            super
+          end
+          finished = true
+          result
+        ensure
+          # Also runs when the host's block breaks, throws or raises: read_body then never reached the
+          # end of the body, which is what marks the log stream_incomplete.
+          StreamRead.record(finished)
         end
       end
     end
@@ -118,6 +132,7 @@ module Coolhand
       response = nil
       status_code = nil
       response_body = nil
+      completed = false
 
       # Save/restore rather than just nil-ing: a request made from inside
       # this request's own streaming block (nested interception) would
@@ -125,23 +140,34 @@ module Coolhand
       # chunks, mixing one request's content into another's log.
       previous_stream_buffer = Thread.current[:coolhand_stream_buffer]
       previous_capturing_stream = Thread.current[:coolhand_capturing_stream]
+      previous_stream_read = Thread.current[:coolhand_stream_read]
       Thread.current[:coolhand_stream_buffer] = nil
       Thread.current[:coolhand_capturing_stream] = nil
+      Thread.current[:coolhand_stream_read] = nil
       host_block_errors = []
       tracked_block = Helpers.track_streaming_block(block, host_block_errors)
 
       begin
         response = super(req, body, &tracked_block)
         status_code, response_body = Helpers.capture_response(response)
+        completed = true
       rescue StandardError => e
         status_code, response_body = Helpers.error_details(e, host_block_errors)
         raise
       ensure
         # First, so the host's own stream is back on its request whatever fails below.
         request_body = Helpers.finalize_request_body(captured_body, req)
+        stream_incomplete = StreamRead.incomplete?(completed)
+        # A stream abandoned by break, throw or raise never reached the capture above, so what was
+        # buffered so far is logged instead of the error (or nothing).
+        if stream_incomplete && !completed
+          response = Thread.current[:coolhand_capturing_stream]
+          status_code, response_body = StreamRead.partial_response(response)
+        end
         active.delete(self)
         Thread.current[:coolhand_stream_buffer] = previous_stream_buffer
         Thread.current[:coolhand_capturing_stream] = previous_capturing_stream
+        Thread.current[:coolhand_stream_read] = previous_stream_read
         end_time = Time.now
         duration_ms = ((end_time - start_time) * 1000).round(2)
 
@@ -159,7 +185,8 @@ module Coolhand
           start_time: start_time,
           end_time: end_time,
           duration_ms: duration_ms,
-          is_streaming: !!block
+          is_streaming: !!block,
+          stream_incomplete: stream_incomplete
         )
       end
 
@@ -190,6 +217,7 @@ module Coolhand
 
         proc do |res|
           Thread.current[:coolhand_capturing_stream] = res
+          Thread.current[:coolhand_stream_read] = nil
           block.call(res)
         rescue StandardError => e
           host_block_errors << e unless transport_error?(e)

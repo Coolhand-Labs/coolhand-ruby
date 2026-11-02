@@ -440,7 +440,7 @@ When a request matches configured LLM endpoints:
 
 1. The original request executes normally
 2. Request and response data (body, headers, status) are captured by the interceptor
-3. For streaming requests, the complete accumulated response is captured (not individual chunks)
+3. For streaming requests, the complete accumulated response is captured (not individual chunks); a stream your code abandons before it ends is logged with the partial body and `stream_incomplete: true` ([details](docs/configuration.md#abandoned-streams-stream_incomplete))
 4. Data is sent to the Coolhand API inline, after the original response is available (bounded by a 5-second connect/read timeout so a slow or unreachable Coolhand backend can't hang your request indefinitely)
 5. Your application continues once the log is sent (or times out) — the original request/response is never blocked on Coolhand being reachable
 
