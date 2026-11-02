@@ -76,16 +76,15 @@ RSpec.describe Coolhand::LogService do
           template_id: "t1", workload_id: "w1", system_prompt_contains: "sys", user_prompt_contains: "usr",
           error_contains: "rate limit", model: "gpt-4o", source_api: "openai", source_api_result: "success",
           source_application: "app", project_path: "/p", unmatched_only: true, days_back: 7, since: "2026-09-01",
-          until: "2026-10-01",
-          min_cost: 0.5, order: "cost_desc", include_prompts: true, include_total: true,
+          until: "2026-10-01", min_cost: 0.5, order: "cost_desc", include_prompts: true, include_total: true,
           sort: "created_at desc", page: 2, per: 50
         )
 
         expect(WebMock).to have_requested(:get, endpoint).with(query: {
           "template_id" => "t1", "workload_id" => "w1", "system_prompt_contains" => "sys",
           "user_prompt_contains" => "usr", "error_contains" => "rate limit", "model" => "gpt-4o",
-          "source_api" => "openai",
-          "source_api_result" => "success", "source_application" => "app", "project_path" => "/p",
+          "source_api" => "openai", "source_api_result" => "success", "source_application" => "app",
+          "project_path" => "/p",
           "unmatched_only" => "true", "days_back" => "7", "since" => "2026-09-01", "until" => "2026-10-01",
           "min_cost" => "0.5", "order" => "cost_desc", "include_prompts" => "true", "include_total" => "true",
           "q[s]" => "created_at desc", "page" => "2", "per" => "50"

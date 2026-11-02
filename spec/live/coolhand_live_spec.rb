@@ -119,7 +119,7 @@ RSpec.describe Coolhand, if: LIVE do
     it "returns the full summary shape with a non-empty error_breakdown" do
       expect(summary).to include(:client_id, :client_name, :days_analyzed, :total_failed_count,
         :provider_outage_excluded_count, :error_breakdown, :by_template, :actionable_summary)
-      expect(summary[:error_breakdown]).not_to be_empty
+      expect(summary[:error_breakdown]).not_to be_empty, "Live fixture broken: the test client has no failed logs."
       expect(summary[:error_breakdown].first).to include(:error_pattern, :count, :category, :example_log_ids)
       expect(summary[:actionable_summary]).to include(:client_fixable_count, :server_side_count)
     end

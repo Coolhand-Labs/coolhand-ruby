@@ -13,9 +13,12 @@ module Coolhand
     protected
 
     def list_url(query)
-      uri = URI.parse(api_endpoint)
-      uri.query = URI.encode_www_form(query) unless query.empty?
-      uri
+      url_with_query(api_endpoint, query)
+    end
+
+    # A fixed collection action such as `failure_summary`; unlike `resource_url` there is no id to validate.
+    def action_url(action, query = {})
+      url_with_query("#{api_endpoint}/#{action}", query)
     end
 
     # GETs a list endpoint and wraps the JSON array and its pagination headers in `result_class`,
@@ -39,7 +42,11 @@ module Coolhand
       # retargets the request at another path. Neither would 404, so both are rejected here.
       raise Error, blank_message if trimmed.empty? || [".", ".."].include?(trimmed)
 
-      uri = URI.parse("#{api_endpoint}/#{escape_path_segment(trimmed)}")
+      url_with_query("#{api_endpoint}/#{escape_path_segment(trimmed)}", query)
+    end
+
+    def url_with_query(url, query)
+      uri = URI.parse(url)
       uri.query = URI.encode_www_form(query) unless query.empty?
       uri
     end

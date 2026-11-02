@@ -56,7 +56,7 @@ module Coolhand
     # pattern's `:error_pattern` as `search_logs(error_contains:)` to list its logs. `days_back` is sent
     # as given, so the server answers 422 for zero or negative. docs/log-search.md.
     def failure_summary(days_back: nil)
-      get_json(resource_url(FAILURE_SUMMARY_PATH, BLANK_ID_MESSAGE, { days_back: days_back }.compact), ERROR_NOUN)
+      get_json(action_url(FAILURE_SUMMARY_PATH, { days_back: days_back }.compact), ERROR_NOUN)
     end
 
     # The full log, with `cost` and `cost_breakdown`. Both are nil when the log has no tokens or its
