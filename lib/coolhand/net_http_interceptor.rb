@@ -21,17 +21,13 @@ module Coolhand
         # intercepted, such as a nested request made from inside the host's
         # streaming block) accumulates into a thread-local that's never
         # freed, and leaks one request's chunks into another's log.
-        return super unless Thread.current[:coolhand_capturing_stream].equal?(self)
+        return super unless block && Thread.current[:coolhand_capturing_stream].equal?(self)
 
         finished = false
         begin
-          result = if block
-            super do |chunk|
-              Helpers.buffer_stream_chunk(chunk)
-              yield(chunk)
-            end
-          else
-            super
+          result = super do |chunk|
+            Helpers.buffer_stream_chunk(chunk)
+            yield(chunk)
           end
           finished = true
           result

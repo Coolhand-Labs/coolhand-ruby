@@ -7,8 +7,8 @@ module Coolhand
     module StreamRead
       module_function
 
-      # Records how the host's first read of the body ended; a later read cannot undo it (after a
-      # break, Net::HTTP itself reads the rest of the body once the host's block returns).
+      # Records how the host's first block-form read of the body ended; a later one cannot undo it
+      # (Net::HTTP raises IOError "called twice" on a second read, which would otherwise look abandoned).
       def record(finished)
         Thread.current[:coolhand_stream_read] ||= finished ? :complete : :abandoned
       end
@@ -30,7 +30,10 @@ module Coolhand
         buffered = Thread.current[:coolhand_stream_buffer]
         # The cut can land inside a multibyte character, and invalid UTF-8 makes JSON.generate fail,
         # which would lose the whole record.
-        buffered = buffered.dup.force_encoding(Encoding::UTF_8).scrub("") if buffered.is_a?(String)
+        if buffered.is_a?(String)
+          buffered = buffered.dup.force_encoding(Encoding::UTF_8)
+          buffered.scrub!("") unless buffered.valid_encoding?
+        end
         [response.code.to_i, NetHttpInterceptor::Helpers.response_body_for_log(buffered, response)]
       rescue StandardError => e
         Coolhand.log "❌ Error capturing partial response: #{e.message}"

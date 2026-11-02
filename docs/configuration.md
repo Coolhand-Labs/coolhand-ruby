@@ -100,7 +100,7 @@ In every case, only the *captured log entry* is affected — the real request to
 
 ## Abandoned Streams (`stream_incomplete`)
 
-A streamed response (`Net::HTTP#request` with a block, which is what the OpenAI, Anthropic and Gemini Ruby clients use under the hood) that your code stops reading before it ends is logged with whatever had arrived, and `raw_request.stream_incomplete: true`. A response read to its end is sent without the field. The backend then nulls latency, and nulls token counts unless the provider's final usage event is in the captured body; Coolhand never computes tokens, cost or latency for a partial body.
+A streamed response (a `Net::HTTP#request` block that reads the body through a block-form `read_body`, which is what the OpenAI, Anthropic and Gemini Ruby clients use under the hood) that your code stops reading before it ends is logged with whatever had arrived, and `raw_request.stream_incomplete: true`. A response read to its end is sent without the field. The backend then nulls latency, and nulls token counts unless the provider's final usage event is in the captured body; Coolhand never computes tokens, cost or latency for a partial body.
 
 A stream is marked when the body was not read to its end because:
 - your `read_body` block (or the SDK's) `break`s or `throw`s out of it, including right after the provider's terminator (`data: [DONE]`): only reading the body to its end counts as complete

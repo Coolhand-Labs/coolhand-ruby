@@ -246,11 +246,12 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(Thread.current[:coolhand_stream_read]).to eq(:abandoned)
     end
 
-    it "keeps the first outcome when read_body is called again, as Net::HTTP does after a break" do
+    it "keeps the first outcome when a later block-form read_body finishes or fails" do
       Thread.current[:coolhand_capturing_stream] = response
       response.read_body { |_chunk| break }
 
-      response.read_body
+      response.read_body { |_chunk| nil }
+      expect { response.read_body { |_chunk| raise IOError, "read_body called twice" } }.to raise_error(IOError)
 
       expect(Thread.current[:coolhand_stream_read]).to eq(:abandoned)
     end
