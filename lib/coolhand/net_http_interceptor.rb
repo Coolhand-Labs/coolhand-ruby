@@ -154,9 +154,10 @@ module Coolhand
         stream_incomplete = StreamRead.incomplete?
         # A stream abandoned by break, throw or raise: what was buffered so far is logged (cleaned of a
         # split multibyte character) instead of the error, or of the capture above after a break.
+        logged_response = response
         if stream_incomplete
-          response = Thread.current[:coolhand_capturing_stream]
-          status_code, response_body = StreamRead.partial_response(response)
+          logged_response = Thread.current[:coolhand_capturing_stream]
+          status_code, response_body = StreamRead.partial_response(logged_response)
         end
         active.delete(self)
         Thread.current[:coolhand_stream_buffer] = previous_stream_buffer
@@ -173,7 +174,7 @@ module Coolhand
           url: url,
           request_headers: BaseInterceptor.sanitize_headers(req),
           request_body: request_body,
-          response_headers: BaseInterceptor.sanitize_headers(response),
+          response_headers: BaseInterceptor.sanitize_headers(logged_response),
           response_body: response_body,
           status_code: status_code,
           start_time: start_time,

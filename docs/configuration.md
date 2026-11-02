@@ -107,9 +107,9 @@ A stream is marked when the body was not read to its end because:
 - your streaming block raises
 - the connection drops or times out mid-body (`EOFError`, `Errno::ECONNRESET`, `Net::ReadTimeout`, ...); the error still propagates to your code as before
 
-Nothing is marked when no part of the body had arrived yet (for example the connection drops before the first chunk, or the block is left before reading): there is no partial body, so the log is the same as before, including the error record for a failure. When your streaming block raises mid-stream, the log holds the partial body and the status of the response, not the exception: its class and message are not recorded. Only one record is sent per call. The `body_too_large` cap is independent of the marker: a body truncated by the cap but read to its end is not marked, and one that is both truncated and abandoned is. The capture buffer is released as soon as the record is sent.
+Nothing is marked when no part of the body had arrived yet (for example the connection drops before the first chunk, or the block is left before reading): there is no partial body, so the log is the same as before, including the error record for a failure. When a stream fails mid-body (your streaming block raises, or the connection drops), the log holds the partial body and the status of the response, not the exception: its class and message are not recorded. Only one record is sent per call. The `body_too_large` cap is independent of the marker: a body truncated by the cap but read to its end is not marked, and one that is both truncated and abandoned is. The capture buffer is released as soon as the record is sent.
 
-Limits: Net::HTTP does not raise when a response with a `Content-Length` (or one that ends by closing the connection) is cut short, so those are logged as complete. Chunks are captured as Net::HTTP delivers them (already decompressed), so a cut-off gzip body is logged as the text received so far.
+Limits: by default (`ignore_eof`) Net::HTTP does not raise when a response with a `Content-Length` (or one that ends by closing the connection) is cut short, so those are logged as complete. Chunks are captured as Net::HTTP delivers them (already decompressed), so a cut-off gzip body is logged as the text received so far.
 
 ## Custom Intercept Addresses
 
