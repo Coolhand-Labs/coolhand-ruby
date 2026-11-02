@@ -28,6 +28,9 @@ module Coolhand
       # Runs in #request's ensure, so it must not raise.
       def partial_response(response)
         buffered = Thread.current[:coolhand_stream_buffer]
+        # The cut can land inside a multibyte character, and invalid UTF-8 makes JSON.generate fail,
+        # which would lose the whole record.
+        buffered = buffered.dup.force_encoding(Encoding::UTF_8).scrub("") if buffered.is_a?(String)
         [response.code.to_i, NetHttpInterceptor::Helpers.response_body_for_log(buffered, response)]
       rescue StandardError => e
         Coolhand.log "❌ Error capturing partial response: #{e.message}"

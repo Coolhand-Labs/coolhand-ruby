@@ -254,6 +254,19 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
     end
   end
 
+  it "logs a partial body cut inside a multibyte character as valid UTF-8, still as one record" do
+    served = serve_stream(["data: {\"t\":\"caf\xC3".b, "\xA9\"}\n\n".b], ending: :stall)
+    expect do
+      stream_request { |res| res.read_body { |_chunk| raise "host failed" } }
+    end.to raise_error(RuntimeError, "host failed")
+    served.join
+
+    expect(logs.size).to eq(1)
+    expect { JSON.generate(logs.first) }.not_to raise_error
+    expect(raw[:response_body]).to eq("data: {\"t\":\"caf")
+    expect(raw[:stream_incomplete]).to be true
+  end
+
   it "releases the capture state after an abandoned stream, so the next call starts clean" do
     served = serve_stream(events, ending: :stall)
     stream_request { |res| res.read_body { |_chunk| break } }
