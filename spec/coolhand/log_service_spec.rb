@@ -74,15 +74,17 @@ RSpec.describe Coolhand::LogService do
       it "maps every keyword onto its wire parameter" do
         service.search_logs(
           template_id: "t1", workload_id: "w1", system_prompt_contains: "sys", user_prompt_contains: "usr",
-          model: "gpt-4o", source_api: "openai", source_api_result: "success", source_application: "app",
-          project_path: "/p", unmatched_only: true, days_back: 7, since: "2026-09-01", until: "2026-10-01",
+          error_contains: "rate limit", model: "gpt-4o", source_api: "openai", source_api_result: "success",
+          source_application: "app", project_path: "/p", unmatched_only: true, days_back: 7, since: "2026-09-01",
+          until: "2026-10-01",
           min_cost: 0.5, order: "cost_desc", include_prompts: true, include_total: true,
           sort: "created_at desc", page: 2, per: 50
         )
 
         expect(WebMock).to have_requested(:get, endpoint).with(query: {
           "template_id" => "t1", "workload_id" => "w1", "system_prompt_contains" => "sys",
-          "user_prompt_contains" => "usr", "model" => "gpt-4o", "source_api" => "openai",
+          "user_prompt_contains" => "usr", "error_contains" => "rate limit", "model" => "gpt-4o",
+          "source_api" => "openai",
           "source_api_result" => "success", "source_application" => "app", "project_path" => "/p",
           "unmatched_only" => "true", "days_back" => "7", "since" => "2026-09-01", "until" => "2026-10-01",
           "min_cost" => "0.5", "order" => "cost_desc", "include_prompts" => "true", "include_total" => "true",
@@ -188,6 +190,88 @@ RSpec.describe Coolhand::LogService do
         expect { service.search_logs }.to raise_error(Coolhand::Error, /API key is required/)
         expect(WebMock).not_to have_requested(:get, /llm_request_logs/)
       end
+    end
+  end
+
+  describe "#failure_summary" do
+    let(:summary_endpoint) { "#{endpoint}/failure_summary" }
+    let(:summary) do
+      {
+        client_id: "c1a2b3", client_name: "Acme", days_analyzed: 7, total_failed_count: 12,
+        provider_outage_excluded_count: 1,
+        error_breakdown: [{
+          error_pattern: "Rate limit exceeded", source_api: nil, count: 9,
+          first_seen_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-02T00:00:00Z", category: "rate_limit",
+          example_error_details: "429", example_log_ids: ["l1"], example_log_urls: ["/c/x/llm_request_logs/l1"]
+        }],
+        by_template: [{
+          template_id: nil, template_name: "Unmatched", failed_count: 3,
+          error_patterns: [{ category: "rate_limit", count: 3, error: "Rate limit exceeded", source_api: "openai" }],
+          example_log_ids: [], example_log_urls: []
+        }],
+        actionable_summary: { client_fixable_count: 9, server_side_count: 3 }
+      }
+    end
+
+    def stub_summary(body: summary, status: 200)
+      stub_request(:get, /failure_summary/).to_return(status: status, body: JSON.generate(body))
+    end
+
+    it "GETs the collection action with the private key and no query by default" do
+      stub_summary
+
+      service.failure_summary
+
+      expect(WebMock).to have_requested(:get, summary_endpoint)
+        .with(headers: { "X-API-Key" => "test-private-key", "Accept" => "application/json" }, query: {})
+    end
+
+    it "sends days_back only when given, including zero and negative values" do
+      stub_summary
+
+      [14, 0, -1].each do |days|
+        service.failure_summary(days_back: days)
+
+        expect(WebMock).to have_requested(:get, summary_endpoint).with(query: { "days_back" => days.to_s })
+      end
+    end
+
+    it "returns the single object with Symbol keys, unpaginated" do
+      stub_summary
+
+      result = service.failure_summary
+
+      expect(result).to be_a(Hash)
+      expect(result).to include(total_failed_count: 12,
+        actionable_summary: { client_fixable_count: 9, server_side_count: 3 })
+      expect(result[:error_breakdown].first)
+        .to include(error_pattern: "Rate limit exceeded", category: "rate_limit", source_api: nil)
+      expect(result[:by_template].first).to include(template_id: nil, failed_count: 3)
+    end
+
+    it "carries 401, 422 and 504 on the HttpError" do
+      { 401 => { error: "API key is required" }, 422 => { errors: { days_back: ["must be a positive integer"] } },
+        504 => { errors: { system: ["timeout"] } } }.each do |status, body|
+        stub_summary(body: body, status: status)
+
+        expect { service.failure_summary(days_back: 0) }.to raise_error(Coolhand::HttpError) { |e|
+          expect(e.status).to eq(status)
+          expect(e.body).to include(JSON.generate(body))
+        }
+      end
+    end
+
+    it "raises without making a request when no API key is configured" do
+      allow(config).to receive(:api_key).and_return("")
+
+      expect { service.failure_summary }.to raise_error(Coolhand::Error, /API key is required/)
+      expect(WebMock).not_to have_requested(:get, /failure_summary/)
+    end
+
+    it "raises when a 200 body is not valid JSON" do
+      stub_request(:get, /failure_summary/).to_return(status: 200, body: "<html>")
+
+      expect { service.failure_summary }.to raise_error(Coolhand::Error, /not valid JSON/)
     end
   end
 

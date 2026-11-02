@@ -112,4 +112,30 @@ RSpec.describe Coolhand, if: LIVE do
       expect(Coolhand.log_service.search_logs(per: 1, include_total: true).pagination.total_count).to be >= 1
     end
   end
+
+  describe "failure_summary" do
+    let(:summary) { Coolhand.log_service.failure_summary(days_back: 36_500) }
+
+    it "returns the full summary shape with a non-empty error_breakdown" do
+      expect(summary).to include(:client_id, :client_name, :days_analyzed, :total_failed_count,
+        :provider_outage_excluded_count, :error_breakdown, :by_template, :actionable_summary)
+      expect(summary[:error_breakdown]).not_to be_empty
+      expect(summary[:error_breakdown].first).to include(:error_pattern, :count, :category, :example_log_ids)
+      expect(summary[:actionable_summary]).to include(:client_fixable_count, :server_side_count)
+    end
+
+    it "lists the failed logs behind an error_pattern via error_contains" do
+      pattern = summary[:error_breakdown].first[:error_pattern]
+
+      logs = Coolhand.log_service.search_logs(error_contains: pattern, per: 5).logs
+
+      expect(logs).not_to be_empty
+      expect(logs.map { |l| l[:source_api_result] }.uniq).to eq(["failed"])
+    end
+
+    it "raises 422 for a zero days_back" do
+      expect { Coolhand.log_service.failure_summary(days_back: 0) }
+        .to raise_error(Coolhand::HttpError) { |e| expect(e.status).to eq(422) }
+    end
+  end
 end
