@@ -125,7 +125,10 @@ RSpec.describe Coolhand, if: LIVE do
     end
 
     it "lists the failed logs behind an error_pattern via error_contains" do
-      pattern = summary[:error_breakdown].first[:error_pattern]
+      top = summary[:error_breakdown].first
+      raise "Live fixture broken: the test client has no failed logs." unless top
+
+      pattern = top[:error_pattern]
 
       logs = Coolhand.log_service.search_logs(error_contains: pattern, per: 5).logs
 
