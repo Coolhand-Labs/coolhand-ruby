@@ -91,6 +91,16 @@ Never `rake release` or `gem push`; CI publishes.
    anything behavior-affecting. Use full `https://github.com/...` URLs (blob
    links to `main` for docs), not relative links, because the notes render on
    the Releases page.
+
+   **Carry contributor credit across.** The notes are written from the
+   changelog, not copied, so the credit has to be written in again. Take the
+   `thanks @login` entries and the `### Thanks` section from the `## [X.Y.Z]`
+   CHANGELOG section: put `thanks @login` next to the PR on each of those
+   entries, and add a `## 🙏 Thanks` section after the last theme section
+   (before Known Follow-ups) naming each outside contributor and what they
+   sent, with a welcome shout-out for any first-time contributor. If the
+   changelog section has no credit, check for outside authors yourself (step
+   5 below) rather than assuming there were none.
 3. **Verify every claim and every issue link before publishing.** For
    Known Follow-ups, take the list from the previous release and run
    `gh issue view <n> --json state` on each: drop closed ones, and re-read any
@@ -99,7 +109,18 @@ Never `rake release` or `gem push`; CI publishes.
    read in the code or the PR. A release note that misstates scope is worse
    than a short one.
 4. Write the notes to `.context/release-notes-vX.Y.Z.md` (gitignored).
-5. `gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes-file
+5. **Check contributor credit before publishing.** For every `(#N)` in the
+   changelog section, `gh pr view N --json author`; for each author that is
+   neither a bot nor a team member (`gh api repos/{owner}/{repo}/pulls/N --jq
+   .author_association` is not `MEMBER`, `OWNER` or `COLLABORATOR`), the notes
+   file must carry `thanks @login` on that change and a `## 🙏 Thanks` section
+   naming them. If that author had no commit on `main` before this release
+   (`gh api "repos/{owner}/{repo}/commits?author=<login>&until=<previous-tag-date>"`
+   is `[]`), the thanks must also say it is their first contribution. If any
+   of it is missing from the notes file or the tagged changelog, stop and tell
+   the user before publishing, since the release notes are what the
+   contributor sees; don't edit the tagged changelog silently.
+6. `gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes-file
    .context/release-notes-vX.Y.Z.md --latest`. Not a draft and not a
    prerelease, same as the previous release. Confirm with
    `gh release view vX.Y.Z --json name,tagName,isDraft,url`.
@@ -109,6 +130,8 @@ Never `rake release` or `gem push`; CI publishes.
 State, in the final message:
 - The merged PR number, its squash commit, and the tag (which points at it).
 - The release URL.
+- Outside and first-time contributors credited in the release notes, by
+  `@login` and PR (or that there were none).
 - The Publish workflow run (`gh run list --workflow publish.yml --limit 1`) and
   whether it is waiting on `rubygems-publish` approval. Do not approve it or
   publish by any other route. Check the run again later if the user asks
