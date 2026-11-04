@@ -35,6 +35,7 @@ bundle install
 bundle exec ruby examples/openai_example.rb
 bundle exec ruby examples/anthropic_example.rb
 bundle exec ruby examples/elevenlabs_example.rb
+bundle exec ruby examples/abandoned_stream_example.rb
 ```
 
 ## Running everything: `bin/live-examples`
@@ -91,6 +92,21 @@ interleaved per iteration so provider drift hits all three equally. The live sce
 `2N + 1` small real logs per provider to your Coolhand account and costs a negligible amount of
 provider usage. A last check confirms the interceptor adds no generically named helper methods to
 `Net::HTTP`.
+
+## Abandoned streams: `abandoned_stream_example.rb`
+
+Smoke test for the `stream_incomplete` marker: a streamed response the host stops reading before
+it ends must be logged with `raw_request.stream_incomplete: true` and the partial body, and a
+stream read to its end must not carry the field. It exits non-zero if an assertion fails. With no
+keys set it runs only the local scenario and exits 0.
+
+| Scenario | Needs | What it checks |
+|---|---|---|
+| Local | nothing (fake chunked SSE server + fake Coolhand) | complete read: no field; `break`, `throw` and a host raise mid-stream: marked, partial body kept, host exception message never logged; non-streaming read: no field; one delivered record per call |
+| Live | `COOLHAND_API_KEY` plus `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` | per provider: a real stream abandoned after its first chunk produces one delivered, marked record with the partial body |
+
+The live scenario sends one tiny streamed request per provider key and one log per provider to
+your Coolhand account.
 
 ## Why no Vertex example
 
