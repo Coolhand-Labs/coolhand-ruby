@@ -105,7 +105,7 @@ For the full filter reference, pagination, and error handling, see [Reading Temp
 
 ### Cost and performance metrics
 
-Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it.
+Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it. `failure_summary` rolls failed requests up by error pattern and template, and `search_logs(error_contains:)` lists the logs behind a pattern.
 
 ```ruby
 window = { since: Time.utc(2026, 9, 1), until: Time.utc(2026, 10, 1) }
@@ -507,7 +507,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
+- The read methods (`search_templates`, `get_template`, `search_workloads`, `search_logs`, `get_log`, `failure_summary`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
 
 ## Documentation
 

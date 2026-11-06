@@ -14,6 +14,7 @@ module Coolhand
     include ReadQuery
 
     ERROR_NOUN = "Log"
+    FAILURE_SUMMARY_PATH = "failure_summary"
     BLANK_ID_MESSAGE = "get_log: id must be a non-empty log hashid"
 
     def initialize
@@ -22,14 +23,15 @@ module Coolhand
 
     # Filters, cost ordering, error semantics and server behaviour: docs/log-search.md.
     def search_logs(template_id: nil, workload_id: nil, system_prompt_contains: nil, user_prompt_contains: nil,
-      model: nil, source_api: nil, source_api_result: nil, source_application: nil, project_path: nil,
-      unmatched_only: nil, days_back: nil, since: nil, until: nil, min_cost: nil, order: nil,
+      error_contains: nil, model: nil, source_api: nil, source_api_result: nil, source_application: nil,
+      project_path: nil, unmatched_only: nil, days_back: nil, since: nil, until: nil, min_cost: nil, order: nil,
       include_prompts: nil, include_total: nil, sort: nil, page: nil, per: nil)
       query = {
         template_id: template_id,
         workload_id: workload_id,
         system_prompt_contains: system_prompt_contains,
         user_prompt_contains: user_prompt_contains,
+        error_contains: error_contains,
         model: model,
         source_api: source_api,
         source_api_result: source_api_result,
@@ -48,6 +50,13 @@ module Coolhand
       }.compact
 
       fetch_list(query, LogSearchResult, :logs, page: page, per: per)
+    end
+
+    # Failed requests rolled up by error pattern and by template. One object, not paginated. Pass a
+    # pattern's `:error_pattern` as `search_logs(error_contains:)` to list its logs. `days_back` is sent
+    # as given, so the server answers 422 for zero or negative. docs/log-search.md.
+    def failure_summary(days_back: nil)
+      get_json(action_url(FAILURE_SUMMARY_PATH, { days_back: days_back }.compact), ERROR_NOUN)
     end
 
     # The full log, with `cost` and `cost_breakdown`. Both are nil when the log has no tokens or its
