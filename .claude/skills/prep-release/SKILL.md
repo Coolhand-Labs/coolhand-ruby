@@ -45,13 +45,32 @@ what an individual PR's diff already contains.
      — weight those higher regardless of size; failing CI checks or a
      non-clean `mergeable` state also push risk up; an isolated additive
      feature or docs-only change is lower risk.
-3. Present one table: PR number, title, quality, risk, CI status,
-   mergeable state, and a one-line recommendation (include / exclude /
-   needs work before it can be considered). Call out anything that looks
+3. **Classify each PR's author** and record it in a running contributor
+   list that Phase 3 and Phase 5 reuse:
+   - **bot**: `author.is_bot` (Dependabot and the like). Never thanked.
+   - **team**: `gh api repos/{owner}/{repo}/pulls/<n> --jq .author_association`
+     is `MEMBER`, `OWNER` or `COLLABORATOR`.
+   - **outside contributor**: anyone else. Also flag the PR as coming from a
+     fork (`isCrossRepository`) when it does.
+   - **first-time contributor** (a subset of outside): the login has no
+     commit on `main` at or before the last tag —
+     `gh api "repos/{owner}/{repo}/commits?author=<login>&until=<last-tag-date>"`
+     returns `[]` and `gh pr list --state merged --author <login>` is empty.
+     Decide this now, before Phase 2 merges anything: once their PR is
+     merged they stop looking new. Record the GitHub `login` (for the
+     `@mention`) and the PR number(s).
+4. Present one table: PR number, title, **author** (login plus `team`, `bot`,
+   `outside contributor` or `first-time contributor`), quality, risk, CI
+   status, mergeable state, and a one-line recommendation (include / exclude /
+   needs work before it can be considered). Below the table, list every
+   outside and first-time contributor by `@login` with the PR they sent, so
+   the user sees them without scanning. An outside PR has no CI run until a
+   maintainer approves its workflows — say so instead of rating CI as
+   passing. Call out anything that looks
    unfinished — draft, a WIP-sounding title, failing checks, an empty or
    placeholder description, visible `TODO`/`FIXME` in the diff — as
    "exclude, not ready" rather than rating it neutrally.
-4. Stop here and ask the user which PRs to include in this release. This
+5. Stop here and ask the user which PRs to include in this release. This
    is the one planned decision point in the whole skill — do not merge,
    write changelog entries, or touch `version.rb` until the user answers.
    (Phase 2 step 3 below has its own unplanned-error stop for an unclean
@@ -106,6 +125,21 @@ never on `main` directly.
      number in its title) for anything not merged in this run. If a
      change genuinely has no discoverable PR (a direct commit to `main`),
      write the entry without one rather than skipping it.
+   - **Credit outside contributors.** For every change from an outside
+     contributor (the Phase 1 list; for changes not merged in this run, look
+     the author up from the PR, `gh pr view <n> --json author`, and classify
+     as in Phase 1 step 3), put `thanks @login` inside the parentheses next to
+     the PR number on that entry, e.g. `([#168](...), thanks @login)`. Then
+     end the version's section with a `### Thanks` heading (last, after
+     `### Dependencies`) that names each outside contributor and what they
+     sent. For a first-time contributor, add a shout-out saying it is their
+     first contribution to this gem and welcoming them, e.g. "Welcome and
+     thank you to @login, whose first contribution to coolhand-ruby, #168,
+     adds Amazon Bedrock FIPS endpoints." Contributors who have landed before
+     get the thanks without the first-time line. Skip bots and team members,
+     and omit `### Thanks` when there is nothing to put in it.
+     `/finish-release` writes the GitHub release notes from this section
+     rather than copying it, so it carries the credit across (its Phase 4).
    - `README.md` / `docs/*.md` — any new config option, public method, or
      behavior change needs the relevant section updated. Follow this
      repo's docs philosophy from `AGENTS.md`: the README stays a scannable
@@ -215,6 +249,9 @@ background thread) — surface these to the user for a decision, the same
    - Phase 1's PR table and which PRs the user chose.
    - Phase 2's outcome: which PRs merged, which were skipped for new
      conflicts (and need a rebase before the next release).
+   - Outside and first-time contributors in this release, by `@login` and PR,
+     and where their credit landed in `CHANGELOG.md` (the `thanks @login`
+     entry and the `### Thanks` section).
    - The release-prep PR link, the version bump and why.
    - Coverage-quality gaps plus recommended specs.
    - Docs updated.
