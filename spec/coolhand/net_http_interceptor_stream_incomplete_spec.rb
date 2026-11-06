@@ -125,6 +125,22 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
     expect(raw[:is_streaming]).to be true
   end
 
+  it "still sends the marked record, without a body, when building the partial response fails" do
+    allow(Coolhand::NetHttpInterceptor::Helpers).to receive(:response_body_for_log).and_raise("boom")
+    served = serve_stream(events, ending: :stall)
+
+    expect do
+      stream_request { |res| res.read_body { |_chunk| break } }
+    end.not_to raise_error
+    served.join
+
+    expect(logs.size).to eq(1)
+    expect(raw[:stream_incomplete]).to be true
+    expect(raw[:response_body]).to be_nil
+    expect(raw[:status_code]).to be_nil
+    expect(Coolhand).to have_received(:log).with(/Error capturing partial response: boom/)
+  end
+
   it "marks a stream abandoned right after the provider terminator, even though the last frame was seen" do
     served = serve_stream(events, ending: :stall)
 
