@@ -12,6 +12,19 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "request timeouts" do
+    it "bounds connect, read and write so a stalled Coolhand upload cannot hang the caller" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs").to_return(status: 200, body: "{}")
+      http = nil
+      allow(Net::HTTP).to receive(:new).and_wrap_original { |original, *args| (http = original.call(*args)) }
+
+      described_class.new.send_llm_request_log(method: "POST", url: "https://api.openai.com/v1/chat/completions",
+        request_body: {}, response_body: {}, status_code: 200)
+
+      expect([http.open_timeout, http.read_timeout, http.write_timeout]).to eq([5, 5, 5])
+    end
+  end
+
   describe "custom base_url" do
     it "uses the configured base_url to build api_endpoint" do
       Coolhand.configuration.base_url = "https://self-hosted.example.com/api"

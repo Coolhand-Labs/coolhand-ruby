@@ -87,9 +87,10 @@ module Coolhand
       # Bound worst-case latency: with async_logging off this call happens inline in
       # the intercepted request's path (otherwise it ties up the background log
       # worker), so a slow/unreachable Coolhand backend must not hang for Ruby's
-      # ~60s Net::HTTP defaults.
+      # ~60s Net::HTTP defaults (a stalled upload hits write_timeout).
       http.open_timeout = 5
       http.read_timeout = 5
+      http.write_timeout = 5
 
       request = Net::HTTP::Post.new(uri.request_uri)
       apply_headers(request, create_request_options(payload))
