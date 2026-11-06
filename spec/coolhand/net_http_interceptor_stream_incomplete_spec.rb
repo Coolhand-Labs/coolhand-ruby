@@ -20,7 +20,10 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
     Thread.new do
       client = server.accept
       client.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
-      client.gets("\r\n\r\n")
+      head = client.gets("\r\n\r\n")
+      # Drain the request body too: closing a socket with unread data sends a RST on Linux, which the
+      # client sees as ECONNRESET instead of the EOFError a clean close gives.
+      client.read(head[/content-length:\s*(\d+)/i, 1].to_i)
       client.write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n" \
                    "Connection: close\r\n\r\n")
       pieces.each do |piece|
@@ -33,6 +36,11 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
     rescue IOError, SystemCallError
       nil
     end
+  end
+
+  # How a cut-short chunked body surfaces depends on the platform's TCP close behaviour.
+  def expect_dropped_connection(&block)
+    expect(&block).to(raise_error { |error| expect([EOFError, Errno::ECONNRESET]).to include(error.class) })
   end
 
   def stream_request(&block)
@@ -166,7 +174,7 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
   it "sends the partial body when the connection is dropped mid-stream" do
     served = serve_stream(events.first(2), ending: :drop)
 
-    expect { stream_request { |res| res.read_body { |_chunk| nil } } }.to raise_error(EOFError)
+    expect_dropped_connection { stream_request { |res| res.read_body { |_chunk| nil } } }
     served.join
 
     expect(logs.size).to eq(1)
@@ -189,12 +197,12 @@ RSpec.describe Coolhand::NetHttpInterceptor, "abandoned streams (stream_incomple
   it "keeps the error record, unmarked, when the connection drops before the first chunk arrives" do
     served = serve_stream([], ending: :drop)
 
-    expect { stream_request { |res| res.read_body { |_chunk| nil } } }.to raise_error(EOFError)
+    expect_dropped_connection { stream_request { |res| res.read_body { |_chunk| nil } } }
     served.join
 
     expect(logs.size).to eq(1)
     expect(raw).not_to have_key(:stream_incomplete)
-    expect(raw[:response_body]).to include("error" => hash_including("class" => "EOFError"))
+    expect(raw[:response_body]).to include("error" => hash_including("class" => a_string_matching(/\AEOFError|Errno::ECONNRESET\z/)))
   end
 
   it "does not mark a stream the host fully read but then raised on" do
