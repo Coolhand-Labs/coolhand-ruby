@@ -19,6 +19,7 @@ require "socket"
 require "json"
 require "net/http"
 require "coolhand"
+require_relative "support/http_helpers"
 
 N = Integer(ENV.fetch("N", "8"), exception: false)
 abort("N must be an integer between 1 and 1000") unless N&.between?(1, 1000)
@@ -34,11 +35,6 @@ LIVE_ASYNC_BUDGET_MS = 200
 
 $stdout.sync = true
 @failures = []
-
-def check(description, passed)
-  puts "  #{passed ? 'PASS' : 'FAIL'}  #{description}"
-  @failures << description unless passed
-end
 
 def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
@@ -136,11 +132,7 @@ def serve(server, delay: 0)
     loop do
       client = server.accept
       Thread.new(client) do |socket|
-        head = +""
-        head << socket.readpartial(65_536) until head.include?("\r\n\r\n")
-        length = head[/content-length:\s*(\d+)/i, 1].to_i
-        body = head.split("\r\n\r\n", 2)[1].to_s
-        body << socket.readpartial(length - body.bytesize) while body.bytesize < length
+        body = read_http_request(socket)
         sleep delay
         response = yield(body)
         socket.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" \
