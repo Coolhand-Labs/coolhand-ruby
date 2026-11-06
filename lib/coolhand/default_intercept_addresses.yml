@@ -26,7 +26,8 @@
 # Amazon Bedrock. Every endpoint variant needs its own entry: a wildcard entry is
 # an exact host match with no implicit subdomains, and "amazonaws.com.cn" is not a
 # dot-boundary suffix of "amazonaws.com". "api.aws" hosts are the dual-stack (IPv6)
-# endpoints; "-fips" hosts are the FIPS 140-3 ones, used by GovCloud callers.
+# endpoints; "-fips" hosts are the FIPS 140-3 ones, used by GovCloud and other
+# FIPS-constrained callers (they exist in commercial regions too).
 - "bedrock-runtime.*.amazonaws.com"
 - "bedrock-runtime.*.amazonaws.com.cn"
 - "bedrock-runtime-fips.*.amazonaws.com"
