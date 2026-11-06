@@ -119,7 +119,7 @@ For the parameters, `metrics` fields and errors, see [Reading Step Templates →
 
 ### Cost and performance metrics
 
-Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it.
+Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it. `failure_summary` rolls failed requests up by error pattern and template, and `search_logs(error_contains:)` lists the logs behind a pattern.
 
 ```ruby
 window = { since: Time.utc(2026, 9, 1), until: Time.utc(2026, 10, 1) }
@@ -425,7 +425,7 @@ The monitor works with multiple transport layers and Ruby libraries:
 - Google Gemini (`generativelanguage.googleapis.com`)
 - Google Vertex AI (`aiplatform.googleapis.com`) — see the [Vertex AI batch result logging guide](docs/vertex.md) for async batch jobs
 - Azure OpenAI Service, Azure AI Foundry, and Azure Machine Learning managed online endpoints (dedicated hosts, multi-service Azure AI Services hosts, and serverless/MaaS deployments) — see [Configuration](docs/configuration.md) for the full list of covered hosts
-- AWS Bedrock (`bedrock-runtime.<region>.amazonaws.com`, plus the `.amazonaws.com.cn`, `.api.aws` dual-stack and `bedrock-runtime-fips.<region>` variants — model invoke, Converse and the OpenAI-compatible endpoint)
+- Amazon Bedrock — the standard, FIPS, dual-stack and China-partition runtime hosts; see [Configuration](docs/configuration.md) for the full list of covered hosts
 - Cloudflare AI Gateway
 - OpenRouter
 - OpenCode Zen (`opencode.ai`)
@@ -454,7 +454,7 @@ When a request matches configured LLM endpoints:
 
 1. The original request executes normally
 2. Request and response data (body, headers, status) are captured by the interceptor
-3. For streaming requests, the complete accumulated response is captured (not individual chunks)
+3. For streaming requests, the complete accumulated response is captured (not individual chunks); a stream your code abandons before it ends is logged with the partial body and `stream_incomplete: true` ([details](docs/configuration.md#abandoned-streams-stream_incomplete))
 4. Data is sent to the Coolhand API inline, after the original response is available (bounded by a 5-second connect/read timeout so a slow or unreachable Coolhand backend can't hang your request indefinitely)
 5. Your application continues once the log is sent (or times out) — the original request/response is never blocked on Coolhand being reachable
 
@@ -521,7 +521,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`, `list_step_templates`, `get_step_template`, `search_workloads`, `search_logs`, `get_log`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Step Templates →](docs/step-templates.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
+- The read methods (`search_templates`, `get_template`, `list_step_templates`, `get_step_template`, `search_workloads`, `search_logs`, `get_log`, `failure_summary`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Step Templates →](docs/step-templates.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
 
 ## Documentation
 

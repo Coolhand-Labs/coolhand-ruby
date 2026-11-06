@@ -247,7 +247,7 @@ module Coolhand
 
     def send_complete_request_log(request_id:, method:, url:, request_headers:, request_body:, response_headers:,
       response_body:, status_code:, start_time:, end_time:, duration_ms:, is_streaming:, source_api: nil, model: nil,
-      declared: nil)
+      declared: nil, stream_incomplete: false)
       raw_request = {
         id: request_id,
         timestamp: start_time.iso8601,
@@ -264,6 +264,7 @@ module Coolhand
       }
       raw_request[:source_api] = source_api if Coolhand.required_field?(source_api)
       raw_request[:model] = model if Coolhand.required_field?(model)
+      raw_request[:stream_incomplete] = true if stream_incomplete
 
       request_data = { raw_request: raw_request }
       request_data[:declared] = declared if declared && !declared.empty?

@@ -59,6 +59,15 @@ RSpec.describe Coolhand::BaseInterceptor do
       )
     end
 
+    it "includes stream_incomplete: true only when the stream was abandoned" do
+      described_class.send_complete_request_log(**base_args, stream_incomplete: true)
+      described_class.send_complete_request_log(**base_args, stream_incomplete: false)
+      described_class.send_complete_request_log(**base_args)
+
+      expect(sent.map { |s| s.fetch(:raw_request) }.map { |r| r[:stream_incomplete] }).to eq([true, nil, nil])
+      expect(sent[1].fetch(:raw_request)).not_to have_key(:stream_incomplete)
+    end
+
     it "includes source_api and model when both are present" do
       described_class.send_complete_request_log(**base_args, source_api: "vertex", model: "gemini-2.0-flash")
 

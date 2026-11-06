@@ -98,6 +98,19 @@ end
 
 In every case, only the *captured log entry* is affected — the real request to the LLM provider always sends the complete, untruncated body, and your code always receives the complete response (every streamed chunk is passed to your block untouched).
 
+## Abandoned Streams (`stream_incomplete`)
+
+A streamed response (a `Net::HTTP#request` block that reads the body through a block-form `read_body`, which is what the OpenAI, Anthropic and Gemini Ruby clients use under the hood) that your code stops reading before it ends is logged with whatever had arrived, and `raw_request.stream_incomplete: true`. A response read to its end is sent without the field. The backend then nulls latency, and nulls token counts unless the provider's final usage event is in the captured body; Coolhand never computes tokens, cost or latency for a partial body.
+
+A stream is marked when the body was not read to its end because:
+- your `read_body` block (or the SDK's) `break`s or `throw`s out of it, including right after the provider's terminator (`data: [DONE]`): only reading the body to its end counts as complete
+- your streaming block raises
+- the connection drops or times out mid-body (`EOFError`, `Errno::ECONNRESET`, `Net::ReadTimeout`, ...); the error still propagates to your code as before
+
+Nothing is marked when no part of the body had arrived yet (for example the connection drops before the first chunk, or the block is left before reading): there is no partial body, so the log is the same as before, including the error record for a failure. When a stream fails mid-body (your streaming block raises, or the connection drops), the log holds the partial body and the status of the response, not the exception: its class and message are not recorded. Only one record is sent per call. The `body_too_large` cap is independent of the marker: a body truncated by the cap but read to its end is not marked, and one that is both truncated and abandoned is. The capture buffer is released as soon as the record is sent.
+
+Limits: by default (`ignore_eof`) Net::HTTP does not raise when a response with a `Content-Length` (or one that ends by closing the connection) is cut short, so those are logged as complete. Chunks are captured as Net::HTTP delivers them (already decompressed), so a cut-off gzip body is logged as the text received so far.
+
 ## Custom Intercept Addresses
 
 By default Coolhand captures requests to a built-in list of LLM API hosts (OpenAI, Anthropic, Google Gemini, ElevenLabs, GitHub Models, and more). To capture a custom endpoint — an internal proxy, a self-hosted model server, or a third-party gateway — override `intercept_addresses`:
@@ -117,7 +130,7 @@ Setting `intercept_addresses` **replaces** the default list entirely, so include
 
 The default list can be found in `Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES`.
 
-Each entry is matched against the request's parsed host (optionally with a port and path prefix, see below) — an exact match, or a dot-boundary suffix match (`my-llm-proxy.internal` also matches `eu.my-llm-proxy.internal`) — case-insensitively. A single `*` in an entry matches exactly one host label, e.g. `bedrock-runtime.*.amazonaws.com`. A wildcard entry is an exact host match with no implicit subdomains, so each Bedrock endpoint variant is listed separately (`bedrock-runtime.*.amazonaws.com`, `.amazonaws.com.cn`, `.api.aws`, plus the `bedrock-runtime-fips.*` hosts on `amazonaws.com` and `api.aws`); a VPC interface endpoint host (`vpce-….bedrock-runtime.…`) needs its own entry. Entries are never matched against the full URL, so query strings that merely mention a host can't trigger a false match.
+Each entry is matched against the request's parsed host (optionally with a port and path prefix, see below) — an exact match, or a dot-boundary suffix match (`my-llm-proxy.internal` also matches `eu.my-llm-proxy.internal`) — case-insensitively. A single `*` in an entry matches exactly one host label, e.g. `bedrock-runtime.*.amazonaws.com`. A wildcard entry is an exact host match with no implicit subdomains, so each Amazon Bedrock runtime host is listed separately: `bedrock-runtime.*.amazonaws.com`, `bedrock-runtime.*.amazonaws.com.cn`, `bedrock-runtime.*.api.aws` (dual-stack/IPv6), and the FIPS hosts `bedrock-runtime-fips.*.amazonaws.com` and `bedrock-runtime-fips.*.api.aws`. Hosts outside that set need their own entry — the endpoint-specific DNS name of a VPC interface endpoint (`vpce-….bedrock-runtime.…`; PrivateLink callers with private DNS enabled still address the standard regional host and are already covered), the aws-cn dual-stack shape (`bedrock-runtime.*.api.amazonwebservices.com.cn`) and the Agents for Amazon Bedrock runtime (`bedrock-agent-runtime.*.amazonaws.com`, which serves `InvokeAgent` and `RetrieveAndGenerate`) are not covered by the defaults. Entries are never matched against the full URL, so query strings that merely mention a host can't trigger a false match.
 
 An entry can also pin a port (`host:port`) and/or a path (`host/path`, or `host:port/path`), and then a request must match all of them. Cohere, TypeSafe and Ollama are defaulted this way: `api.cohere.com/v2/chat`, `api.typesafe.ai/v1/systemone`, and `*:11434/api/chat` (plus `/api/generate`, `/api/embed`, `/api/embeddings`, also for `127.0.0.1`). Ollama has no fixed host, so its defaults require Ollama's default port *and* an Ollama path — an app's own unrelated `/api/chat` on another host or port is not captured. To capture an Ollama server on a dotted host or IP, or a non-default port, add entries such as `192.168.1.5:11434/api/chat` or `ollama.internal:8080/api/chat`. An IPv6 loopback server (`[::1]:11434`) is already covered by the defaults.
 
@@ -131,7 +144,7 @@ A small number of Google API endpoints use a colon-suffixed path (e.g. `.../gemi
 
 ## Excluding API Patterns
 
-`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match against the request's path is skipped and never forwarded as an `llm_request_log`. It defaults to a small built-in list (see `Coolhand::Configuration::DEFAULT_EXCLUDE_API_PATTERNS`) that suppresses Vertex AI batch job management noise (`/batchPredictionJobs/`) and Azure OpenAI control-plane paths (file, batch, and fine-tuning management under `/openai/` and `/openai/v1/`) that aren't inference traffic.
+`config.exclude_api_patterns` is a deny-list checked *after* `intercept_addresses` allows a request through — a match against the request's path is skipped and never forwarded as an `llm_request_log`. It defaults to a small built-in list (see `Coolhand::Configuration::DEFAULT_EXCLUDE_API_PATTERNS`) that suppresses Vertex AI batch job management noise (`/batchPredictionJobs/`) and OpenAI-compatible control-plane paths (file, batch, fine-tuning and model-listing management under `/openai/` and `/openai/v1/`) that aren't inference traffic. Those `/openai/` patterns apply to every intercepted host that exposes an OpenAI-compatible surface, Azure OpenAI Service and Amazon Bedrock alike, so narrowing them for one provider narrows them for both.
 
 ```ruby
 Coolhand.configure do |config|

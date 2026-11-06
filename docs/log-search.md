@@ -1,14 +1,15 @@
 # Reading Logs (Search + Get)
 
 `Coolhand::LogService` reads logs back out of Coolhand, with the per-log `cost` the dashboard shows.
-The write side, `Coolhand.logger_service`, is a different class. It wraps two read-only endpoints:
+The write side, `Coolhand.logger_service`, is a different class. It wraps three read-only endpoints:
 
 | method | endpoint |
 |---|---|
 | `search_logs` | `GET /api/v2/llm_request_logs` |
 | `get_log` | `GET /api/v2/llm_request_logs/{id}` |
+| `failure_summary` | `GET /api/v2/llm_request_logs/failure_summary` |
 
-Both require your **private** API key. The public key is write-only on this API and is rejected exactly
+All three require your **private** API key. The public key is write-only on this API and is rejected exactly
 like an invalid one.
 
 ```ruby
@@ -38,6 +39,7 @@ keyword, and the `per_page` alias, since this gem only sends `per`.
 |---|---|---|
 | `template_id`, `workload_id` | String | Hashids. One that does not decode, or that belongs to another client, is a `422`. |
 | `system_prompt_contains`, `user_prompt_contains` | String | Case-insensitive substring. |
+| `error_contains` | String | Case-insensitive substring of the failed request's error text. Pass a `failure_summary` `:error_pattern` to list the logs behind that pattern. |
 | `model`, `source_api`, `source_api_result`, `source_application` | String | Exact match. `source_api_result` is `success`, `failed`, `operational` or `unmatched`. |
 | `project_path` | String | Exact match against `metadata.project_path`. |
 | `unmatched_only` | Boolean | Only logs with no template. |
@@ -91,6 +93,45 @@ output_tokens, cache_read_tokens, cache_creation_tokens }`. The timestamps and t
 are nil when unknown. It is `nil` for a log that is not a captured session, and the key is absent
 unless you ask for it. It holds no content, so it is still returned after the content scrub.
 
+## `failure_summary(days_back: nil)`
+
+```ruby
+summary = Coolhand.log_service.failure_summary(days_back: 30)
+summary[:error_breakdown].each { |p| puts "#{p[:category]} #{p[:count]} #{p[:error_pattern]}" }
+
+# The logs behind the most frequent pattern
+top = summary[:error_breakdown].first
+Coolhand.log_service.search_logs(error_contains: top[:error_pattern]).logs if top
+```
+
+Rolls this client's recent failed requests up by error pattern (error text and `source_api`) and by
+template, and sorts each pattern into whose problem it is. Failures inside a confirmed provider outage
+are left out and counted in `:provider_outage_excluded_count`. Only directly-collected logs whose content
+has not been removed by retention are counted.
+
+`days_back` is the lookback in days (server default 7, max 36500). It is sent only when given and not
+checked here, so `0` or a negative number is a `422` from the server.
+
+Returns the response as one Symbol-keyed Hash, not paginated:
+
+| key | type |
+|---|---|
+| `:client_id`, `:client_name` | String |
+| `:days_analyzed`, `:total_failed_count`, `:provider_outage_excluded_count` | Integer |
+| `:error_breakdown` | Array of the 50 most frequent patterns (below) |
+| `:by_template` | Array of `:template_id` (String or nil), `:template_name`, `:failed_count`, `:error_patterns`, `:example_log_ids`, `:example_log_urls` |
+| `:actionable_summary` | Hash: `:client_fixable_count`, `:server_side_count` |
+
+Each `:error_breakdown` item has `:error_pattern`, `:source_api` (String or nil), `:count`,
+`:first_seen_at`, `:last_seen_at` (ISO8601 Strings), `:category`, `:example_error_details`,
+`:example_log_ids` (up to 3) and `:example_log_urls`. `:category` is `"client_error"` (a 4xx the caller
+can fix), `"rate_limit"` (429), `"server_error"` (5xx), `"provider_error"` (no HTTP status) or
+`"relayed_upstream"` (an upstream vendor's account or key error surfaced through a relay).
+
+The totals and `:actionable_summary` count every pattern, not just the 50 listed. The API definition
+types each `:by_template` `:error_patterns` item only as an open object; today it is `:category`,
+`:count`, `:error` and `:source_api`, and any other key is optional.
+
 ## Errors
 
 The read methods raise where the write methods log and return `nil`. `Coolhand::HttpError` carries
@@ -101,7 +142,7 @@ The read methods raise where the write methods log and return `nil`. `Coolhand::
 | `401` | No API key, an invalid key, or the public key. |
 | `404` | `get_log` only: unknown id, another client's log, or an internally generated record. |
 | `422` | Bad `template_id`, `workload_id`, `days_back`, `since`, `until`, `min_cost`, `order` or `max_chars`. |
-| `504` | The search exceeded the statement timeout. Narrow the window and retry. |
+| `504` | The search or summary exceeded the statement timeout. Narrow the window (for `failure_summary`, a smaller `days_back`) and retry. |
 
 `Coolhand::Error` covers no API key configured, a transport failure, a body that is not valid JSON, a
 non-array list body, and a blank `id` passed to `get_log`. An unsupported `since`/`until` type raises
