@@ -8,6 +8,7 @@ require "zlib"
 
 require_relative "body_stream_tap"
 require_relative "path_normalizer"
+require_relative "stream_read"
 
 module Coolhand
   module NetHttpInterceptor
@@ -22,9 +23,18 @@ module Coolhand
         # freed, and leaks one request's chunks into another's log.
         return super unless block && Thread.current[:coolhand_capturing_stream].equal?(self)
 
-        super do |chunk|
-          Helpers.buffer_stream_chunk(chunk)
-          yield(chunk)
+        finished = false
+        begin
+          result = super do |chunk|
+            Helpers.buffer_stream_chunk(chunk)
+            yield(chunk)
+          end
+          finished = true
+          result
+        ensure
+          # Also runs when the host's block breaks, throws or raises: read_body then never reached the
+          # end of the body, which is what marks the log stream_incomplete.
+          StreamRead.record(finished)
         end
       end
     end
@@ -125,8 +135,10 @@ module Coolhand
       # chunks, mixing one request's content into another's log.
       previous_stream_buffer = Thread.current[:coolhand_stream_buffer]
       previous_capturing_stream = Thread.current[:coolhand_capturing_stream]
+      previous_stream_read = Thread.current[:coolhand_stream_read]
       Thread.current[:coolhand_stream_buffer] = nil
       Thread.current[:coolhand_capturing_stream] = nil
+      Thread.current[:coolhand_stream_read] = nil
       host_block_errors = []
       tracked_block = Helpers.track_streaming_block(block, host_block_errors)
 
@@ -139,9 +151,18 @@ module Coolhand
       ensure
         # First, so the host's own stream is back on its request whatever fails below.
         request_body = Helpers.finalize_request_body(captured_body, req)
+        stream_incomplete = StreamRead.incomplete?
+        # A stream abandoned by break, throw or raise: what was buffered so far is logged (cleaned of a
+        # split multibyte character) instead of the error, or of the capture above after a break.
+        logged_response = response
+        if stream_incomplete
+          logged_response = Thread.current[:coolhand_capturing_stream]
+          status_code, response_body = StreamRead.partial_response(logged_response)
+        end
         active.delete(self)
         Thread.current[:coolhand_stream_buffer] = previous_stream_buffer
         Thread.current[:coolhand_capturing_stream] = previous_capturing_stream
+        Thread.current[:coolhand_stream_read] = previous_stream_read
         end_time = Time.now
         duration_ms = ((end_time - start_time) * 1000).round(2)
 
@@ -153,13 +174,14 @@ module Coolhand
           url: url,
           request_headers: BaseInterceptor.sanitize_headers(req),
           request_body: request_body,
-          response_headers: BaseInterceptor.sanitize_headers(response),
+          response_headers: BaseInterceptor.sanitize_headers(logged_response),
           response_body: response_body,
           status_code: status_code,
           start_time: start_time,
           end_time: end_time,
           duration_ms: duration_ms,
-          is_streaming: !!block
+          is_streaming: !!block,
+          stream_incomplete: stream_incomplete
         )
       end
 
@@ -190,6 +212,7 @@ module Coolhand
 
         proc do |res|
           Thread.current[:coolhand_capturing_stream] = res
+          Thread.current[:coolhand_stream_read] = nil
           block.call(res)
         rescue StandardError => e
           host_block_errors << e unless transport_error?(e)
