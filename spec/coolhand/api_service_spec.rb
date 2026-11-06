@@ -16,7 +16,7 @@ RSpec.describe Coolhand::ApiService do
     it "bounds connect, read and write so a stalled Coolhand upload cannot hang the caller" do
       stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs").to_return(status: 200, body: "{}")
       http = nil
-      allow(Net::HTTP).to receive(:new).and_wrap_original { |original, *args| (http = original.call(*args)) }
+      allow(Net::HTTP).to(receive(:new).and_wrap_original { |original, *args| (http = original.call(*args)) })
 
       described_class.new.send_llm_request_log(method: "POST", url: "https://api.openai.com/v1/chat/completions",
         request_body: {}, response_body: {}, status_code: 200)
