@@ -23,6 +23,7 @@ require_relative "coolhand/api_service"
 require_relative "coolhand/logger_service"
 require_relative "coolhand/feedback_service"
 require_relative "coolhand/template_service"
+require_relative "coolhand/step_template_service"
 require_relative "coolhand/optimization_feedback_link_service"
 require_relative "coolhand/workload_service"
 require_relative "coolhand/help_center_service"
@@ -137,6 +138,12 @@ module Coolhand
     # Coolhand. Needs the private API key - the public key is write-only on this API.
     def template_service
       TemplateService.new
+    end
+
+    # Creates a new StepTemplateService instance, for reading the skills and recurring steps detected
+    # in captured agent sessions. Requires the private API key.
+    def step_template_service
+      StepTemplateService.new
     end
 
     # Creates a new WorkloadService instance, for listing workloads (with optional cost and
