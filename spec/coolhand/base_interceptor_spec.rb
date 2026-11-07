@@ -282,6 +282,18 @@ RSpec.describe Coolhand::BaseInterceptor do
     end
   end
 
+  describe ".sensitive_query_param? with a malformed percent-escape" do
+    # URI.parse rejects such a name inside a whole URL, so this is the guard for callers that hand a
+    # raw name straight in.
+    it "falls back to the raw name, so a credential-like name is still sensitive" do
+      expect(described_class.sensitive_query_param?("api_key%zz")).to be true
+    end
+
+    it "does not flag an undecodable name that is not credential-like" do
+      expect(described_class.sensitive_query_param?("bad%zz")).to be false
+    end
+  end
+
   describe ".sanitize_url" do
     it "redacts presigned-URL credential params for AWS SigV4 and Google Cloud storage URLs, " \
        "not just the small fixed list it used to check" do

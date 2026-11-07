@@ -402,6 +402,24 @@ RSpec.describe Coolhand do
     end
   end
 
+  describe ".feedback_service and .logger_service" do
+    it "build a service on each call" do
+      expect(Coolhand.feedback_service).to be_a(Coolhand::FeedbackService)
+      expect(Coolhand.logger_service).to be_a(Coolhand::LoggerService)
+    end
+  end
+
+  describe "Configuration#validate!" do
+    it "rejects an empty intercept_addresses list, which the setter would otherwise never let through" do
+      allow(Coolhand).to receive(:log)
+      configuration = Coolhand::Configuration.new
+      configuration.instance_variable_set(:@intercept_addresses, [])
+
+      expect { configuration.validate! }.to raise_error(Coolhand::Error, "Intercept addresses cannot be empty")
+      expect(Coolhand).to have_received(:log).with(/Intercept addresses cannot be empty/)
+    end
+  end
+
   describe ".required_field?" do
     it "returns true for valid values" do
       expect(Coolhand.required_field?("valid")).to be true

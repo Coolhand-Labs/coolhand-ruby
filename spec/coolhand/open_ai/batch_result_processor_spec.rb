@@ -390,6 +390,56 @@ RSpec.describe Coolhand::OpenAi::BatchResultProcessor do
       end
     end
 
+    context "when retrieving the batch raises" do
+      it "logs the failure and does not raise into the webhook handler" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_raise(StandardError, "api down")
+
+        expect(Rails.logger).to receive(:error)
+          .with(a_string_including("Failed to process OpenAI batch results").and(a_string_including("api down")))
+        expect { described_class.new(event_data: { "id" => "batch_abc127" }).call }.not_to raise_error
+      end
+    end
+
+    context "when sending one item's log raises" do
+      let(:batch_info) do
+        {
+          "id" => "batch_abc128", "status" => "completed", "input_file_id" => "file-in-send",
+          "output_file_id" => "file-out-send", "in_progress_at" => 1_700_000_000, "completed_at" => 1_700_000_005
+        }
+      end
+
+      it "logs it and still tries the remaining items" do
+        allow(client).to receive_message_chain(:batches, :retrieve).and_return(batch_info)
+        allow(client).to receive_message_chain(:files, :content).and_return(
+          [{ "custom_id" => "c1", "method" => "POST", "url" => "/v1/chat/completions", "body" => {} },
+           { "custom_id" => "c2", "method" => "POST", "url" => "/v1/chat/completions", "body" => {} }],
+          [{ "custom_id" => "c1", "response" => { "request_id" => "r1", "body" => {}, "status_code" => 200 } },
+           { "custom_id" => "c2", "response" => { "request_id" => "r2", "body" => {}, "status_code" => 200 } }]
+        )
+        attempts = 0
+        allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log) do
+          attempts += 1
+          raise "wire failure" if attempts == 1
+        end
+
+        expect(Rails.logger).to receive(:error)
+          .with(a_string_including("Failed to send request log").and(a_string_including("wire failure"))).once
+        described_class.new(event_data: { "id" => "batch_abc128" }).call
+        Coolhand.flush(timeout: 2)
+
+        expect(attempts).to eq(2)
+      end
+    end
+
+    context "when the openai gem cannot be loaded" do
+      it "raises a LoadError that says how to install it" do
+        processor = described_class.new(event_data: { "id" => "batch_abc129" })
+        allow(processor).to receive(:require).with("openai").and_raise(LoadError, "cannot load such file -- openai")
+
+        expect { processor.call }.to raise_error(LoadError, /'openai' gem is required.*gem 'openai'.*cannot load/m)
+      end
+    end
+
     context "when batch status is unrecognized" do
       let(:batch_info) { { "id" => "batch_abc124", "status" => "some_future_status" } }
 

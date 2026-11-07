@@ -216,15 +216,14 @@ machine; that Conductor setting has been cleared.)
   `lib/coolhand/default_intercept_addresses.yml` or
   `lib/coolhand/default_exclude_api_patterns.yml` must be additive —
   flag anything that silently drops a previously-covered host or pattern.
-  Every user-visible change needs a `CHANGELOG.md` entry in Keep a
-  Changelog format (match the style of existing entries, e.g. the
-  plain-English migration notes in the `0.5.0` entry) under `[Unreleased]`
-  — this applies whether or not the change is breaking; see Documentation
-  below. Version bumps in `lib/coolhand/version.rb` happen at the release
-  boundary (`/prep-release`), not per-PR, so don't flag a diff for
-  lacking one. If a break is necessary, the CHANGELOG entry must also
-  explain the migration path in plain English, so `/prep-release` has
-  what it needs to pick the right version (consistent with this repo's
+  Per `AGENTS.md` ("Changelog and versioning"), `/prep-release` is the
+  sole owner of `CHANGELOG.md` and `lib/coolhand/version.rb`: feature and
+  fix branches must not edit either, so flag a diff that does, and don't
+  flag one for lacking an entry or a bump. What a user-visible change does
+  need is a PR description that states the behavior change, and for a
+  break the plain-English migration path (match the style of the
+  `0.5.0` changelog entry), so `/prep-release` has what it needs to write
+  the entry and pick the right version (consistent with this repo's
   own SemVer history) at the release boundary. Also check the
   optional-provider-dependency rule from this repo's `AGENTS.md`: provider
   SDK `require`s (`openai`, `anthropic`, `google-generativeai`, etc.) must
@@ -248,9 +247,8 @@ machine; that Conductor setting has been cleared.)
   provider/framework integration gets its own `docs/<name>.md` linked
   from the README's Documentation section, and headings/provider names
   should use full names for SEO/AEO ("OpenAI", "Anthropic", "Google
-  Gemini") rather than abbreviations. Flag a missing `CHANGELOG.md`
-  `[Unreleased]` entry for user-visible changes, and any README/docs left
-  stale or inconsistent with the code change.
+  Gemini") rather than abbreviations. Flag any README/docs left stale or
+  inconsistent with the code change.
 - **Testing**: new or changed behavior lacking corresponding RSpec
   coverage under `spec/coolhand/`, and existing specs weakened (loosened
   matchers, removed assertions) to make them pass rather than fixing the
