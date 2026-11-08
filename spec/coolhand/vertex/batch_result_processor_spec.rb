@@ -381,6 +381,43 @@ RSpec.describe Coolhand::Vertex::BatchResultProcessor do
       end
     end
 
+    context "when handing the completed batch to the log queue raises" do
+      let(:batch_info) { { "displayName" => "batch_z", "state" => "JOB_STATE_SUCCEEDED" } }
+
+      it "logs the failure and does not raise" do
+        allow(Coolhand::LogQueue).to receive(:submit).and_raise(StandardError, "queue broke")
+
+        expect(Rails.logger).to receive(:error)
+          .with(a_string_including("Failed to process Vertex batch results").and(a_string_including("queue broke")))
+        expect { described_class.new(batch_info: batch_info).call([{ "request" => {}, "response" => {} }]) }
+          .not_to raise_error
+      end
+    end
+
+    context "when sending one item's log raises" do
+      let(:batch_info) do
+        { "name" => "projects/1/locations/us/batchPredictionJobs/1", "displayName" => "batch_w",
+          "startTime" => "2026-01-04T20:16:56.310023Z", "endTime" => "2026-01-04T20:21:38.785842Z",
+          "state" => "JOB_STATE_SUCCEEDED" }
+      end
+
+      it "logs it and still tries the remaining items" do
+        attempts = 0
+        allow(Coolhand::BaseInterceptor).to receive(:send_complete_request_log) do
+          attempts += 1
+          raise "wire failure" if attempts == 1
+        end
+        item = { "request" => { "input" => "foo" }, "response" => { "output" => "bar" } }
+
+        expect(Rails.logger).to receive(:error)
+          .with(a_string_including("Failed to send request log").and(a_string_including("wire failure"))).once
+        described_class.new(batch_info: batch_info).call([item, item])
+        Coolhand.flush(timeout: 2)
+
+        expect(attempts).to eq(2)
+      end
+    end
+
     context "when batch state is unrecognized" do
       let(:batch_info) { { "displayName" => "batch_y", "state" => "JOB_STATE_SOME_FUTURE_STATE" } }
 

@@ -109,6 +109,17 @@ RSpec.describe Coolhand::NetHttpInterceptor, "chunked body_stream capture" do # 
     expect(stream.read_calls).not_to include(nil)
   end
 
+  it "logs a nil request body, and does not raise, when resolving a tapped body fails" do
+    tapped = Coolhand::NetHttpInterceptor::BodyStreamTap.allocate
+    allow(tapped).to receive(:restore_stream).and_raise("tap broke")
+    allow(Coolhand).to receive(:log)
+
+    body = described_class::Helpers.finalize_request_body(tapped, Net::HTTP::Post.new("/v1/chat/completions"))
+
+    expect(body).to be_nil
+    expect(Coolhand).to have_received(:log).with(/Error capturing request body: tap broke/)
+  end
+
   it "puts the host's own stream back on the request once it has been sent" do
     stream = StringIO.new('{"a":1}')
     req = chunked_post(stream)
