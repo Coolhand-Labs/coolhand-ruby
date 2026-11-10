@@ -41,9 +41,14 @@ environment, which may wait for a human approval. Say so in the final report.
    - `CHANGELOG.md` has a `## [X.Y.Z]` heading and `## [Unreleased]` is empty.
    - `X.Y.Z` is greater than the latest tag (`git describe --tags --abbrev=0
      origin/main`).
-4. The PR is open, not a draft, `mergeStateStatus` is `CLEAN`, and every check
-   passes (`gh pr checks <n>`). A red or pending check, or a conflict, stops the
-   run: report it, don't merge around it.
+4. The PR is open, not a draft, and every check passes (`gh pr checks <n>`).
+   `mergeStateStatus` is `CLEAN`, or `BLOCKED` solely because of the "only
+   maintainers can merge" ruleset: the checks are all green, no review is
+   outstanding or requesting changes, and an active ruleset of that name exists
+   (`gh api repos/{owner}/{repo}/rulesets --jq '.[] | select(.enforcement ==
+   "active") | .name'`). Record which of the two it is; Phase 2 needs it. A red
+   or pending check, a conflict, a `BLOCKED` state with any other cause, or a
+   `BEHIND`/`DIRTY` state stops the run: report it, don't merge around it.
 5. The tag does not already exist, locally (`git tag -l vX.Y.Z`) or on the
    remote (`git ls-remote --tags origin 'vX.Y.Z*'`), and no release exists
    (`gh release view vX.Y.Z` fails). If the tag exists but the release does not,
@@ -57,8 +62,14 @@ environment, which may wait for a human approval. Say so in the final report.
    --body-file .context/release-pr-body.md`. The title is `release vX.Y.Z`; the
    `(#<n>)` suffix is added by hand because `--subject` is used verbatim and the
    history reads `release v0.9.0 (#157)`. The PR description is the squash
-   commit body; add no other text or attribution. Never `--admin` and never
-   bypass a required check. If the merge is refused, stop and report.
+   commit body; add no other text or attribution. Try the plain merge first.
+   If it is refused with "the base branch policy prohibits the merge" and
+   Phase 1 step 4 found the "only maintainers can merge" ruleset to be the
+   only blocker, run the same command once more with `--admin`: that
+   ruleset is the one thing `--admin` may bypass. Never use `--admin` for a
+   failing or pending check, a conflict, a missing review, or any other
+   ruleset or branch protection, and never retry it a second time. For any
+   other refusal, stop and report.
 3. `git fetch origin main --tags`. Take the merge commit from `gh pr view <n>
    --json mergeCommit --jq .mergeCommit.oid` and check
    `git show <sha>:lib/coolhand/version.rb` still says `X.Y.Z`.
@@ -143,6 +154,10 @@ State, in the final message:
 - *"The version file on my branch says X.Y.Z, close enough."* Read it from the
   PR head before merging and from the merge commit after. Tagging a stale
   checkout publishes the wrong code.
+- *"`--admin` got the merge through last time, so I'll just use it."* Only
+  for the "only maintainers can merge" ruleset, and only after the plain merge
+  was refused and every check is green. If the block is anything else, it is
+  not a ruleset to bypass: stop and report.
 - *"Checks are probably green, I'll merge."* Run `gh pr checks`. A release
   doesn't ship on a red or pending build.
 - *"The default squash message is fine."* The title (`release vX.Y.Z (#n)`) and
