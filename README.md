@@ -117,6 +117,18 @@ step[:metrics][:notes]
 
 For the parameters, `metrics` fields and errors, see [Reading Step Templates →](docs/step-templates.md).
 
+### Realized savings
+
+`Coolhand.savings_service.get_realized_savings` returns what you saved by switching templates or models, in total and per workload, with the same private API key. It takes no parameters; a `503` means the figure could not be computed right now and is not zero savings.
+
+```ruby
+savings = Coolhand.savings_service.get_realized_savings
+savings[:total]   # USD saved against the deprecated versions
+savings[:percent] # share of what they would have cost
+```
+
+For the return value, errors, and joining it with workload metrics, see [Reading Realized Savings →](docs/savings.md).
+
 ### Cost and performance metrics
 
 Pass `include_metrics: true` to `search_templates` (or `search_workloads`) for the dashboard's cost and performance numbers, over a rolling `days_back` window or an explicit `since:` / `until:` one. `search_logs` carries each log's `cost` and can sort and filter by it. `failure_summary` rolls failed requests up by error pattern and template, and `search_logs(error_contains:)` lists the logs behind a pattern.
@@ -521,7 +533,7 @@ The monitor handles errors gracefully:
 - Failed API logging attempts are logged to console but don't interrupt your application
 - Invalid API keys will be reported but won't crash your app
 - Network issues are handled with appropriate error messages
-- The read methods (`search_templates`, `get_template`, `list_step_templates`, `get_step_template`, `search_workloads`, `search_logs`, `get_log`, `failure_summary`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Step Templates →](docs/step-templates.md), [Reading Workloads →](docs/workload-search.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
+- The read methods (`search_templates`, `get_template`, `list_step_templates`, `get_step_template`, `search_workloads`, `get_realized_savings`, `search_logs`, `get_log`, `failure_summary`, `search_help_articles`, `get_help_article`, `list_help_categories`), the feedback-link methods and the `upsert` methods are the exception — they raise `Coolhand::Error` (`Coolhand::HttpError` for non-2xx responses); see [Reading Templates →](docs/template-search.md), [Reading Step Templates →](docs/step-templates.md), [Reading Workloads →](docs/workload-search.md), [Reading Realized Savings →](docs/savings.md), [Reading Logs →](docs/log-search.md), [Linking Feedback →](docs/feedback-links.md) and [Declared Workloads →](docs/declared_workloads.md)
 
 ## Documentation
 
@@ -530,6 +542,7 @@ The monitor handles errors gracefully:
 - **[Reading Templates](docs/template-search.md)** — Search LLM request templates and fetch a single one, prompt patterns included, using the private API key
 - **[Reading Step Templates](docs/step-templates.md)** — List the skills and recurring steps detected in captured agent sessions, with run and efficiency metrics, using the private API key
 - **[Reading Workloads](docs/workload-search.md)** — List workloads with optional cost and performance metrics over a rolling or explicit time window
+- **[Reading Realized Savings](docs/savings.md)** — Fetch the saving realized by switching templates or models, in total and per workload, and join it with workload metrics
 - **[Reading Logs](docs/log-search.md)** — Search logs with per-log cost, filter and sort by cost, and fetch one log with its cost breakdown
 - **[Reading the Help Center](docs/help-center.md)** — Search and read Coolhand's help center articles and list its sections, with no API key required
 - **[Linking Feedback](docs/feedback-links.md)** — Link feedback to an optimization as evidence, singly or in bulk, using the private API key

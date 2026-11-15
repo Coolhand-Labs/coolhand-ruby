@@ -60,6 +60,27 @@ RSpec.describe Coolhand, if: LIVE do
     end
   end
 
+  describe "savings" do
+    it "returns the realized-savings shape, with the baseline at least the saving" do
+      result = Coolhand.savings_service.get_realized_savings
+
+      expect(result).to include(:total, :cost_at_previous_versions, :percent, :workloads)
+      expect(result.values_at(:total, :cost_at_previous_versions, :percent)).to all(be_a(Numeric))
+      expect(result[:total]).to be <= result[:cost_at_previous_versions]
+      expect(result[:workloads]).to all(
+        include(:id, :name, :savings, :cost_at_previous_versions, :active_requests)
+      )
+      expect(result[:workloads].map { |row| row[:id] }).to all(be_a(String))
+    end
+
+    it "raises 401 for an invalid key" do
+      Coolhand.configuration.api_key = "not-a-real-key"
+
+      expect { Coolhand.savings_service.get_realized_savings }
+        .to raise_error(Coolhand::HttpError) { |e| expect(e.status).to eq(401) }
+    end
+  end
+
   describe "templates" do
     it "lists metrics for a days_back window and shows one for an explicit window" do
       list = Coolhand.template_service.search_templates(include_metrics: true, days_back: 365, per: 3)
