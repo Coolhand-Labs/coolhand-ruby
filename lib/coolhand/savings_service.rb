@@ -27,10 +27,7 @@ module Coolhand
     #
     # The name is the API definition's operationId; this is a network read, not an accessor.
     def get_realized_savings # rubocop:disable Naming/AccessorMethodName
-      body = get_json(api_endpoint, ERROR_NOUN)
-      raise Error, "#{ERROR_NOUN} response was not a JSON object" unless body.is_a?(Hash)
-
-      body
+      ensure_json_object!(get_json(api_endpoint, ERROR_NOUN), ERROR_NOUN)
     end
   end
 end

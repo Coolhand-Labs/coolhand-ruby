@@ -45,6 +45,12 @@ module Coolhand
       true
     end
 
+    def ensure_json_object!(result, noun)
+      raise Error, "#{noun} response was not a JSON object" unless result.is_a?(Hash)
+
+      result
+    end
+
     private
 
     def perform_get(url, noun)
