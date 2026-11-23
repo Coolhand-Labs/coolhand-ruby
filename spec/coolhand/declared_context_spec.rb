@@ -147,6 +147,66 @@ RSpec.describe Coolhand::DeclaredContext do
       expect(seen).to be_nil
     end
 
+    describe "client_unique_id:" do
+      before { Coolhand.configuration.silent = true }
+
+      it "is a real keyword, so callers can feature-detect it" do
+        expect(Coolhand.method(:with_context).parameters).to include(%i[key client_unique_id])
+      end
+
+      it "is exposed as a frozen copy inside the block" do
+        id = +"abc.1"
+        Coolhand.with_context(client_unique_id: id) do
+          id << "x"
+          expect(described_class.current).to eq(client_unique_id: "abc.1")
+          expect(described_class.current[:client_unique_id]).to be_frozen
+        end
+      end
+
+      it "nests with the innermost block winning, and an unset inner block inheriting" do
+        Coolhand.with_context(client_unique_id: "outer", workload: { key: "w" }) do
+          Coolhand.with_context(template: { key: "t" }) do
+            expect(described_class.current[:client_unique_id]).to eq("outer")
+          end
+          Coolhand.with_context(client_unique_id: "inner") do
+            expect(described_class.current[:client_unique_id]).to eq("inner")
+          end
+          expect(described_class.current[:client_unique_id]).to eq("outer")
+        end
+        expect(described_class.current).to be_nil
+      end
+
+      it "is restored after the block raises" do
+        expect { Coolhand.with_context(client_unique_id: "x") { raise "boom" } }.to raise_error("boom")
+        expect(described_class.current).to be_nil
+      end
+
+      it "accepts exactly 255 characters" do
+        id = "a" * 255
+        Coolhand.with_context(client_unique_id: id) { expect(described_class.current[:client_unique_id]).to eq(id) }
+      end
+
+      [nil, "", "   ", "a" * 256, "a\nb", "a\u0000b", "a\u200Bb", 42, :sym, ["a"], (+"\xFF").force_encoding("UTF-8")]
+        .each do |bad|
+        it "drops #{bad.inspect[0, 20]} and still runs the block" do
+          ran = false
+          Coolhand.with_context(client_unique_id: bad) do
+            ran = true
+            expect(described_class.current).to be_nil
+          end
+          expect(ran).to be true
+        end
+      end
+
+      it "keeps the outer id when an inner one is invalid" do
+        Coolhand.with_context(client_unique_id: "outer") do
+          Coolhand.with_context(client_unique_id: "") do
+            expect(described_class.current[:client_unique_id]).to eq("outer")
+          end
+        end
+      end
+    end
+
     it "is cleared by reset_configuration!" do
       Thread.current[described_class::THREAD_KEY] = { reporter: "x" }
       Coolhand.reset_configuration!
@@ -207,6 +267,39 @@ RSpec.describe Coolhand::DeclaredContext do
 
       expect(posted.map { |p| p.dig("llm_request_log", "declared", "workload", "key") })
         .to contain_exactly("Parser#call", "Other#call")
+    end
+
+    it "sends client_unique_id on the log, outside declared" do
+      Coolhand.with_context(client_unique_id: "abc.1", workload: { key: "Parser#call" }) { call_llm }
+
+      log = posted.fetch(0).fetch("llm_request_log")
+      expect(log["client_unique_id"]).to eq("abc.1")
+      expect(log["declared"]).to eq("workload" => { "key" => "Parser#call" })
+    end
+
+    it "omits declared when only a client_unique_id is set" do
+      Coolhand.with_context(client_unique_id: "abc.1") { call_llm }
+
+      log = posted.fetch(0).fetch("llm_request_log")
+      expect(log["client_unique_id"]).to eq("abc.1")
+      expect(log).not_to have_key("declared")
+    end
+
+    it "omits client_unique_id outside a context or when it was invalid" do
+      call_llm
+      Coolhand.with_context(client_unique_id: "") { call_llm }
+
+      posted.each { |p| expect(p.fetch("llm_request_log")).not_to have_key("client_unique_id") }
+    end
+
+    it "keeps the client_unique_id when logs are sent from the background queue" do
+      Coolhand.configuration.async_logging = true
+
+      Coolhand.with_context(client_unique_id: "abc.1") { call_llm }
+      Coolhand.with_context(client_unique_id: "abc.2") { call_llm }
+      expect(Coolhand.flush(timeout: 2)).to be true
+
+      expect(posted.map { |p| p.dig("llm_request_log", "client_unique_id") }).to contain_exactly("abc.1", "abc.2")
     end
 
     it "logs warnings the server returns for an ignored declaration" do
