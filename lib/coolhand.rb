@@ -26,6 +26,7 @@ require_relative "coolhand/template_service"
 require_relative "coolhand/step_template_service"
 require_relative "coolhand/optimization_feedback_link_service"
 require_relative "coolhand/workload_service"
+require_relative "coolhand/savings_service"
 require_relative "coolhand/help_center_service"
 require_relative "coolhand/log_service"
 require_relative "coolhand/webhook_interceptor"
@@ -154,6 +155,12 @@ module Coolhand
     # performance metrics). Needs the private API key.
     def workload_service
       WorkloadService.new
+    end
+
+    # Creates a new SavingsService instance, for reading the client's realized savings. Needs the
+    # private API key.
+    def savings_service
+      SavingsService.new
     end
 
     # Creates a new LogService instance, for reading logs back out of Coolhand. Distinct from

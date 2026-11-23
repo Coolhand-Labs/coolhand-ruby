@@ -22,7 +22,8 @@ module Coolhand
     def link_feedback(optimization_id, feedback_id, note: nil)
       validate_id!("link_feedback", "feedback_id", feedback_id)
       url = links_url("link_feedback", optimization_id)
-      ensure_object!(request_json(:post, url, ERROR_NOUN, body: { feedback_id: feedback_id.strip, note: note }.compact))
+      result = request_json(:post, url, ERROR_NOUN, body: { feedback_id: feedback_id.strip, note: note }.compact)
+      ensure_json_object!(result, ERROR_NOUN)
     end
 
     # Lists over 100 ids are sent in batches; a failing batch raises and earlier ones stay applied,
@@ -56,16 +57,10 @@ module Coolhand
     private
 
     def merge_bulk_result!(totals, result)
-      ensure_object!(result)
+      ensure_json_object!(result, ERROR_NOUN)
 
       %i[linked already_linked errored].each { |key| totals[key] += result[key].to_i }
       totals[:not_found].concat(Array(result[:not_found]))
-    end
-
-    def ensure_object!(result)
-      raise Error, "#{ERROR_NOUN} response was not a JSON object" unless result.is_a?(Hash)
-
-      result
     end
 
     def links_url(method_name, optimization_id)
