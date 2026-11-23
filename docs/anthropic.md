@@ -305,31 +305,31 @@ threads.each(&:join)
 
 ### Request Correlation
 
-Access the current request ID for correlation:
+Tag a request with your own id, then send feedback against it:
 
 ```ruby
 client = Anthropic::Client.new
 
-response = client.messages(
-  parameters: {
-    model: "claude-3-sonnet-20240229",
-    max_tokens: 1000,
-    messages: [{ role: "user", content: "Hello" }]
-  }
-)
+Coolhand.with_context(client_unique_id: "support-ticket-123.1") do
+  client.messages(
+    parameters: {
+      model: "claude-3-sonnet-20240229",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: "Hello" }]
+    }
+  )
+end
 
-# Get the request ID that was logged to Coolhand
-request_id = Thread.current[:coolhand_current_request_id]
-puts "Logged to Coolhand with ID: #{request_id}"
-
-# Use this ID for feedback or debugging
-feedback_service = Coolhand::FeedbackService.new(Coolhand.configuration)
-feedback_service.create_feedback(
-  llm_request_log_id: request_id,
+# The log is tagged with the id above, so feedback can be matched to that request
+Coolhand.flush # logs are sent in the background; make sure this one has been delivered
+Coolhand.feedback_service.create_feedback(
+  client_unique_id: "support-ticket-123.1",
   sentiment: "like",
   explanation: "Great response quality"
 )
 ```
+
+See [Declaring workloads and templates](declared_workloads.md#linking-feedback-to-a-request) for the id rules.
 
 ## Troubleshooting
 

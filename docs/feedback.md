@@ -27,6 +27,17 @@ feedback_service.create_feedback(
 )
 ```
 
+To link feedback to a specific request without storing the log ID, tag the request with your own id first:
+
+```ruby
+Coolhand.with_context(client_unique_id: 'order-42.1') do
+  client.chat(...) # logged with client_unique_id 'order-42.1'
+end
+
+Coolhand.flush # logs are sent in the background; make sure this one has been delivered
+feedback_service.create_feedback(client_unique_id: 'order-42.1', sentiment: 'like')
+```
+
 ---
 
 ## Field Reference
@@ -41,7 +52,7 @@ These fields identify which LLM request the feedback refers to. Use the most spe
 |---|---|---|
 | `llm_request_log_id` | Exact | Hashid returned when the original request was logged (a raw integer FK is also still accepted for backward compatibility). Most reliable. |
 | `llm_provider_unique_id` | Exact | The provider's own request ID (e.g. `x-request-id` from Anthropic or OpenAI). |
-| `client_unique_id` | Exact | Your own internal identifier for the request (e.g. a database row ID). |
+| `client_unique_id` | Exact | Your own identifier for the request. Stamp it on the log with [`Coolhand.with_context(client_unique_id:)`](declared_workloads.md#linking-feedback-to-a-request), then pass the same value here. |
 | `original_output` | Fuzzy | The raw text the LLM produced. Used for fuzzy matching when no ID is available — less reliable. |
 
 ### Quality Signals

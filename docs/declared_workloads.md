@@ -24,6 +24,7 @@ end
 | `reporter` | String | Who is making the declaration, e.g. the library or app. Used when a record is first created. |
 | `workload` | Hash: `id`, `key`, `name`, `description` | Needs an `id` or a `key`. Other keys are ignored. |
 | `template` | Hash: `id`, `key`, `name` | Needs an `id` or a `key`. Other keys are ignored. |
+| `client_unique_id` | String | Your own id for the request, so feedback can find it. See [Linking feedback to a request](#linking-feedback-to-a-request). |
 
 - `id` refers to an existing record. `key` is a stable string of your choosing; Coolhand finds or creates the record with that key. On a template, `id` wins over `key`.
 - `name`, `description` and `reporter` are used only when a record is **first created**. Declaring never renames or re-attributes an existing record; use `upsert` for that. A display name that is already taken gets a numeric suffix, and names such as "Unmatched" are reserved.
@@ -35,7 +36,7 @@ end
 
 ### Nesting
 
-Blocks nest. Each field (`reporter`, `workload`, `template`) is taken from the innermost block that sets it, and fields an inner block leaves out are inherited (with the one exception below):
+Blocks nest. Each field (`reporter`, `workload`, `template`, `client_unique_id`) is taken from the innermost block that sets it, and fields an inner block leaves out are inherited (with the one exception below):
 
 ```ruby
 Coolhand.with_context(reporter: "my-app", workload: { key: "Parser#call" }) do
@@ -48,6 +49,28 @@ end
 A template belongs to a workload, so an inner block that declares a `workload` without a `template` does not inherit the outer block's template. Declare both together when you change workload.
 
 A `workload` or `template` Hash is replaced as a whole, not merged key by key. An inner `workload: { key: "b" }` inside an outer `workload: { id: "a" }` declares only `b`, rather than a mix of `id` and `key`.
+
+### Linking feedback to a request
+
+`client_unique_id` stamps an id of your own on every log captured in the block. Pass the same id to `create_feedback` so the feedback can be matched to that request exactly, instead of by fuzzy `original_output` comparison.
+
+```ruby
+Coolhand.with_context(workload: { key: "Triage#call" }, client_unique_id: "abc.1") do
+  client.chat(...) # logged with client_unique_id "abc.1"
+end
+
+Coolhand.feedback_service.create_feedback(
+  client_unique_id: "abc.1",
+  sentiment: "dislike",
+  revised_output: "..."
+)
+```
+
+- It must be a non-blank String of at most 255 characters with no control or invisible characters. An invalid value is **ignored** rather than raised: your block still runs and the call is logged, just without the id.
+- Use an id that is unique per request (e.g. `"<call_id>.<n>"`). Every call inside the block carries the same id, so wrap one LLM call per block when you need to tell them apart.
+- Logs are sent in the background by default, so call `Coolhand.flush` before `create_feedback` if the feedback might otherwise arrive before the request it refers to.
+- It travels as `llm_request_log.client_unique_id`, not inside `declared`, and it works without a `workload` or `template`.
+- Matching happens on the Coolhand server, so whether the id is honoured depends on the server version. What happens when two logs share an id is also decided by the server.
 
 ### Threads and background logging
 

@@ -267,7 +267,11 @@ module Coolhand
       raw_request[:stream_incomplete] = true if stream_incomplete
 
       request_data = { raw_request: raw_request }
+      # client_unique_id rides in the snapshot but is a log attribute, not workload identity.
+      client_unique_id = declared&.dig(:client_unique_id)
+      declared = declared&.except(:client_unique_id)
       request_data[:declared] = declared if declared && !declared.empty?
+      request_data[:client_unique_id] = client_unique_id if client_unique_id
 
       LogQueue.submit do
         Coolhand::ApiService.new.send_llm_request_log(request_data)
