@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-23
+
+### Added
+- `Coolhand.savings_service.get_realized_savings` ([#220](https://github.com/Coolhand-Labs/coolhand-ruby/pull/220)) reads the client's realized savings (`GET /api/v2/savings`): what requests on the current templates cost versus the deprecated versions they replaced, in total and per workload. It takes no parameters and returns one Symbol-keyed Hash. A non-2xx response raises `Coolhand::HttpError`; a `503` means the figure could not be computed right now and is not zero savings. Needs the private API key. See [Reading Realized Savings](docs/savings.md).
+- `Coolhand.with_context(client_unique_id: "abc.1") { ... }` ([#222](https://github.com/Coolhand-Labs/coolhand-ruby/pull/222)) stamps your own id on every log captured in the block, so `create_feedback(client_unique_id: "abc.1")` has a log-side id to match. It nests like the other fields (innermost wins, restored on exit) and works without a workload or template. The id is sent as top-level `llm_request_log.client_unique_id`, not inside `declared`. **Note:** Coolhand's server does not yet persist or match `client_unique_id` on logs, so the field has no effect until that ships. See [Declared Workloads](docs/declared_workloads.md).
+
+### Changed
+- An invalid `client_unique_id` (not a String, blank, over 255 characters, or containing control or invisible characters) is ignored and logged rather than raised, so a bad correlation id never breaks your LLM call or risks a 422 on the log ([#222](https://github.com/Coolhand-Labs/coolhand-ruby/pull/222)).
+- Docs: `docs/anthropic.md` "Request Correlation" no longer references the nonexistent `Thread.current[:coolhand_current_request_id]` or `FeedbackService.new(Coolhand.configuration)`, and `docs/feedback.md` documents the `client_unique_id` flow ([#222](https://github.com/Coolhand-Labs/coolhand-ruby/pull/222)).
+- Internal: the "response was not a JSON object" check now lives in `ReadRequests#ensure_json_object!`, shared by the savings and optimization feedback link services ([#220](https://github.com/Coolhand-Labs/coolhand-ruby/pull/220)).
+- The `/finish-release` skill may use `gh pr merge --admin` only to bypass the "only maintainers can merge" ruleset, after a plain merge is refused and every check is green ([#217](https://github.com/Coolhand-Labs/coolhand-ruby/pull/217)).
+
+### Dependencies
+- `ruby/setup-ruby` bumped to 1.338.0 in CI and the publish workflow ([#218](https://github.com/Coolhand-Labs/coolhand-ruby/pull/218)).
+
 ## [0.11.0] - 2026-11-06
 
 ### Added
