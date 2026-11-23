@@ -190,6 +190,12 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized["accept"]).to eq("application/json")
     end
 
+    it "redacts a bearer token whole even when the value contains a newline" do
+      sanitized = described_class.sanitize_headers("Authorization" => "Bearer sk-first\nsk-second")
+
+      expect(sanitized["Authorization"]).to eq("Bearer [REDACTED]")
+    end
+
     it "enumerates a header-like object that only responds to each_header, redacting sensitive values" do
       headers = Class.new do
         def each_header

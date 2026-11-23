@@ -73,7 +73,7 @@ module Coolhand
 
         if key_down == "authorization"
           sanitized[k] = if v.to_s.match?(/\ABearer\s+/i)
-            v.to_s.gsub(/\ABearer\s+.+/i, "Bearer [REDACTED]")
+            v.to_s.gsub(/\ABearer\s+.+/im, "Bearer [REDACTED]")
           else
             "[REDACTED]"
           end
