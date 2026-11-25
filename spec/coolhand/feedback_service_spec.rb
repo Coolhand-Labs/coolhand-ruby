@@ -453,6 +453,18 @@ RSpec.describe Coolhand::FeedbackService do
         expect(WebMock).to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
       end
 
+      it "does not wait for a log queued by a different process, and still sends" do
+        allow(config).to receive(:async_logging).and_return(true)
+        release = Queue.new
+        Coolhand::LogQueue.submit(client_unique_id: "abc.1") { release.pop }
+        allow(Process).to receive(:pid).and_return(Process.pid + 1) # as in a forked child
+
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        expect(service.create_feedback(feedback)).to eq({ id: "fb1" })
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+        release << true
+      end
+
       it "does not wait when feedback has no client_unique_id" do
         allow(Coolhand::LogQueue).to receive(:await_delivery)
 

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Credentials in URL-valued headers are redacted. A header value that holds a URL (`Location`, `Referer`, `Link`, an upload-URL header) went to Coolhand as is, so a presigned signature or API key in its query string was logged even though the request URL itself was scrubbed. They now go through the same query-string scrub as the request URL.
+- A 2xx response from Coolhand whose body is the JSON literal `null` now counts as a delivered log, like a blank or non-JSON 2xx body. Before, it made the send look failed, so `Coolhand.flush` returned `false` and a `create_feedback` waiting on that `client_unique_id` was skipped, even though Coolhand had stored the log.
 - `Coolhand.configuration.inspect` no longer prints the API key, so `p config` or a logged config object can't leak it.
 - An exception raised by host code whose own `#message` or `#status` raises no longer replaces the host's original error while Coolhand records it.
 - The logged URL no longer drops the `/` before a slash-less request path ([#235](https://github.com/Coolhand-Labs/coolhand-ruby/pull/235)). Requests that reach `Net::HTTP` with a path such as `v1/messages` (the Anthropic SDK's Bedrock client does this) were logged as `https://bedrock-runtime.us-east-1.amazonaws.comv1/messages`, which broke provider classification downstream. The same URL feeds the intercept check, so host and path matching now also work for slash-less paths, which were silently skipped before.

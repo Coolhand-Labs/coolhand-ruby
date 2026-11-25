@@ -106,10 +106,10 @@ module Coolhand
       parse_success_body(response.body)
     end
 
-    # The server already accepted the request, so a blank or non-JSON 2xx body (a 204, say) is still
-    # a delivery: reporting it as a failure would make a retrying caller store it twice.
+    # The server already accepted the request, so a blank, non-JSON or `null` 2xx body (a 204, say) is
+    # still a delivery: reporting it as a failure would make a retrying caller store it twice.
     def parse_success_body(body)
-      JSON.parse(body.to_s, symbolize_names: true)
+      JSON.parse(body.to_s, symbolize_names: true) || {}
     rescue JSON::ParserError
       {}
     end

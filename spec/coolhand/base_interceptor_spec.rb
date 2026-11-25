@@ -154,6 +154,18 @@ RSpec.describe Coolhand::BaseInterceptor do
       expect(sanitized["Content-Type"]).to eq("application/json")
     end
 
+    it "fails closed on a header URL that does not parse, dropping its userinfo and query" do
+      sanitized = described_class.sanitize_headers(
+        "Location" => "https://user:pw@bad[host.example/a?token=zzz",
+        "X-Other" => "see https://u:pw@[bad/p?api_key=abc for details"
+      )
+
+      expect(sanitized["Location"]).not_to include("pw", "zzz")
+      expect(sanitized["X-Other"]).not_to include("pw", "abc")
+      expect(sanitized["X-Other"]).to start_with("see ")
+      expect(sanitized["X-Other"]).to end_with("for details")
+    end
+
     it "leaves a URL-valued header without credentials as it was" do
       headers = { "Referer" => "https://app.example.com/page?tab=2" }
 
