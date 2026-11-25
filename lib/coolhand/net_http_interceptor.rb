@@ -506,7 +506,9 @@ module Coolhand
 
         url = "#{scheme}://#{host}"
         url << ":#{port}" if port != default
-        url << req.path
+        path = req.path.to_s
+        path = "/#{path}" unless path.start_with?("/")
+        url << path
         url
       end
     end

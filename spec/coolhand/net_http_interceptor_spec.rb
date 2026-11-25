@@ -1497,6 +1497,56 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     end
   end
 
+  describe "issue #232 — leading slash in built request URL" do
+    let(:interceptor) { Coolhand::NetHttpInterceptor::Helpers }
+
+    def build_url(host, path, port: 443, ssl: true)
+      http = Net::HTTP.new(host, port)
+      http.use_ssl = ssl
+      interceptor.build_url_for_request(http, Net::HTTP::Post.new(path))
+    end
+
+    it "adds the missing slash between host and a slash-less path" do
+      expect(build_url("bedrock-runtime.us-east-1.amazonaws.com", "v1/messages"))
+        .to eq("https://bedrock-runtime.us-east-1.amazonaws.com/v1/messages")
+    end
+
+    it "leaves a path that already starts with a slash unchanged" do
+      expect(build_url("api.example.com", "/v1/messages")).to eq("https://api.example.com/v1/messages")
+    end
+
+    it "turns a query-only path into /?query" do
+      expect(build_url("api.example.com", "?a=1")).to eq("https://api.example.com/?a=1")
+    end
+
+    it "keeps a non-default port and still inserts the slash" do
+      expect(build_url("api.example.com", "v1/messages", port: 8443)).to eq("https://api.example.com:8443/v1/messages")
+    end
+
+    it "returns an absolute URL path unchanged" do
+      expect(build_url("proxy.example.com", "https://api.example.com/v1/messages"))
+        .to eq("https://api.example.com/v1/messages")
+    end
+
+    it "builds a plain http URL on the default port" do
+      expect(build_url("api.example.com", "v1/messages", port: 80, ssl: false)).to eq("http://api.example.com/v1/messages")
+    end
+
+    it "leaves a double-slash path alone" do
+      expect(build_url("api.example.com", "//v1/messages")).to eq("https://api.example.com//v1/messages")
+    end
+
+    it "still recognizes a configured intercept host when the path has no leading slash" do
+      Coolhand.configure do |c|
+        c.api_key = "test-key"
+        c.silent = true
+        c.intercept_addresses = Coolhand::Configuration::DEFAULT_INTERCEPT_ADDRESSES.dup
+      end
+
+      expect(interceptor.intercept?(build_url("api.openai.com", "v1/chat/completions"))).to be true
+    end
+  end
+
   describe "issue #85 — host-boundary matching" do
     let(:interceptor) { Coolhand::NetHttpInterceptor::Helpers }
 
