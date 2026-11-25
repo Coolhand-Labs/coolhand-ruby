@@ -4,10 +4,13 @@ module Coolhand
   # Redacts credentials in raw String bodies, which BodyRedactor's tree walk never sees: a streamed
   # (server-sent event) response arrives as one String of `data: {...}` lines, and a webhook body
   # may be raw JSON text. Each JSON object/array payload is parsed, run through BodyRedactor and
-  # re-serialized; text that is not JSON (plain text, `[DONE]`, `event:` and comment lines, a
-  # payload that fails to parse) is left byte for byte. A JSON payload is always re-serialized, even
-  # when nothing in it needed redacting: JSON.parse keeps only the last of a repeated key, so
-  # "nothing changed" cannot be trusted to mean "no credential in the original text".
+  # re-serialized; text that is not JSON (plain text, `[DONE]`, `event:` and comment lines) is left
+  # byte for byte. JSON that fails to parse (typically a stream cut off mid-line) cannot be
+  # re-serialized, so each credential-named string value in it is scrubbed in place instead: the
+  # rest of the partial text is kept, and an unterminated value is scrubbed to the end of the text.
+  # A JSON payload is always re-serialized, even when nothing in it needed redacting: JSON.parse
+  # keeps only the last of a repeated key, so "nothing changed" cannot be trusted to mean "no
+  # credential in the original text".
   module StringBodyRedactor
     module_function
 
@@ -19,6 +22,13 @@ module Coolhand
     # a rewritten line keeps its own.
     DATA_LINE = /(?<![^\r\n\uFEFF])data:([ \t]*)([^\r\n]*)/
     JSON_CONTAINER = /\A\uFEFF?\s*[\[{]/
+    # Scans JSON text that may not parse, one string literal at a time: a `"key": "value"` pair
+    # (first alternative; the key is group 1, the separator group 2) or any other string literal
+    # (second alternative, consumed whole so a quote inside it never starts a new match and the
+    # scan stays linear even when a regex engine does not memoize, as before Ruby 3.2). A string
+    # ends at its closing quote, or at the end of the text when it was cut off (possibly right
+    # after a backslash).
+    STRING_PAIR = /("(?:[^"\\]|\\.)*")(\s*:\s*)"(?:[^"\\]|\\.)*(?:"|\\?\z)|"(?:[^"\\]|\\.)*(?:"|\\?\z)/m
 
     def redact(body)
       text = utf8_text(body)
@@ -45,22 +55,61 @@ module Coolhand
 
     # One pass with gsub (linear in the body); the original String is returned when no line differs
     # once re-serialized (providers emit compact JSON, so a clean stream usually round-trips as is).
+    # Text that starts like JSON but did not parse as one document (a body cut off mid-value) also
+    # has its credential-named string values scrubbed.
     def redact_stream(body, text)
-      changed = false
       redacted = text.gsub(DATA_LINE) do |line|
         match = Regexp.last_match
-        payload = match[2].match?(JSON_CONTAINER) ? redacted_json(match[2]) : nil
+        payload = redact_payload(match[2])
         next line if payload.nil? || payload == match[2]
 
-        changed = true
         "data:#{match[1]}#{payload}"
       end
-      changed ? redacted : body
+      redacted = scrub_credential_strings(redacted) if text.match?(JSON_CONTAINER)
+      redacted == text ? body : redacted
     end
 
-    # The redacted, re-serialized JSON; nil when the text should stay as is (not a JSON
-    # object/array, or unparsable). Anything else that goes wrong yields a `redaction_failed`
-    # marker rather than the unchecked text.
+    # The redacted text of a `data:` payload, or nil when it is not JSON-looking and stays as is.
+    def redact_payload(payload)
+      return unless payload.match?(JSON_CONTAINER)
+
+      redacted_json(payload) || scrub_credential_strings(payload)
+    end
+
+    # Fallback for JSON text that did not parse: replaces the value of every credential-named
+    # string pair (see BodyRedactor::CREDENTIAL_BODY_KEYS) without needing a valid document.
+    # URL-valued keys and `client_secret` objects are only handled for parsed JSON.
+    def scrub_credential_strings(text)
+      text.gsub(STRING_PAIR) do |pair|
+        match = Regexp.last_match
+        next pair unless match[1] && credential_key?(match[1])
+
+        "#{match[1]}#{match[2]}#{JSON.generate(BaseInterceptor::REDACTED)}"
+      end
+    end
+
+    # `quoted_key` is a JSON string literal, so decode it (`"\u0061pi_key"` names `api_key`).
+    def credential_key?(quoted_key)
+      BodyRedactor::CREDENTIAL_BODY_KEYS.include?(BodyRedactor.normalize_body_key(decode_key(quoted_key)))
+    end
+
+    # A literal the JSON parser rejects (an invalid escape such as `\_`, a raw control character)
+    # is decoded leniently, the way older JSON versions did: `\uXXXX` becomes its character and any
+    # other backslash is dropped, so `"api\_key"` still names `api_key` and its value is scrubbed.
+    # `scrub` because a lone low surrogate (`"\udc00"`) parses to an invalid UTF-8 String, which
+    # String#delete would reject and fail the whole body closed instead of just this one key.
+    def decode_key(quoted_key)
+      JSON.parse(quoted_key).scrub
+    rescue JSON::ParserError
+      quoted_key[1..-2].gsub(/\\(?:u(\h{4})|(.))/m) do
+        hex, char = Regexp.last_match.captures
+        hex ? [hex.hex].pack("U") : char
+      end.scrub
+    end
+
+    # The redacted, re-serialized JSON; nil when the text is not a parseable JSON object/array
+    # (callers fall back to scrub_credential_strings for the unparseable case). Anything else that
+    # goes wrong yields a `redaction_failed` marker rather than the unchecked text.
     def redacted_json(text)
       # NaN/Infinity are not JSON, but some servers emit them; a payload that failed to parse
       # would be logged unredacted next to its credential-named fields.
