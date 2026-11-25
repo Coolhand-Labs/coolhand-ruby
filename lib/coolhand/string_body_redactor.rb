@@ -96,8 +96,10 @@ module Coolhand
     # A literal the JSON parser rejects (an invalid escape such as `\_`, a raw control character)
     # is decoded leniently, the way older JSON versions did: `\uXXXX` becomes its character and any
     # other backslash is dropped, so `"api\_key"` still names `api_key` and its value is scrubbed.
+    # `scrub` because a lone low surrogate (`"\udc00"`) parses to an invalid UTF-8 String, which
+    # String#delete would reject and fail the whole body closed instead of just this one key.
     def decode_key(quoted_key)
-      JSON.parse(quoted_key)
+      JSON.parse(quoted_key).scrub
     rescue JSON::ParserError
       quoted_key[1..-2].gsub(/\\(?:u(\h{4})|(.))/m) do
         hex, char = Regexp.last_match.captures
@@ -105,9 +107,9 @@ module Coolhand
       end.scrub
     end
 
-    # The redacted, re-serialized JSON; nil when the text should stay as is (not a JSON
-    # object/array, or unparsable). Anything else that goes wrong yields a `redaction_failed`
-    # marker rather than the unchecked text.
+    # The redacted, re-serialized JSON; nil when the text is not a parseable JSON object/array
+    # (callers fall back to scrub_credential_strings for the unparseable case). Anything else that
+    # goes wrong yields a `redaction_failed` marker rather than the unchecked text.
     def redacted_json(text)
       # NaN/Infinity are not JSON, but some servers emit them; a payload that failed to parse
       # would be logged unredacted next to its credential-named fields.

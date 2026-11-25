@@ -313,11 +313,28 @@ RSpec.describe Coolhand::StringBodyRedactor do
 
     it "decodes a key whose escape the JSON parser rejects leniently, so its value is still scrubbed" do
       expect(described_class.redact(%(data: {"api\\_key":"v","n":))).to eq(%(data: {"api\\_key":"[REDACTED]","n":))
-      expect(described_class.redact(%(data: {"api\\_key":"v"}))).to eq(%(data: {"api\\_key":"[REDACTED]"}))
+      # Cut off, so it takes the scrub path on every json version (some parse a complete `\_` and would re-serialize).
+      expect(described_class.redact(%({"api\\_key":"v","n":"x))).to eq(%({"api\\_key":"[REDACTED]","n":"x))
     end
 
     it "mixes a valid unicode escape and an invalid one in a credential key" do
       expect(described_class.redact(%({"\\u0061pi\\_key":"v","n":))).to eq(%({"\\u0061pi\\_key":"[REDACTED]","n":))
+    end
+
+    it "does not fail the whole body over a key holding a lone surrogate escape, and still scrubs the rest" do
+      expect(described_class.redact(%({"\\udc00":"v","api_key":"sk-1","n":"x)))
+        .to eq(%({"\\udc00":"v","api_key":"[REDACTED]","n":"x))
+    end
+
+    it "scrubs a key holding a lone high surrogate escape, which the JSON parser rejects, the same way" do
+      expect(described_class.redact(%({"\\ud800":"v","api_key":"sk-1","n":"x)))
+        .to eq(%({"\\ud800":"v","api_key":"[REDACTED]","n":"x))
+    end
+
+    it "returns bracket-led text that is not JSON as the same String" do
+      ["[note] hello", "{not json}", "[DONE]"].each do |body|
+        expect(described_class.redact(body)).to equal(body)
+      end
     end
 
     it "scrubs trailing text after an otherwise valid payload" do
@@ -358,7 +375,8 @@ RSpec.describe Coolhand::StringBodyRedactor do
     end
 
     it "stays linear on megabyte-sized adversarial text (escaped quotes, bare quotes, tiny pairs)" do
-      bodies = [%(data: {"#{'\\"' * 500_000}), "{#{'"' * 1_000_000}", %({#{'"a":"b",' * 120_000}"c)]
+      bodies = [%(data: {"#{'\\"' * 500_000}), "{#{'"' * 1_000_000}", %({#{'"a":"b",' * 120_000}"c),
+                %({#{'"api\\_key":"v",' * 70_000}"c), %({"k"#{' ' * 1_000_000}:)]
 
       bodies.each do |body|
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
