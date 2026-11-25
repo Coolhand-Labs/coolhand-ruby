@@ -67,19 +67,26 @@ module Coolhand
       sanitized = raw.dup
 
       sanitized.each do |k, v|
-        next if v.nil?
-
-        key_down = k.to_s.downcase
-
-        if key_down == "authorization"
-          # Keep only the scheme: nothing after "Bearer " survives, whatever the value contains.
-          sanitized[k] = v.to_s.match?(/\ABearer\s+/i) ? "Bearer [REDACTED]" : "[REDACTED]"
-        elsif sensitive_header?(key_down)
-          sanitized[k] = "[REDACTED]"
-        end
+        sanitized[k] = sanitize_header_value(k.to_s.downcase, v) unless v.nil?
       end
 
       sanitized
+    end
+
+    # The value to log for one header: redacted by name, or with credentials scrubbed out of a URL it holds.
+    def sanitize_header_value(key_down, value)
+      if key_down == "authorization"
+        # Keep only the scheme: nothing after "Bearer " survives, whatever the value contains.
+        value.to_s.match?(/\ABearer\s+/i) ? "Bearer [REDACTED]" : "[REDACTED]"
+      elsif sensitive_header?(key_down)
+        "[REDACTED]"
+      elsif value.include?("://")
+        # Location, Referer, Link and upload-URL headers carry URLs whose query string can hold a
+        # presigned signature or API key; run them through the same scrub as the request URL.
+        value.gsub(HEADER_URL_PATTERN) { |url| sanitize_url(url) }
+      else
+        value
+      end
     end
 
     # Helper: convert arrays -> joined string, otherwise to_s
@@ -90,6 +97,10 @@ module Coolhand
         value.to_s
       end
     end
+
+    # An absolute URL inside a header value (stops at whitespace and the delimiters that separate
+    # URLs in Link and similar headers).
+    HEADER_URL_PATTERN = %r{[a-z][a-z0-9+.-]*://[^\s<>",;]+}i
 
     # Matches query param *names* that signal sensitive content, the same way
     # SENSITIVE_HEADER_PATTERN does for headers — covers exact params this

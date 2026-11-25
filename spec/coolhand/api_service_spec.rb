@@ -459,6 +459,13 @@ RSpec.describe Coolhand::ApiService do
         expect(Coolhand::LogQueue).not_to have_received(:record_failure)
       end
 
+      it "treats a 2xx whose body is the JSON literal null as delivered" do
+        stub_request(:post, url).to_return(status: 200, body: "null")
+
+        expect(service.send_llm_request_log(request_data)).to eq({})
+        expect(Coolhand::LogQueue).not_to have_received(:record_failure)
+      end
+
       it "does not retry a 400 but still records the failure" do
         stub_request(:post, url).to_return(status: 400, body: "bad")
 

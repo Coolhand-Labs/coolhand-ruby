@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-25
+
+### Added
+- `create_feedback(client_unique_id:)` now waits for its own log ([#233](https://github.com/Coolhand-Labs/coolhand-ruby/pull/233)). Logs are sent in the background, so feedback used to need a `Coolhand.flush` first or it could arrive before the log it refers to. Feedback that carries a `client_unique_id` now waits (up to 5 seconds) for the queued log with that id to finish sending, and only that log: unrelated traffic doesn't delay it. No `Coolhand.flush` is needed any more, and `docs/feedback.md`, `docs/declared_workloads.md` and `docs/anthropic.md` drop the workaround. This only covers logs queued in the same process; feedback sent from a different process still needs its log delivered first.
+- `create_feedback(..., raise_on_error: true)` raises `Coolhand::HttpError` (with `status` and `body`) or `Coolhand::Error` instead of returning `nil` ([#234](https://github.com/Coolhand-Labs/coolhand-ruby/pull/234)). Fields can be passed as a Hash or as bare keywords. The success message now names the identifier used (for example `Client Unique ID: order-42.1`) instead of `ID: N/A`.
+- Logs sent from the background queue retry transient failures (connect failure or timeout, HTTP 429, 502 or 503) twice with a short backoff ([#234](https://github.com/Coolhand-Labs/coolhand-ruby/pull/234)). A read timeout, connection reset or 504 is not retried, because the server may have stored the log and a retry could duplicate it.
+
+### Changed
+- **Behavior change:** if the log for a `client_unique_id` failed to send, `create_feedback` now logs a warning and returns `nil` without posting (or raises `Coolhand::Error` with `raise_on_error: true`), instead of sending feedback Coolhand can't match to a log ([#233](https://github.com/Coolhand-Labs/coolhand-ruby/pull/233)). The failed id is remembered (last 1,000) until a later log with that id sends successfully. If the log is still sending after 5 seconds, the feedback is sent anyway with a warning. Feedback without a `client_unique_id` behaves as before.
+- **Behavior change:** `Coolhand.flush` returns `false` (once, until the next flush that drains) when a log was not delivered ([#234](https://github.com/Coolhand-Labs/coolhand-ruby/pull/234)): a send that failed after its retries, a queued job that raised, or a log dropped from a full queue. Code that treated `flush == true` as always-true will now see `false` after a lost log. A 2xx response with a blank or non-JSON body now counts as delivered. `create_feedback(hash, unknown_keyword: ...)` now raises `ArgumentError`, since a stray keyword next to a Hash is almost certainly a misspelled option.
+- Redaction now also covers JSON that fails to parse ([#231](https://github.com/Coolhand-Labs/coolhand-ruby/pull/231)). A streamed response cut off mid-line (the `stream_incomplete` case) or a malformed JSON text body used to be logged as received, credentials included. The value of every credential-named string pair in it is now replaced with `[REDACTED]` in place, including a value cut off before its closing quote, and the rest of the partial text is kept. URL-valued fields and the `client_secret` object form are still only handled in JSON that parses (see `docs/configuration.md`).
+- A Google `intercept_path_patterns` entry (such as `:generateContent`) now matches only at the end of the request path ([#229](https://github.com/Coolhand-Labs/coolhand-ruby/pull/229)). Before, any `googleapis.com` path that merely contained the pattern was captured, for example a Cloud Storage object named `notes:generateContent.txt`. If you added a custom pattern that is not a path suffix, it no longer matches.
+- Errors raised by host code during `Net::HTTP#request` other than your streaming block (for example a custom `body_stream` whose `read` raises) are now logged with only their class and `[redacted: not a transport error]` as the message ([#228](https://github.com/Coolhand-Labs/coolhand-ruby/pull/228)). Transport errors keep their message, and `SocketError` (DNS failures) is now one of them.
+- Hardening ([#230](https://github.com/Coolhand-Labs/coolhand-ruby/pull/230)): a `Bearer` authorization header is always logged as `Bearer [REDACTED]`, the body of a failed Coolhand API response is stripped of control, bidi and zero-width characters before it reaches your stdout or an `HttpError` message (`HttpError#body` stays the raw, length-capped body, so treat it as untrusted), and GET requests that read from Coolhand now have a 5 second `write_timeout`.
+- Docs: `docs/configuration.md` notes that `exclude_api_patterns` is case-sensitive on purpose and what to do behind a case-insensitive gateway, and `docs/openai.md` notes that the batch processor keeps each input item's capped request body in memory until the output file is read ([#229](https://github.com/Coolhand-Labs/coolhand-ruby/pull/229)).
+- Internal: the POST logic moved from `ApiService` into `Coolhand::PostDelivery` ([#234](https://github.com/Coolhand-Labs/coolhand-ruby/pull/234)).
+
+### Fixed
+- Credentials in URL-valued headers are redacted. A header value that holds a URL (`Location`, `Referer`, `Link`, an upload-URL header) went to Coolhand as is, so a presigned signature or API key in its query string was logged even though the request URL itself was scrubbed. They now go through the same query-string scrub as the request URL.
+- A 2xx response from Coolhand whose body is the JSON literal `null` now counts as a delivered log, like a blank or non-JSON 2xx body. Before, it made the send look failed, so `Coolhand.flush` returned `false` and a `create_feedback` waiting on that `client_unique_id` was skipped, even though Coolhand had stored the log.
+- `Coolhand.configuration.inspect` no longer prints the API key, so `p config` or a logged config object can't leak it.
+- An exception raised by host code whose own `#message` or `#status` raises no longer replaces the host's original error while Coolhand records it.
+- The logged URL no longer drops the `/` before a slash-less request path ([#235](https://github.com/Coolhand-Labs/coolhand-ruby/pull/235)). Requests that reach `Net::HTTP` with a path such as `v1/messages` (the Anthropic SDK's Bedrock client does this) were logged as `https://bedrock-runtime.us-east-1.amazonaws.comv1/messages`, which broke provider classification downstream. The same URL feeds the intercept check, so host and path matching now also work for slash-less paths, which were silently skipped before.
+
+### Dependencies
+- `ruby/setup-ruby` bumped to 1.343.0 in CI and the publish workflow ([#224](https://github.com/Coolhand-Labs/coolhand-ruby/pull/224)).
+- `rubygems/release-gem` bumped to 1.4.2 in the publish workflow ([#225](https://github.com/Coolhand-Labs/coolhand-ruby/pull/225)).
+
 ## [0.12.0] - 2026-11-23
 
 ### Added

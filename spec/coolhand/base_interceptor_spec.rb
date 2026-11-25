@@ -142,6 +142,36 @@ RSpec.describe Coolhand::BaseInterceptor do
   end
 
   describe ".sanitize_headers" do
+    it "scrubs credential query params inside URL-valued headers, keeping the rest of the value" do
+      sanitized = described_class.sanitize_headers(
+        "Location" => "https://s3.example.com/f?X-Amz-Signature=abc&part=1",
+        "Link" => '<https://x.example.com/p?access_token=zzz>; rel="next"',
+        "Content-Type" => "application/json"
+      )
+
+      expect(sanitized["Location"]).to eq("https://s3.example.com/f?X-Amz-Signature=%5BREDACTED%5D&part=1")
+      expect(sanitized["Link"]).to eq('<https://x.example.com/p?access_token=%5BREDACTED%5D>; rel="next"')
+      expect(sanitized["Content-Type"]).to eq("application/json")
+    end
+
+    it "fails closed on a header URL that does not parse, dropping its userinfo and query" do
+      sanitized = described_class.sanitize_headers(
+        "Location" => "https://user:pw@bad[host.example/a?token=zzz",
+        "X-Other" => "see https://u:pw@[bad/p?api_key=abc for details"
+      )
+
+      expect(sanitized["Location"]).not_to include("pw", "zzz")
+      expect(sanitized["X-Other"]).not_to include("pw", "abc")
+      expect(sanitized["X-Other"]).to start_with("see ")
+      expect(sanitized["X-Other"]).to end_with("for details")
+    end
+
+    it "leaves a URL-valued header without credentials as it was" do
+      headers = { "Referer" => "https://app.example.com/page?tab=2" }
+
+      expect(described_class.sanitize_headers(headers)).to eq(headers)
+    end
+
     it "redacts cookie and set-cookie headers, not just auth/key/token-shaped ones" do
       sanitized = described_class.sanitize_headers(
         "Cookie" => "_session=abc123; remember_token=deadbeef",

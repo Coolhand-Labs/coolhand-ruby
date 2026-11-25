@@ -239,6 +239,9 @@ module Coolhand
         status = from_host ? nil : extract_status_from_exception(error)
         message = transport_error?(error) ? error.message : NON_TRANSPORT_ERROR_MESSAGE
         [status, { "error" => { "class" => error.class.name, "message" => message } }]
+      rescue StandardError
+        # A host exception whose #message or #status raises must not replace the host's own error.
+        [nil, { "error" => { "class" => error.class.name, "message" => NON_TRANSPORT_ERROR_MESSAGE } }]
       end
 
       def should_capture?

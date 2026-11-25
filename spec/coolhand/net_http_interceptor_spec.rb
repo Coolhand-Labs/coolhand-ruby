@@ -816,6 +816,19 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(@captured_log.to_s).not_to include("X-Amz-Signature")
   end
 
+  it "does not replace the host's exception when reading the error's own message raises" do
+    error_class = Class.new(StandardError) do
+      def message
+        raise "message exploded"
+      end
+    end
+    stub_request(:get, "https://api.test.com/chat").to_raise(error_class)
+    http = Net::HTTP.new("api.test.com", 443)
+    http.use_ssl = true
+
+    expect { http.request(Net::HTTP::Get.new("/chat")) }.to raise_error(error_class)
+  end
+
   it "keeps the message of a DNS failure (SocketError), which carries no app data" do
     stub_request(:get, "https://api.test.com/chat")
       .to_raise(SocketError.new("getaddrinfo: Name or service not known"))
