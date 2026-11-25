@@ -311,10 +311,61 @@ RSpec.describe Coolhand::StringBodyRedactor do
       expect(described_class.redact(stream)).to eq(stream)
     end
 
-    it "leaves a key whose escape cannot be decoded as written, without raising" do
-      body = %(data: {"api\\_key":"v","n":)
+    it "decodes a key whose escape the JSON parser rejects leniently, so its value is still scrubbed" do
+      expect(described_class.redact(%(data: {"api\\_key":"v","n":))).to eq(%(data: {"api\\_key":"[REDACTED]","n":))
+      expect(described_class.redact(%(data: {"api\\_key":"v"}))).to eq(%(data: {"api\\_key":"[REDACTED]"}))
+    end
 
-      expect(described_class.redact(body)).to eq(body)
+    it "mixes a valid unicode escape and an invalid one in a credential key" do
+      expect(described_class.redact(%({"\\u0061pi\\_key":"v","n":))).to eq(%({"\\u0061pi\\_key":"[REDACTED]","n":))
+    end
+
+    it "scrubs trailing text after an otherwise valid payload" do
+      expect(described_class.redact(%(data: {"api_key": "sk-1", broken)))
+        .to eq(%(data: {"api_key": "[REDACTED]", broken))
+    end
+
+    it "leaves non-string credential values alone, as the parsed path does" do
+      body = %(data: {"password":12,"secret":{"value":"x"},"authorization":["Bearer x"],"api_key":null,"n":)
+
+      expect(described_class.redact(body)).to equal(body)
+    end
+
+    it "keeps pairs aligned across arrays of strings, colons and credential names inside values, and odd spacing" do
+      {
+        %(["a","b"],"api_key":"S","z) => %(["a","b"],"api_key":"[REDACTED]","z),
+        %({"a":"api_key","password":"S","z) => %({"a":"api_key","password":"[REDACTED]","z),
+        %({"a":"x:y","api_key":"S") => %({"a":"x:y","api_key":"[REDACTED]"),
+        %({"":"x","api_key":"S") => %({"":"x","api_key":"[REDACTED]"),
+        %({"api_key"\n:\r\n"S","n) => %({"api_key"\n:\r\n"[REDACTED]","n),
+        %({"a":1,"api_key":"S","n) => %({"a":1,"api_key":"[REDACTED]","n)
+      }.each do |body, expected|
+        expect(described_class.redact(body)).to eq(expected)
+      end
+    end
+
+    it "scrubs newline-delimited JSON and a byte-order-marked or CRLF body that does not parse" do
+      expect(described_class.redact(%({"a":1}\n{"api_key":"sk-1"}))).to eq(%({"a":1}\n{"api_key":"[REDACTED]"}))
+      expect(described_class.redact(%(\uFEFF{"api_key":"sk-1","n":))).to eq(%(\uFEFF{"api_key":"[REDACTED]","n":))
+      expect(described_class.redact(%(data: {"api_key":"sk-1"}\r\ndata: {"password":"p","n":)))
+        .to eq(%(data: {"api_key":"[REDACTED]"}\r\ndata: {"password":"[REDACTED]","n":))
+    end
+
+    it "scrubs a cut-off body held in a binary-tagged String with invalid UTF-8" do
+      binary = %(data: {"api_key":"sk-\xFF1","n":).b
+
+      expect(described_class.redact(binary)).to eq(%(data: {"api_key":"[REDACTED]","n":))
+    end
+
+    it "stays linear on megabyte-sized adversarial text (escaped quotes, bare quotes, tiny pairs)" do
+      bodies = [%(data: {"#{'\\"' * 500_000}), "{#{'"' * 1_000_000}", %({#{'"a":"b",' * 120_000}"c)]
+
+      bodies.each do |body|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        described_class.redact(body)
+
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 5
+      end
     end
 
     it "scrubs a truncated JSON text body, not only data: lines" do

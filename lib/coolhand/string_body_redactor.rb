@@ -22,9 +22,13 @@ module Coolhand
     # a rewritten line keeps its own.
     DATA_LINE = /(?<![^\r\n\uFEFF])data:([ \t]*)([^\r\n]*)/
     JSON_CONTAINER = /\A\uFEFF?\s*[\[{]/
-    # A `"key": "value"` pair in JSON text that may not parse. The value ends at its closing quote,
-    # or at the end of the text when it was cut off (possibly right after a backslash).
-    STRING_PAIR = /("(?:[^"\\]|\\.)*")(\s*:\s*)"(?:[^"\\]|\\.)*(?:"|\\?\z)/m
+    # Scans JSON text that may not parse, one string literal at a time: a `"key": "value"` pair
+    # (first alternative; the key is group 1, the separator group 2) or any other string literal
+    # (second alternative, consumed whole so a quote inside it never starts a new match and the
+    # scan stays linear even when a regex engine does not memoize, as before Ruby 3.2). A string
+    # ends at its closing quote, or at the end of the text when it was cut off (possibly right
+    # after a backslash).
+    STRING_PAIR = /("(?:[^"\\]|\\.)*")(\s*:\s*)"(?:[^"\\]|\\.)*(?:"|\\?\z)|"(?:[^"\\]|\\.)*(?:"|\\?\z)/m
 
     def redact(body)
       text = utf8_text(body)
@@ -78,21 +82,27 @@ module Coolhand
     def scrub_credential_strings(text)
       text.gsub(STRING_PAIR) do |pair|
         match = Regexp.last_match
-        next pair unless credential_key?(match[1])
+        next pair unless match[1] && credential_key?(match[1])
 
         "#{match[1]}#{match[2]}#{JSON.generate(BaseInterceptor::REDACTED)}"
       end
     end
 
-    # `quoted_key` is a JSON string literal, so decode it (`"\u0061pi_key"` names `api_key`);
-    # an undecodable literal is matched as written.
+    # `quoted_key` is a JSON string literal, so decode it (`"\u0061pi_key"` names `api_key`).
     def credential_key?(quoted_key)
-      key = begin
-        JSON.parse(quoted_key)
-      rescue JSON::ParserError
-        quoted_key.delete('"')
-      end
-      BodyRedactor::CREDENTIAL_BODY_KEYS.include?(BodyRedactor.normalize_body_key(key))
+      BodyRedactor::CREDENTIAL_BODY_KEYS.include?(BodyRedactor.normalize_body_key(decode_key(quoted_key)))
+    end
+
+    # A literal the JSON parser rejects (an invalid escape such as `\_`, a raw control character)
+    # is decoded leniently, the way older JSON versions did: `\uXXXX` becomes its character and any
+    # other backslash is dropped, so `"api\_key"` still names `api_key` and its value is scrubbed.
+    def decode_key(quoted_key)
+      JSON.parse(quoted_key)
+    rescue JSON::ParserError
+      quoted_key[1..-2].gsub(/\\(?:u(\h{4})|(.))/m) do
+        hex, char = Regexp.last_match.captures
+        hex ? [hex.hex].pack("U") : char
+      end.scrub
     end
 
     # The redacted, re-serialized JSON; nil when the text should stay as is (not a JSON
