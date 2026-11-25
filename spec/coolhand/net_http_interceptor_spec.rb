@@ -406,7 +406,7 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       raw = logs.first[:raw_request]
       expect(raw).not_to have_key(:stream_incomplete)
       expect(raw[:response_body]["error"]).to eq(
-        "class" => "ArgumentError", "message" => "[redacted: raised in host streaming block]"
+        "class" => "ArgumentError", "message" => "[redacted: not a transport error]"
       )
       expect(logs.first.to_s).not_to include("app-level secret")
     end
@@ -794,6 +794,40 @@ RSpec.describe Coolhand::NetHttpInterceptor do
     expect(@captured_log).to be_a(Hash)
     raw = @captured_log[:raw_request] || @captured_log["raw_request"]
     expect(raw[:request_body] || raw["request_body"]).to be_nil
+  end
+
+  it "logs only the class when host code (a custom body_stream) raises, keeping the secret out of the record" do
+    stub_request(:post, "https://api.test.com/upload").to_return(status: 200, body: "{}")
+    stream = StringIO.new("{}")
+    allow(stream).to receive(:read).and_raise(ArgumentError, "presigned https://b/x?X-Amz-Signature=abc status=502")
+    http = Net::HTTP.new("api.test.com", 443)
+    http.use_ssl = true
+    req = Net::HTTP::Post.new("/upload")
+    req.body_stream = stream
+    req["Content-Length"] = "2"
+
+    expect { http.request(req) }.to raise_error(ArgumentError, /presigned/)
+    sleep 0.05
+
+    raw = @captured_log[:raw_request]
+    expect(raw[:response_body]["error"]).to eq(
+      "class" => "ArgumentError", "message" => "[redacted: not a transport error]"
+    )
+    expect(@captured_log.to_s).not_to include("X-Amz-Signature")
+  end
+
+  it "keeps the message of a DNS failure (SocketError), which carries no app data" do
+    stub_request(:get, "https://api.test.com/chat")
+      .to_raise(SocketError.new("getaddrinfo: Name or service not known"))
+    http = Net::HTTP.new("api.test.com", 443)
+    http.use_ssl = true
+
+    expect { http.request(Net::HTTP::Get.new("/chat")) }.to raise_error(SocketError)
+    sleep 0.05
+
+    expect(@captured_log[:raw_request][:response_body]["error"]).to eq(
+      "class" => "SocketError", "message" => "getaddrinfo: Name or service not known"
+    )
   end
 
   it "replaces an oversized body_stream with a truncation marker in the log, but still sends it in full" do
