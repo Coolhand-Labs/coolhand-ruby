@@ -221,16 +221,19 @@ module Coolhand
         end
       end
 
-      # Matched by class, so a host block raising its own IOError/SystemCallError subclass keeps its
-      # message too; accepted trade-off, as telling those apart from socket failures isn't possible.
+      # Matched by class, so host code (the streaming block or a custom body_stream) raising its own
+      # IOError/SystemCallError subclass keeps its message too; accepted trade-off, as telling those
+      # apart from socket failures isn't possible.
       def transport_error?(error)
         TRANSPORT_ERRORS.any? { |klass| error.is_a?(klass) }
       end
 
       # An error raised by the host's streaming block can carry app-level data in its message (and
-      # in a #status or message-embedded status code), so no status is derived from it. Any
-      # non-transport error (that, or one from other host code such as a custom body_stream) is
-      # logged with only its class; transport errors keep their message. Returns [status, body].
+      # in a #status or message-embedded status code), so no status is derived from it. Other errors
+      # (e.g. one raised by `super` itself) still have a status extracted. Independently of that,
+      # every non-transport error, whether from the streaming block or other host code such as a
+      # custom body_stream, is logged with only its class; transport errors keep their message.
+      # Returns [status, body].
       def error_details(error, host_block_errors)
         from_host = host_block_errors.any? { |host_error| host_error.equal?(error) }
         status = from_host ? nil : extract_status_from_exception(error)
