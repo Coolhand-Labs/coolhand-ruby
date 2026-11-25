@@ -5,6 +5,8 @@ require "uri"
 require "json"
 require_relative "collector"
 require_relative "errors"
+require_relative "log_queue"
+require_relative "post_delivery"
 require_relative "read_requests"
 require_relative "response_warnings"
 
@@ -14,6 +16,7 @@ module Coolhand
     # log and return nil.
     include ReadRequests
     include ResponseWarnings
+    include PostDelivery
 
     # Caps how much of a failed response body is interpolated into a log line or an exception
     # message. Without it an oversized body from a proxy or gateway becomes the message.
@@ -22,6 +25,13 @@ module Coolhand
     # How much of a failed response body is sanitized before it is cut to ERROR_BODY_LIMIT
     # characters (a character is at most 4 bytes).
     ERROR_BODY_SCAN_BYTES = ERROR_BODY_LIMIT * 4
+
+    FEEDBACK_ID_LABELS = {
+      llm_request_log_id: "LLM Request Log ID",
+      llm_provider_unique_id: "Provider Unique ID",
+      client_unique_id: "Client Unique ID"
+    }.freeze
+    private_constant :FEEDBACK_ID_LABELS
 
     attr_reader :api_endpoint
 
@@ -42,7 +52,7 @@ module Coolhand
         log JSON.pretty_generate(sanitize_payload_for_json(payload))
         nil
       else
-        result = send_request(payload, "✅ Successfully sent request metadata")
+        result = send_request(payload, "✅ Successfully sent request metadata", background: LogQueue.worker_thread?)
         log_response_warnings(result)
         result
       end
@@ -82,53 +92,6 @@ module Coolhand
       }
     end
 
-    def send_request(payload, success_message)
-      return nil if missing_api_key?
-
-      uri = URI.parse(@api_endpoint)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == "https")
-      # Bound worst-case latency: with async_logging off this call happens inline in
-      # the intercepted request's path (otherwise it ties up the background log
-      # worker), so a slow/unreachable Coolhand backend must not hang for Ruby's
-      # ~60s Net::HTTP defaults (a stalled upload hits write_timeout).
-      http.open_timeout = 5
-      http.read_timeout = 5
-      http.write_timeout = 5
-
-      request = Net::HTTP::Post.new(uri.request_uri)
-      apply_headers(request, create_request_options(payload))
-
-      # Clean payload and ensure UTF-8 encoding before JSON generation
-      cleaned_payload = sanitize_payload_for_json(payload)
-      json_body = JSON.generate(cleaned_payload)
-
-      # Ensure the request body is properly encoded as UTF-8
-      request.body = json_body.force_encoding("UTF-8")
-
-      begin
-        # This request goes through the same patched Net::HTTP as the host
-        # app's real LLM calls. Without this, a base_url/intercept_addresses
-        # configuration that also matches Coolhand's own API host would
-        # re-intercept this log-shipping call, generating a second log
-        # request that itself gets intercepted, and so on — unbounded
-        # request amplification.
-        response = Coolhand.without_capture { http.request(request) }
-
-        if response.is_a?(Net::HTTPSuccess)
-          result = JSON.parse(response.body, symbolize_names: true)
-          log success_message
-          result
-        else
-          log "❌ Request failed: #{response.code} - #{format_error_body(response.body)}"
-          nil
-        end
-      rescue StandardError => e
-        log "❌ Request error: #{e.message}"
-        nil
-      end
-    end
-
     def log(*args)
       puts args.join(" ") unless silent
     end
@@ -137,8 +100,10 @@ module Coolhand
       log("═" * 60) unless silent
     end
 
-    def create_feedback(feedback, collection_method = nil)
-      return nil if !debug_mode? && missing_api_key?
+    # Returns the parsed response, or nil on failure (and in debug mode, where nothing is sent). With
+    # `raise_on_error`, a failure raises {Coolhand::HttpError} / {Coolhand::Error} instead.
+    def create_feedback(feedback, collection_method = nil, raise_on_error: false)
+      return reject_missing_key(raise_on_error) if !debug_mode? && missing_api_key?
 
       normalized = normalize_feedback_sentiment(feedback)
       feedback_with_collector = add_collector_to_data(normalized, collection_method)
@@ -155,10 +120,8 @@ module Coolhand
         log JSON.pretty_generate(payload)
         nil
       else
-        result = send_request(
-          payload,
-          "✅ Successfully created feedback with ID: #{feedback[:llm_request_log_id] || 'N/A'}"
-        )
+        result = send_request(payload, "✅ Successfully created feedback #{feedback_identifier(feedback)}".strip,
+          raise_on_error: raise_on_error)
 
         log_separator
 
@@ -183,10 +146,7 @@ module Coolhand
         log JSON.pretty_generate(payload)
         nil
       else
-        result = send_request(
-          payload,
-          "✅ Successfully logged to API"
-        )
+        result = send_request(payload, "✅ Successfully logged to API", background: LogQueue.worker_thread?)
 
         puts "✅ Successfully logged to API with ID: #{result[:id]}" if result && !silent
 
@@ -283,17 +243,27 @@ module Coolhand
       feedback.except(:like).merge(sentiment: sentiment)
     end
 
+    # The identifier the feedback is matched by, as [field, value]; nil when it has none.
+    def feedback_match(feedback)
+      field = FEEDBACK_ID_LABELS.keys.find { |name| feedback[name] }
+      [field, feedback[field]] if field
+    end
+
+    # For the success message; "" when the feedback has no identifier.
+    def feedback_identifier(feedback)
+      field, value = feedback_match(feedback)
+      field ? "(#{FEEDBACK_ID_LABELS[field]}: #{value})" : ""
+    end
+
+    def feedback_announcement(feedback)
+      field, value = feedback_match(feedback)
+      field ? "\n📝 CREATING FEEDBACK for #{FEEDBACK_ID_LABELS[field]}: #{value}" : "\n📝 CREATING FEEDBACK"
+    end
+
     def log_feedback_info(feedback)
       return if silent
 
-      # Log the appropriate identifier based on what was provided
-      if feedback[:llm_request_log_id]
-        puts "\n📝 CREATING FEEDBACK for LLM Request Log ID: #{feedback[:llm_request_log_id]}"
-      elsif feedback[:llm_provider_unique_id]
-        puts "\n📝 CREATING FEEDBACK for Provider Unique ID: #{feedback[:llm_provider_unique_id]}"
-      else
-        puts "\n📝 CREATING FEEDBACK"
-      end
+      puts feedback_announcement(feedback)
 
       puts "💬 Sentiment: #{feedback[:sentiment]}" if feedback[:sentiment]
 

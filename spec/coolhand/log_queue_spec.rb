@@ -372,4 +372,72 @@ RSpec.describe Coolhand::LogQueue do
       expect(described_class.await_delivery("abc.1", timeout: 2)).to eq(:failed)
     end
   end
+
+  describe "delivery failures" do
+    it "makes flush return false after a recorded failure, then true once reported" do
+      described_class.record_failure
+
+      expect(described_class.flush(2)).to be false
+      expect(described_class.flush(2)).to be true
+    end
+
+    it "keeps a failure for the next flush when the first one timed out" do
+      release = Queue.new
+      described_class.submit { release.pop }
+      described_class.record_failure
+
+      expect(described_class.flush(0.05)).to be false
+      release << true
+      expect(described_class.flush(2)).to be false
+      expect(described_class.flush(2)).to be true
+    end
+
+    it "does not carry a parent process's failures into a forked child" do
+      described_class.record_failure
+      allow(Process).to receive(:pid).and_return(Process.pid + 1)
+
+      expect(described_class.flush(2)).to be true
+    end
+
+    it "reports a job that raised, since its log was never sent" do
+      described_class.submit { raise "boom" }
+
+      expect(described_class.flush(2)).to be false
+    end
+
+    it "reports a pending log dropped because the queue was full" do
+      release = Queue.new
+      described_class.submit { release.pop }
+      wait_until { described_class::LANES[:default].thread&.alive? }
+      stub_const("Coolhand::LogQueue::MAX_QUEUE_SIZE", 1)
+      described_class.submit { nil }
+      described_class.submit { nil }
+      release << true
+
+      expect(described_class.flush(2)).to be false
+    end
+
+    it "reports a tracked log dropped because the queue was full, and settles it as failed" do
+      release = Queue.new
+      described_class.submit { release.pop }
+      wait_until { described_class::LANES[:default].thread&.alive? }
+      stub_const("Coolhand::LogQueue::MAX_QUEUE_SIZE", 1)
+      described_class.submit(client_unique_id: "dropped") { :sent }
+      described_class.submit { :newer }
+      release << true
+
+      expect(described_class.flush(2)).to be false
+      expect(described_class.await_delivery("dropped", timeout: 1)).to eq(:failed)
+    end
+
+    it "reports a failed send made by a queued job" do
+      Coolhand.configuration.api_key = "k"
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs").to_return(status: 400, body: "no")
+      described_class.submit do
+        Coolhand::ApiService.new.send_llm_request_log(method: "POST", url: "https://x.test", status_code: 200)
+      end
+
+      expect(described_class.flush(2)).to be false
+    end
+  end
 end

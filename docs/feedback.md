@@ -41,6 +41,26 @@ Logs are sent in the background, so `create_feedback` holds the feedback until t
 
 ---
 
+## Knowing whether feedback was delivered
+
+By default `create_feedback` never raises: on any failure (non-2xx response, network error, missing API key) it logs the problem, unless `config.silent` is set, and returns `nil`. On success it returns the parsed response, so `nil` means the feedback was not stored (or, in `debug_mode`, was deliberately not sent).
+
+Pass `raise_on_error: true` when you need to tell lost feedback from delivered feedback, for example to retry:
+
+```ruby
+begin
+  feedback_service.create_feedback(client_unique_id: 'order-42.1', sentiment: 'like', raise_on_error: true)
+rescue Coolhand::HttpError => e
+  e.status # 422, 500, ...: the API's answer (e.body has the response body)
+rescue Coolhand::Error => e
+  # no API key, or a network error
+end
+```
+
+Feedback is never retried automatically, because repeating the POST could store it twice; retrying is up to you. With a `client_unique_id`, `create_feedback` already waits for that log when it was queued in the same process, and with `raise_on_error: true` it raises a `Coolhand::Error` instead of returning `nil` when that log failed to send. A `client_unique_id` that matches no log yet is the common reason to retry feedback sent from another process: make sure the log was delivered first (`Coolhand.flush` in the process that logged it returns `false` when a queued log was not delivered: it failed to send after retrying transient errors, raised in its job, or was dropped from a full queue).
+
+---
+
 ## Field Reference
 
 All fields are optional. Use at least one **Matching Field** to link feedback to its originating LLM request.

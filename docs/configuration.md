@@ -71,10 +71,11 @@ end
 ```
 
 **How it behaves:**
-- The queue is bounded at 1,000 pending logs. If Coolhand is down long enough to fill it, the *oldest* pending log is dropped (with a log line) rather than blocking your app or growing memory.
+- The queue is bounded at 1,000 pending logs. If Coolhand is down long enough to fill it, the *oldest* pending log is dropped (with a log line) rather than blocking your app or growing memory; the next `Coolhand.flush` then returns `false`.
 - The bound is on the *number* of pending logs, not their size: each holds its captured response body in memory until sent, so a long Coolhand outage under heavy traffic with large responses can hold a lot of memory. Batch jobs use their own lane, so a long-running batch never delays or evicts per-request logs.
 - A forked process (Puma/Unicorn workers, Spring) starts its own worker automatically.
-- Pending logs are flushed at process exit (up to 5 seconds in total, so a batch job still running at exit may be only partly logged). In a short-lived script, or to wait explicitly, call `Coolhand.flush(timeout: 5)` — it returns `true` once everything has been sent.
+- Pending logs are flushed at process exit (up to 5 seconds in total, so a batch job still running at exit may be only partly logged). In a short-lived script, or to wait explicitly, call `Coolhand.flush(timeout: 5)` — it returns `true` once everything has been sent, and `false` if the timeout elapsed first **or** a log could not be delivered (see the retry bullet below).
+- A queued log send that fails with a transient error (a connect failure or connect timeout, or HTTP 429/502/503) is retried twice with a short backoff (so during an outage each queued log can hold its lane for a few extra seconds). Failures where the log may already be stored (a read timeout, a connection reset, a 504) and other 4xx errors are not retried. A log that could not be delivered (a send that failed after retries, a queued job that raised, or a log dropped because the queue was full) makes the next `Coolhand.flush` return `false` (once; it reports failures since the previous flush). Inline sends (`async_logging = false`) are never retried.
 - OpenAI and Vertex batch results are processed as a single background job per batch.
 - `config.debug_mode` always runs inline so printed payloads appear in order.
 - Logs queued but not yet sent are lost if the process is killed hard (`kill -9`, OOM). Set `async_logging = false` if you need delivery before each call returns.
