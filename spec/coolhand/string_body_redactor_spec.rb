@@ -95,9 +95,8 @@ RSpec.describe Coolhand::StringBodyRedactor do
       expect(result).to eq(%(data: {"password":"[REDACTED]","id":#{big},"t":"café","f":1.1}))
     end
 
-    it "leaves malformed and non-JSON data lines alone and still redacts the good ones" do
+    it "leaves non-JSON data lines alone and still redacts the good ones" do
       stream = [
-        'data: {"api_key": "sk-1", broken',
         "data: plain text api_key=abc",
         'data: "api_key"',
         "data: 42",
@@ -111,7 +110,7 @@ RSpec.describe Coolhand::StringBodyRedactor do
 
       result = described_class.redact(stream)
 
-      expect(result.lines[0..8].join).to eq(stream.lines[0..8].join)
+      expect(result.lines[0..7].join).to eq(stream.lines[0..7].join)
       expect(result.lines.last).to eq(%(data: {"api_key":"[REDACTED]"}))
     end
 
@@ -261,8 +260,12 @@ RSpec.describe Coolhand::StringBodyRedactor do
         expect(described_class.redact(log_first)).to eq(%([INFO] started\ndata: {"api_key":"[REDACTED]"}\n))
       end
 
-      it "leaves malformed JSON alone" do
-        expect(described_class.redact(%({"password":"p",))).to eq(%({"password":"p",))
+      it "leaves malformed JSON without a credential-named string value alone" do
+        expect(described_class.redact(%({"note":"p",))).to eq(%({"note":"p",))
+      end
+
+      it "scrubs a credential-named string value in malformed JSON, keeping the rest of the text" do
+        expect(described_class.redact(%({"password":"p","n":1,))).to eq(%({"password":"[REDACTED]","n":1,))
       end
 
       it "replaces JSON nested past the depth guard with the marker" do
@@ -270,6 +273,66 @@ RSpec.describe Coolhand::StringBodyRedactor do
 
         expect(JSON.parse(described_class.redact(deep))).to eq("_coolhand_capture_skipped" => "nesting_too_deep")
       end
+    end
+  end
+
+  describe "JSON cut off mid-line (a stream that was abandoned or dropped)" do
+    it "scrubs a credential-named value that was cut off before its closing quote" do
+      stream = %(data: {"id":"1","n":2}\n\ndata: {"tools":[{"authorization":"Bearer sk-LIVE-12)
+
+      result = described_class.redact(stream)
+
+      expect(result).to eq(%(data: {"id":"1","n":2}\n\ndata: {"tools":[{"authorization":"[REDACTED]"))
+      expect(result).not_to include("sk-LIVE")
+    end
+
+    it "scrubs a value cut off right after a backslash or inside an escape" do
+      expect(described_class.redact(%(data: {"api_key":"sk-1\\))).to eq(%(data: {"api_key":"[REDACTED]"))
+      expect(described_class.redact(%(data: {"api_key":"sk-1\\u00))).to eq(%(data: {"api_key":"[REDACTED]"))
+    end
+
+    it "scrubs a terminated credential value whose line is cut off after it" do
+      result = described_class.redact(%(data: {"apiKey":"sk-1","choices":[{"delta":{"con))
+
+      expect(result).to eq(%(data: {"apiKey":"[REDACTED]","choices":[{"delta":{"con))
+    end
+
+    it "matches key names the way BodyRedactor does: case, separators and unicode escapes" do
+      result = described_class.redact(%(data: {"Client-Secret":"s1","\\u0061pi_key":"s2","x-api-key":"s3","tok))
+
+      expect(result).to eq(
+        %(data: {"Client-Secret":"[REDACTED]","\\u0061pi_key":"[REDACTED]","x-api-key":"[REDACTED]","tok)
+      )
+    end
+
+    it "does not scrub non-credential keys, or a credential name that only appears inside another value" do
+      stream = %(data: {"text":"say \\"api_key\\": \\"x\\"","token":"Hello","usage":{"total_tokens":1},"c)
+
+      expect(described_class.redact(stream)).to eq(stream)
+    end
+
+    it "leaves a key whose escape cannot be decoded as written, without raising" do
+      body = %(data: {"api\\_key":"v","n":)
+
+      expect(described_class.redact(body)).to eq(body)
+    end
+
+    it "scrubs a truncated JSON text body, not only data: lines" do
+      result = described_class.redact(%({"data":{"password":"hunter2","n":))
+
+      expect(result).to eq(%({"data":{"password":"[REDACTED]","n":))
+    end
+
+    it "returns the original String when nothing in a cut-off body needed scrubbing" do
+      body = %(data: {"id":"1","choices":[{"delta":{"content":"Hel)
+
+      expect(described_class.redact(body)).to equal(body)
+    end
+
+    it "keeps a rewritten data line's own whitespace and scrubs a later cut-off line too" do
+      result = described_class.redact(%(data:  {"password":"p"}\ndata: {"secret":"cut))
+
+      expect(result).to eq(%(data:  {"password":"[REDACTED]"}\ndata: {"secret":"[REDACTED]"))
     end
   end
 
