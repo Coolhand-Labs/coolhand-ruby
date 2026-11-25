@@ -32,6 +32,12 @@ module Coolhand
       :max_captured_body_bytes, :webhook_replay_tolerance_seconds, :webhook_id_store, :async_logging
     attr_reader :intercept_addresses, :intercept_path_patterns, :base_url, :auto_declare
 
+    # Keeps the API key out of `p config`, `Rails.logger.info(config)` and error-page dumps.
+    def inspect
+      "#<#{self.class} base_url=#{base_url.inspect} enabled=#{enabled.inspect} " \
+        "api_key=#{api_key ? '[REDACTED]' : 'nil'}>"
+    end
+
     def initialize
       # Set defaults
       @environment = "production"
