@@ -371,6 +371,122 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "log delivery retries and failure tracking" do
+    let(:service) { described_class.new }
+    let(:url) { "https://coolhandlabs.com/api/v2/llm_request_logs" }
+    let(:request_data) do
+      { method: "POST", url: "https://api.openai.com/v1/chat/completions",
+        request_body: {}, response_body: {}, status_code: 200 }
+    end
+
+    before do
+      allow(service).to receive(:sleep)
+      allow(Coolhand::LogQueue).to receive(:record_failure)
+    end
+
+    context "when sent from a queue worker" do
+      before { allow(Coolhand::LogQueue).to receive(:worker_thread?).and_return(true) }
+
+      it "retries a 503 and returns the eventual success without recording a failure" do
+        stub_request(:post, url).to_return({ status: 503, body: "" }, { status: 200, body: '{"id":"abc"}' })
+
+        expect(service.send_llm_request_log(request_data)).to include(id: "abc")
+        expect(WebMock).to have_requested(:post, url).twice
+        expect(service).to have_received(:sleep).with(Coolhand::PostDelivery::RETRY_BACKOFF)
+        expect(Coolhand::LogQueue).not_to have_received(:record_failure)
+      end
+
+      it "backs off further on each retry, then records one failure when retries are exhausted" do
+        stub_request(:post, url).to_return(status: 502, body: "")
+
+        expect(service.send_llm_request_log(request_data)).to be_nil
+        expect(WebMock).to have_requested(:post, url).times(1 + Coolhand::PostDelivery::LOG_SEND_RETRIES)
+        expect(service).to have_received(:sleep).with(Coolhand::PostDelivery::RETRY_BACKOFF * 2)
+        expect(Coolhand::LogQueue).to have_received(:record_failure).once
+      end
+
+      [Errno::ECONNREFUSED, Net::OpenTimeout, SocketError].each do |error|
+        it "retries #{error}, a failure where the log was not stored" do
+          stub_request(:post, url).to_raise(error).then.to_return(status: 200, body: "{}")
+
+          expect(service.send_llm_request_log(request_data)).to eq({})
+          expect(WebMock).to have_requested(:post, url).twice
+        end
+      end
+
+      it "retries a 429" do
+        stub_request(:post, url).to_return({ status: 429, body: "" }, { status: 200, body: "{}" })
+
+        expect(service.send_llm_request_log(request_data)).to eq({})
+      end
+
+      [Errno::ECONNRESET, Net::ReadTimeout].each do |error|
+        it "does not retry #{error}, which may have stored the log, but records the failure" do
+          stub_request(:post, url).to_raise(error)
+
+          expect(service.send_llm_request_log(request_data)).to be_nil
+          expect(WebMock).to have_requested(:post, url).once
+          expect(Coolhand::LogQueue).to have_received(:record_failure).once
+        end
+      end
+
+      it "does not retry a 504, which may have stored the log" do
+        stub_request(:post, url).to_return(status: 504, body: "")
+
+        expect(service.send_llm_request_log(request_data)).to be_nil
+        expect(WebMock).to have_requested(:post, url).once
+      end
+
+      it "records a payload that cannot be serialised as a failure instead of raising" do
+        allow(JSON).to receive(:generate).and_raise(JSON::GeneratorError, "bad payload")
+
+        expect(service.send_llm_request_log(request_data)).to be_nil
+        expect(Coolhand::LogQueue).to have_received(:record_failure).once
+      end
+
+      it "still reports success when writing the success message fails" do
+        stub_request(:post, url).to_return(status: 200, body: "{}")
+        allow(service).to receive(:log).with(/Successfully/).and_raise(Errno::EPIPE)
+
+        expect(service.send_llm_request_log(request_data)).to eq({})
+        expect(Coolhand::LogQueue).not_to have_received(:record_failure)
+      end
+
+      it "treats a 2xx with an empty body as delivered" do
+        stub_request(:post, url).to_return(status: 204, body: "")
+
+        expect(service.send_llm_request_log(request_data)).to eq({})
+        expect(Coolhand::LogQueue).not_to have_received(:record_failure)
+      end
+
+      it "does not retry a 400 but still records the failure" do
+        stub_request(:post, url).to_return(status: 400, body: "bad")
+
+        expect(service.send_llm_request_log(request_data)).to be_nil
+        expect(WebMock).to have_requested(:post, url).once
+        expect(Coolhand::LogQueue).to have_received(:record_failure).once
+      end
+
+      it "does not retry or record when the API key is missing" do
+        Coolhand.configuration.api_key = nil
+
+        expect(service.send_llm_request_log(request_data)).to be_nil
+        expect(WebMock).not_to have_requested(:post, url)
+        expect(Coolhand::LogQueue).not_to have_received(:record_failure)
+      end
+    end
+
+    context "when sent inline in the host's request path" do
+      it "does not retry or record a failure" do
+        stub_request(:post, url).to_return(status: 503, body: "")
+
+        expect(service.send_llm_request_log(request_data)).to be_nil
+        expect(WebMock).to have_requested(:post, url).once
+        expect(Coolhand::LogQueue).not_to have_received(:record_failure)
+      end
+    end
+  end
+
   describe "#sanitize_payload_for_json" do
     let(:service) do
       instance = described_class.new

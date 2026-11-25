@@ -212,6 +212,7 @@ module Coolhand
 
       def drop_oldest
         abandon([@jobs.shift])
+        LogQueue.record_failure
         Coolhand.log "⚠️ Log queue full (#{MAX_QUEUE_SIZE}); dropping the oldest pending log"
       end
 
@@ -261,6 +262,7 @@ module Coolhand
       def run(job)
         job.call
       rescue StandardError => e
+        LogQueue.record_failure
         Coolhand.log "❌ Error in background log job: #{e.message}"
       end
     end
@@ -270,6 +272,9 @@ module Coolhand
 
     @at_exit_mutex = Mutex.new
     @at_exit_registered = false
+    @failure_mutex = Mutex.new
+    @failures = 0
+    @failures_pid = Process.pid
 
     class << self
       # Queues the job on a background lane, or runs it inline (see the module comment). With a
@@ -300,10 +305,25 @@ module Coolhand
       end
 
       # Blocks until every queued job has finished or the timeout elapses. Returns true when
-      # every lane drained in time.
+      # every lane drained in time and no log send failed (after retries) since the last drained
+      # flush; false means a timeout or a lost log. A job that finished is not a job that delivered.
       def flush(timeout = DEFAULT_FLUSH_TIMEOUT)
         deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
-        LANES.values.map { |lane| lane.flush(deadline) }.all?
+        drained = LANES.values.map { |lane| lane.flush(deadline) }.all?
+        drained && take_failures.zero?
+      end
+
+      # Called by a worker's send that gave up, so `flush` can report it.
+      def record_failure
+        @failure_mutex.synchronize do
+          forget_inherited_failures
+          @failures += 1
+        end
+      end
+
+      # True on a queue worker, whose sends are retried and tracked rather than run in the host's path.
+      def worker_thread?
+        LANES.each_value.any? { |lane| lane.thread == Thread.current }
       end
 
       # One condition-variable wait bounded by a monotonic deadline (the caller holds the mutex and
@@ -320,6 +340,7 @@ module Coolhand
       def reset!
         LANES.each_value(&:reset!)
         DELIVERIES.clear
+        take_failures
       end
 
       private
@@ -332,12 +353,23 @@ module Coolhand
         raise
       end
 
-      def async?
-        Coolhand.configuration.async_logging && !Coolhand.configuration.debug_mode && !worker_thread?
+      def take_failures
+        @failure_mutex.synchronize do
+          forget_inherited_failures
+          @failures.tap { @failures = 0 }
+        end
       end
 
-      def worker_thread?
-        LANES.each_value.any? { |lane| lane.thread == Thread.current }
+      # A forked child inherits the parent's count, but those sends were the parent's.
+      def forget_inherited_failures
+        return if @failures_pid == Process.pid
+
+        @failures_pid = Process.pid
+        @failures = 0
+      end
+
+      def async?
+        Coolhand.configuration.async_logging && !Coolhand.configuration.debug_mode && !worker_thread?
       end
 
       def register_at_exit

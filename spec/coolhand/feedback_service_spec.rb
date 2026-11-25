@@ -462,4 +462,122 @@ RSpec.describe Coolhand::FeedbackService do
       end
     end
   end
+
+  describe "#create_feedback with raise_on_error: true" do
+    let(:url) { "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks" }
+    let(:feedback) { { client_unique_id: "order-42.1", sentiment: "like" } }
+
+    it "raises instead of returning nil when the log for the client_unique_id failed to send" do
+      allow(Coolhand::LogQueue).to receive(:await_delivery).and_return(:failed)
+
+      expect { service.create_feedback(feedback, raise_on_error: true) }
+        .to raise_error(Coolhand::Error, /log for client_unique_id "order-42\.1" failed to send/)
+      expect(WebMock).not_to have_requested(:post, url)
+    end
+
+    it "returns the parsed response on success" do
+      stub_request(:post, url).to_return(status: 201, body: JSON.generate({ id: "fb1" }))
+
+      expect(service.create_feedback(feedback, raise_on_error: true)).to eq({ id: "fb1" })
+    end
+
+    it "raises HttpError carrying the status and body for a non-2xx response" do
+      stub_request(:post, url).to_return(status: 422, body: "no matching log")
+
+      expect { service.create_feedback(feedback, raise_on_error: true) }
+        .to raise_error(Coolhand::HttpError) { |error|
+          expect(error.status).to eq(422)
+          expect(error.body).to eq("no matching log")
+          expect(error.message).to include("422", "no matching log")
+        }
+    end
+
+    it "raises Coolhand::Error for a network failure" do
+      stub_request(:post, url).to_raise(StandardError.new("boom"))
+
+      expect { service.create_feedback(feedback, raise_on_error: true) }
+        .to raise_error(Coolhand::Error, /boom/)
+    end
+
+    it "treats a 2xx with a blank or non-JSON body as delivered, not as a failure to retry" do
+      stub_request(:post, url).to_return({ status: 204, body: "" }, { status: 200, body: "not json" })
+
+      expect(service.create_feedback(feedback, raise_on_error: true)).to eq({})
+      expect(service.create_feedback(feedback, raise_on_error: true)).to eq({})
+    end
+
+    it "does not retry, so a failed feedback is never sent twice" do
+      stub_request(:post, url).to_return(status: 503, body: "")
+
+      expect { service.create_feedback(feedback, raise_on_error: true) }.to raise_error(Coolhand::HttpError)
+      expect(WebMock).to have_requested(:post, url).once
+    end
+
+    it "raises when the API key is missing, and sends nothing" do
+      allow(config).to receive(:api_key).and_return(nil)
+
+      expect { service.create_feedback(feedback, raise_on_error: true) }
+        .to raise_error(Coolhand::Error, /API key is required/)
+      expect(WebMock).not_to have_requested(:post, url)
+    end
+
+    it "still returns nil without raising by default" do
+      stub_request(:post, url).to_return(status: 500, body: "")
+      allow(config).to receive(:api_key).and_return(nil)
+
+      expect(service.create_feedback(feedback)).to be_nil
+    end
+
+    it "accepts the feedback fields as bare keywords alongside raise_on_error" do
+      stub_request(:post, url).to_return(status: 200, body: JSON.generate({ id: "fb1" }))
+
+      expect(service.create_feedback(client_unique_id: "order-42.1", sentiment: "like", raise_on_error: true))
+        .to eq({ id: "fb1" })
+      expect(WebMock).to(have_requested(:post, url).with do |req|
+        JSON.parse(req.body)["llm_request_log_feedback"]["client_unique_id"] == "order-42.1"
+      end)
+    end
+
+    it "rejects a misspelled option next to a feedback Hash instead of sending it as a field" do
+      expect { service.create_feedback(feedback, raise_on_eror: true) }
+        .to raise_error(ArgumentError, /raise_on_eror/)
+      expect(WebMock).not_to have_requested(:post, url)
+    end
+
+    it "returns nil in debug mode even when raising is on" do
+      allow(config).to receive(:debug_mode).and_return(true)
+
+      expect(service.create_feedback(feedback, raise_on_error: true)).to be_nil
+    end
+  end
+
+  describe "#create_feedback success message" do
+    let(:url) { "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks" }
+
+    before do
+      allow(config).to receive(:silent).and_return(false)
+      stub_request(:post, url).to_return(status: 200, body: JSON.generate({ id: "fb1" }))
+    end
+
+    {
+      llm_request_log_id: ["abc123", "LLM Request Log ID"],
+      llm_provider_unique_id: ["chatcmpl-9", "Provider Unique ID"],
+      client_unique_id: ["order-42.1", "Client Unique ID"]
+    }.each do |field, (value, label)|
+      it "names the #{field} it matched by, never N/A" do
+        expect { service.create_feedback(field => value, sentiment: "like") }
+          .to output(/Successfully created feedback \(#{label}: #{Regexp.escape(value)}\)/).to_stdout
+      end
+    end
+
+    it "prints no identifier when the feedback has none" do
+      expect { service.create_feedback(sentiment: "like") }
+        .to output(/Successfully created feedback$/).to_stdout
+    end
+
+    it "announces a client_unique_id feedback by that id" do
+      expect { service.create_feedback(client_unique_id: "order-42.1", sentiment: "like") }
+        .to output(/CREATING FEEDBACK for Client Unique ID: order-42.1/).to_stdout
+    end
+  end
 end

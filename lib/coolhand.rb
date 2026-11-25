@@ -112,8 +112,10 @@ module Coolhand
     end
 
     # Blocks until log requests queued by async logging have been sent, or the timeout (in
-    # seconds) elapses. Returns true if everything was sent. Pending logs are also flushed
-    # automatically at process exit.
+    # seconds) elapses. Returns true if everything was sent, false on a timeout or if a log was
+    # not delivered (a send that failed after retrying transient errors, a job that raised, or a
+    # log dropped from a full queue) since the previous flush that drained.
+    # Pending logs are also flushed automatically at process exit.
     def flush(timeout: LogQueue::DEFAULT_FLUSH_TIMEOUT)
       LogQueue.flush(timeout)
     end
