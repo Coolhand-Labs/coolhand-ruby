@@ -399,5 +399,67 @@ RSpec.describe Coolhand::FeedbackService do
           end)
       end
     end
+
+    context "when the feedback names a client_unique_id" do
+      let(:feedback) { { client_unique_id: "abc.1", sentiment: "like" } }
+
+      before do
+        stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+          .to_return(status: 200, body: JSON.generate(id: "fb1"), headers: { "Content-Type" => "application/json" })
+      end
+
+      it "waits for that log before sending" do
+        allow(Coolhand::LogQueue).to receive(:await_delivery).and_return(:delivered)
+
+        expect(service.create_feedback(feedback)).to eq({ id: "fb1" })
+        expect(Coolhand::LogQueue).to have_received(:await_delivery)
+          .with("abc.1", timeout: described_class::LOG_WAIT_TIMEOUT)
+      end
+
+      it "sends right away when the log is not queued here" do
+        allow(Coolhand::LogQueue).to receive(:await_delivery).and_return(:none)
+
+        expect(service.create_feedback(feedback)).to eq({ id: "fb1" })
+      end
+
+      it "does not send, and returns nil, when the log failed to send" do
+        allow(Coolhand::LogQueue).to receive(:await_delivery).and_return(:failed)
+        allow(service).to receive(:log)
+
+        expect(service.create_feedback(feedback)).to be_nil
+        expect(WebMock).not_to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+        expect(service).to have_received(:log).with(a_string_including("failed to send"))
+      end
+
+      it "sends anyway, with a warning, when the log is still sending after the wait" do
+        allow(Coolhand::LogQueue).to receive(:await_delivery).and_return(:timeout)
+        allow(service).to receive(:log)
+
+        expect(service.create_feedback(feedback)).to eq({ id: "fb1" })
+        expect(service).to have_received(:log).with(a_string_including("before its log finished"))
+      end
+
+      it "holds the feedback POST until the queued log send completes" do
+        allow(config).to receive(:async_logging).and_return(true)
+        release = Queue.new
+        Coolhand::LogQueue.submit(client_unique_id: "abc.1") { release.pop }
+
+        sender = Thread.new { service.create_feedback(feedback) }
+        sleep 0.01 until sender.status == "sleep"
+        expect(WebMock).not_to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+
+        release << { id: "log" }
+        expect(sender.value).to eq({ id: "fb1" })
+        expect(WebMock).to have_requested(:post, "https://coolhandlabs.com/api/v2/llm_request_log_feedbacks")
+      end
+
+      it "does not wait when feedback has no client_unique_id" do
+        allow(Coolhand::LogQueue).to receive(:await_delivery)
+
+        service.create_feedback(llm_request_log_id: "abc", sentiment: "like")
+
+        expect(Coolhand::LogQueue).not_to have_received(:await_delivery)
+      end
+    end
   end
 end

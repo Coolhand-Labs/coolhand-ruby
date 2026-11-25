@@ -321,7 +321,6 @@ Coolhand.with_context(client_unique_id: "support-ticket-123.1") do
 end
 
 # The log is tagged with the id above, so feedback can be matched to that request
-Coolhand.flush # logs are sent in the background; make sure this one has been delivered
 Coolhand.feedback_service.create_feedback(
   client_unique_id: "support-ticket-123.1",
   sentiment: "like",

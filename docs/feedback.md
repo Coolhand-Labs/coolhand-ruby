@@ -34,9 +34,10 @@ Coolhand.with_context(client_unique_id: 'order-42.1') do
   client.chat(...) # logged with client_unique_id 'order-42.1'
 end
 
-Coolhand.flush # logs are sent in the background; make sure this one has been delivered
 feedback_service.create_feedback(client_unique_id: 'order-42.1', sentiment: 'like')
 ```
+
+Logs are sent in the background, so `create_feedback` holds the feedback until the log with that `client_unique_id` has finished sending (up to 5 seconds), then sends it. You don't need to call `Coolhand.flush` first. If that log's send failed (the failure is remembered for later `create_feedback` calls with that id, until a log with it is sent successfully), the feedback is not sent and `create_feedback` returns `nil`, because Coolhand never received the log. When several logs share an id, it waits for all of them and sends if any one was delivered. This ordering only covers logs queued in the same process; if you send feedback from a different process (a background job, say), make sure the log has been delivered first.
 
 ---
 
