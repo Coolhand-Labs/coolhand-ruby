@@ -25,6 +25,14 @@ RSpec.describe Coolhand::ApiService do
     end
   end
 
+  describe "read request timeouts" do
+    it "bounds writes too, so a stalled GET cannot hang for Net::HTTP's 60s default" do
+      http = described_class.new.send(:build_http, URI("https://coolhandlabs.com/api/v2/savings"))
+
+      expect([http.open_timeout, http.read_timeout, http.write_timeout]).to eq([5, 60, 5])
+    end
+  end
+
   describe "custom base_url" do
     it "uses the configured base_url to build api_endpoint" do
       Coolhand.configuration.base_url = "https://self-hosted.example.com/api"
@@ -328,6 +336,30 @@ RSpec.describe Coolhand::ApiService do
 
       expect { service.send_llm_request_log(request_data) }
         .to output(/\[HTML error page truncated\]/).to_stdout
+    end
+
+    it "strips control characters from the error body so a server cannot forge log lines or escape sequences" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: "boom\n\e[31mred\e[0m\r\nforged line")
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/500 - boom \[31mred \[0m forged line$/).to_stdout
+    end
+
+    it "survives an invalid UTF-8 body" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: "bin \xFF\xFE".b.freeze)
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/500 - bin/).to_stdout
+    end
+
+    it "only sanitizes a bounded prefix of an oversized body and marks it truncated" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: "#{"\n" * 20_000}tail")
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/500 - \.\.\. \[truncated\]$/).to_stdout
     end
 
     it "logs the full body for non-HTML error responses" do

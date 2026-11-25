@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 module Coolhand
-  # Prints the `warnings` a Coolhand log response carries, for {ApiService}.
+  # Prints the `warnings` a Coolhand log response carries, for {ApiService}. Also owns
+  # `strip_control_characters`, which {ApiService#format_error_body} (and so every
+  # {ReadRequests}/{WriteRequests} caller) uses on the error body.
   #
   # Warnings come from the response body and are written to the host app's stdout, so they are
   # untrusted: each is coerced to a string, stripped of control characters and length-capped, and
@@ -27,10 +29,15 @@ module Coolhand
     # Control characters and line/paragraph separators are replaced with a space, not dropped: a
     # newline would forge a log line and ESC starts a terminal escape sequence. Unicode format
     # characters (bidi overrides, zero-width) are invisible and can reorder or hide text in a
-    # terminal, so they are removed outright.
+    # terminal, so they are removed outright. Shared with ApiService#format_error_body, which
+    # prints another server-controlled string.
+    def strip_control_characters(value)
+      text = value.to_s.dup.force_encoding("UTF-8").scrub
+      text.gsub(/\p{Cf}+/, "").gsub(/[[:cntrl:]\p{Zl}\p{Zp}]+/, " ").strip
+    end
+
     def sanitize_warning(warning)
-      text = warning.to_s.dup.force_encoding("UTF-8").scrub
-      text = text.gsub(/\p{Cf}+/, "").gsub(/[[:cntrl:]\p{Zl}\p{Zp}]+/, " ").strip
+      text = strip_control_characters(warning)
       return text if text.length <= MAX_WARNING_LENGTH
 
       "#{text[0, MAX_WARNING_LENGTH]}... [truncated]"

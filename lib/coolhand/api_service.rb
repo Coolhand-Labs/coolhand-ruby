@@ -19,6 +19,10 @@ module Coolhand
     # message. Without it an oversized body from a proxy or gateway becomes the message.
     ERROR_BODY_LIMIT = 2000
 
+    # How much of a failed response body is sanitized before it is cut to ERROR_BODY_LIMIT
+    # characters (a character is at most 4 bytes).
+    ERROR_BODY_SCAN_BYTES = ERROR_BODY_LIMIT * 4
+
     attr_reader :api_endpoint
 
     def initialize(endpoint = "v2/llm_request_logs")
@@ -220,9 +224,12 @@ module Coolhand
     def format_error_body(body)
       return nil if body.nil?
 
-      text = body.dup.force_encoding("UTF-8")
+      # The body is server-controlled and ends up on the host's stdout, so strip control characters.
+      # Only a bounded prefix is sanitized, so a multi-megabyte body costs no more than a small one.
+      raw = body.to_s
+      text = strip_control_characters(raw.byteslice(0, ERROR_BODY_SCAN_BYTES))
       return "#{text[0..200]}... [HTML error page truncated]" if text.include?("<!DOCTYPE html>")
-      return text if text.length <= ERROR_BODY_LIMIT
+      return text if text.length <= ERROR_BODY_LIMIT && raw.bytesize <= ERROR_BODY_SCAN_BYTES
 
       "#{text[0, ERROR_BODY_LIMIT]}... [truncated]"
     end

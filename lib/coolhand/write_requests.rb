@@ -10,8 +10,8 @@ module Coolhand
   # POST/DELETE counterpart of {ReadRequests} for callers that act on the response: raises on any
   # failure where {ApiService#send_request} logs and returns nil. Timeouts are the read ones, for
   # the same server-side statement-bound reason. Mix into an {ApiService} subclass: it relies on
-  # `api_key`, `apply_headers` and `format_error_body` from there and the shared HTTP helpers from
-  # {ReadRequests}.
+  # `api_key`, `apply_headers` and `format_error_body` (which in turn needs {ResponseWarnings}'
+  # `strip_control_characters`) from there and the shared HTTP helpers from {ReadRequests}.
   module WriteRequests
     DOT_SEGMENTS = [".", ".."].freeze
 

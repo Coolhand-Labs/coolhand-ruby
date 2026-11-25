@@ -306,6 +306,15 @@ RSpec.describe Coolhand::TemplateService do
           .to raise_error(an_object_having_attributes(body: a_string_ending_with("... [truncated]")))
       end
 
+      it "strips control characters from the message, but keeps the raw body for callers that parse it" do
+        stub_request(:get, /llm_request_templates/).to_return(status: 500, body: "boom\n\e[31mred\e[0m")
+
+        expect { service.search_templates }.to raise_error(Coolhand::HttpError) { |e|
+          expect(e.message).to end_with("(500): boom [31mred [0m")
+          expect(e.body).to eq("boom\n\e[31mred\e[0m")
+        }
+      end
+
       it "raises rather than returning nil, unlike the write methods" do
         stub_list(body: { error: "API key is required" }, status: 401)
 
