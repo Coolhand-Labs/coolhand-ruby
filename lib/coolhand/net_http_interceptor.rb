@@ -195,14 +195,15 @@ module Coolhand
     module Helpers
       module_function
 
-      HOST_BLOCK_ERROR_MESSAGE = "[redacted: raised in host streaming block]"
+      NON_TRANSPORT_ERROR_MESSAGE = "[redacted: not a transport error]"
       # Socket-level failures can surface inside the host's block (read_body runs there); they
       # carry no app data, so they keep their message even when they pass through the host block.
+      # SocketError (DNS failures) is neither an IOError nor a SystemCallError, so it is listed too.
       TRANSPORT_ERRORS = [
-        IOError, SystemCallError, Timeout::Error, Net::ProtocolError, OpenSSL::SSL::SSLError,
+        IOError, SystemCallError, SocketError, Timeout::Error, Net::ProtocolError, OpenSSL::SSL::SSLError,
         Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Zlib::Error
       ].freeze
-      private_constant :HOST_BLOCK_ERROR_MESSAGE, :TRANSPORT_ERRORS
+      private_constant :NON_TRANSPORT_ERROR_MESSAGE, :TRANSPORT_ERRORS
 
       # Wraps the host's streaming block so (a) read_body only buffers the response being
       # captured here, and (b) exceptions raised by the host's own code can be told apart from
@@ -220,19 +221,23 @@ module Coolhand
         end
       end
 
-      # Matched by class, so a host block raising its own IOError/SystemCallError subclass keeps its
-      # message too; accepted trade-off, as telling those apart from socket failures isn't possible.
+      # Matched by class, so host code (the streaming block or a custom body_stream) raising its own
+      # IOError/SystemCallError subclass keeps its message too; accepted trade-off, as telling those
+      # apart from socket failures isn't possible.
       def transport_error?(error)
         TRANSPORT_ERRORS.any? { |klass| error.is_a?(klass) }
       end
 
       # An error raised by the host's streaming block can carry app-level data in its message (and
-      # in a #status or message-embedded status code), so only its class is logged and no status is
-      # derived from it; transport errors keep their message and status. Returns [status, body].
+      # in a #status or message-embedded status code), so no status is derived from it. Other errors
+      # (e.g. one raised by `super` itself) still have a status extracted. Independently of that,
+      # every non-transport error, whether from the streaming block or other host code such as a
+      # custom body_stream, is logged with only its class; transport errors keep their message.
+      # Returns [status, body].
       def error_details(error, host_block_errors)
         from_host = host_block_errors.any? { |host_error| host_error.equal?(error) }
         status = from_host ? nil : extract_status_from_exception(error)
-        message = from_host ? HOST_BLOCK_ERROR_MESSAGE : error.message
+        message = transport_error?(error) ? error.message : NON_TRANSPORT_ERROR_MESSAGE
         [status, { "error" => { "class" => error.class.name, "message" => message } }]
       end
 
