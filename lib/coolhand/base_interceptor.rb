@@ -273,9 +273,10 @@ module Coolhand
       request_data[:declared] = declared if declared && !declared.empty?
       request_data[:client_unique_id] = client_unique_id if client_unique_id
 
-      LogQueue.submit do
-        Coolhand::ApiService.new.send_llm_request_log(request_data)
+      LogQueue.submit(client_unique_id: client_unique_id) do
+        result = Coolhand::ApiService.new.send_llm_request_log(request_data)
         Coolhand.log "📤 Sent complete request/response log for #{request_id} (duration: #{duration_ms}ms)"
+        result
       end
     rescue StandardError => e
       Coolhand.log "❌ Error sending complete request log: #{e.message}"

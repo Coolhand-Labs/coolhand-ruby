@@ -186,6 +186,137 @@ RSpec.describe Coolhand::LogQueue do
     end
   end
 
+  describe ".await_delivery" do
+    it "returns :none when nothing is pending for the id" do
+      expect(described_class.await_delivery("nope", timeout: 0.1)).to eq(:none)
+    end
+
+    it "returns :none when the job ran inline" do
+      Coolhand.configuration.async_logging = false
+      described_class.submit(client_unique_id: "abc.1") { :sent }
+
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:none)
+    end
+
+    it "waits for the job and returns :delivered when it returns a result" do
+      release = Queue.new
+      described_class.submit(client_unique_id: "abc.1") { release.pop }
+
+      result = Thread.new { described_class.await_delivery("abc.1", timeout: 2) }
+      sleep 0.01 until result.status == "sleep"
+      expect(result).to be_alive
+      release << { id: "log" }
+
+      expect(result.value).to eq(:delivered)
+    end
+
+    it "returns :failed when the job returns nil" do
+      described_class.submit(client_unique_id: "abc.1") { nil }
+
+      expect(described_class.await_delivery("abc.1", timeout: 2)).to eq(:failed)
+    end
+
+    it "returns :failed when the job raises" do
+      allow(Coolhand).to receive(:log)
+      described_class.submit(client_unique_id: "abc.1") { raise "boom" }
+
+      expect(described_class.await_delivery("abc.1", timeout: 2)).to eq(:failed)
+    end
+
+    it "returns :timeout while the job is still running" do
+      release = Queue.new
+      described_class.submit(client_unique_id: "abc.1") { release.pop }
+
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:timeout)
+      release << true
+    end
+
+    it "ignores unrelated jobs ahead of and behind it" do
+      release = Queue.new
+      started = Queue.new
+      described_class.submit(lane: :batch) do
+        started << true
+        release.pop
+      end
+      started.pop
+      described_class.submit(client_unique_id: "mine") { :sent }
+      described_class.submit(client_unique_id: "other") { release.pop }
+
+      expect(described_class.await_delivery("mine", timeout: 2)).to eq(:delivered)
+      release << true
+      release << true
+    end
+
+    it "waits for every log that shares the id" do
+      release = Queue.new
+      described_class.submit(client_unique_id: "abc.1") { :sent }
+      described_class.submit(client_unique_id: "abc.1") { release.pop }
+
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:timeout)
+      release << true
+      expect(described_class.await_delivery("abc.1", timeout: 2)).to eq(:delivered)
+    end
+
+    it "returns :failed for a job dropped from a full queue" do
+      allow(Coolhand).to receive(:log)
+      stub_const("#{described_class}::MAX_QUEUE_SIZE", 1)
+      release = Queue.new
+      started = Queue.new
+      described_class.submit do
+        started << true
+        release.pop
+      end
+      started.pop
+      described_class.submit(client_unique_id: "dropped") { :sent }
+      described_class.submit { :newer }
+
+      expect(described_class.await_delivery("dropped", timeout: 2)).to eq(:failed)
+      release << true
+    end
+
+    it "settles a tracked job whose enqueue raises, then re-raises" do
+      allow(described_class::LANES[:default]).to receive(:enqueue).and_raise(ThreadError)
+
+      expect { described_class.submit(client_unique_id: "abc.1") { :sent } }.to raise_error(ThreadError)
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:failed)
+    end
+
+    it "forgets delivered jobs" do
+      described_class.submit(client_unique_id: "abc.1") { :sent }
+      described_class.flush(2)
+
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:none)
+    end
+
+    it "remembers a failed send for later callers until the id is delivered" do
+      sent = [nil, :sent].each
+      described_class.submit(client_unique_id: "abc.1") { sent.next }
+      described_class.flush(2)
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:failed)
+
+      described_class.submit(client_unique_id: "abc.1") { sent.next }
+      described_class.flush(2)
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:none)
+    end
+
+    it "bounds how many failed ids it remembers" do
+      stub_const("#{described_class}::Deliveries::MAX_FAILED_IDS", 2)
+      %w[a b c].each { |id| described_class.submit(client_unique_id: id) { nil } }
+      described_class.flush(2)
+
+      expect(%w[a b c].map { |id| described_class.await_delivery(id, timeout: 0.1) }).to eq(%i[none failed failed])
+    end
+
+    it "does not see the parent's pending jobs in a forked child" do
+      release = Queue.new
+      described_class.submit(client_unique_id: "abc.1") { release.pop }
+
+      allow(Process).to receive(:pid).and_return(Process.pid + 1)
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:none)
+      release << true
+    end
+  end
+
   describe "NetHttpInterceptor integration" do
     let(:api_service) { instance_double(Coolhand::ApiService) }
 
@@ -214,6 +345,31 @@ RSpec.describe Coolhand::LogQueue do
       release << true
       expect(Coolhand.flush(timeout: 2)).to be true
       expect(api_service).to have_received(:send_llm_request_log).once
+    end
+
+    it "lets feedback wait for the log carrying its client_unique_id" do
+      release = Queue.new
+      allow(api_service).to receive(:send_llm_request_log) { release.pop }
+
+      uri = URI("https://api.test.com/hello")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      Coolhand.with_context(client_unique_id: "abc.1") { http.request(Net::HTTP::Get.new(uri)) }
+
+      expect(described_class.await_delivery("abc.1", timeout: 0.1)).to eq(:timeout)
+      release << { id: "log" }
+      expect(described_class.await_delivery("abc.1", timeout: 2)).to eq(:delivered)
+    end
+
+    it "reports a failed log send to anyone waiting on its client_unique_id" do
+      allow(api_service).to receive(:send_llm_request_log).and_return(nil)
+
+      uri = URI("https://api.test.com/hello")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      Coolhand.with_context(client_unique_id: "abc.1") { http.request(Net::HTTP::Get.new(uri)) }
+
+      expect(described_class.await_delivery("abc.1", timeout: 2)).to eq(:failed)
     end
   end
 end
