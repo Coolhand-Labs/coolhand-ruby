@@ -226,14 +226,23 @@ RSpec.describe Coolhand::NetHttpInterceptor do
       expect(intercepted?("#{host}/v1/models/x/y%3AgenerateContent")).to be false
     end
 
-    it "matches the Google intercept_path_patterns only at the end of the path" do
+    it "matches the Google intercept_path_patterns only at the end of the path, ignoring the query string" do
       host = "https://storage.googleapis.com"
       expect(intercepted?("#{host}/v1/models/gemini-pro:generateContent")).to be true
       expect(intercepted?("#{host}/v1/models/gemini-pro:streamGenerateContent")).to be true
       expect(intercepted?("#{host}/v1/models/gemini-pro:streamGenerateContent?alt=sse")).to be true
       expect(intercepted?("#{host}/b/bucket/o/notes:generateContent.txt")).to be false
       expect(intercepted?("#{host}/b/bucket/o/x:generateContent/y")).to be false
+      expect(intercepted?("#{host}/v1/models/gemini-pro:generateContent/")).to be false
       expect(intercepted?("#{host}/v1/models/gemini-pro:countTokens")).to be false
+    end
+
+    it "suffix-matches custom intercept_path_patterns too" do
+      Coolhand.configuration.intercept_path_patterns = [":myAction"]
+      host = "https://storage.googleapis.com"
+      expect(intercepted?("#{host}/v1/models/m:myAction")).to be true
+      expect(intercepted?("#{host}/v1/models/m:myAction/x")).to be false
+      expect(intercepted?("#{host}/v1/models/m:generateContent")).to be false
     end
 
     it "matches a port-pinned path anchor through a normalized path" do
