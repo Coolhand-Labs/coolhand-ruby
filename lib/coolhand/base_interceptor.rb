@@ -72,11 +72,8 @@ module Coolhand
         key_down = k.to_s.downcase
 
         if key_down == "authorization"
-          sanitized[k] = if v.to_s.match?(/\ABearer\s+/i)
-            v.to_s.gsub(/\ABearer\s+.+/im, "Bearer [REDACTED]")
-          else
-            "[REDACTED]"
-          end
+          # Keep only the scheme: nothing after "Bearer " survives, whatever the value contains.
+          sanitized[k] = v.to_s.match?(/\ABearer\s+/i) ? "Bearer [REDACTED]" : "[REDACTED]"
         elsif sensitive_header?(key_down)
           sanitized[k] = "[REDACTED]"
         end

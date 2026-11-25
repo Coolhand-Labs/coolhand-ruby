@@ -220,7 +220,8 @@ module Coolhand
     def format_error_body(body)
       return nil if body.nil?
 
-      text = body.dup.force_encoding("UTF-8")
+      # The body is server-controlled and ends up on the host's stdout, so strip control characters.
+      text = strip_control_characters(body)
       return "#{text[0..200]}... [HTML error page truncated]" if text.include?("<!DOCTYPE html>")
       return text if text.length <= ERROR_BODY_LIMIT
 

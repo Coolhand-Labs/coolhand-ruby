@@ -16,6 +16,8 @@ module Coolhand
     # and one response runs several. A tighter read timeout pre-empts the 504 callers should retry.
     READ_OPEN_TIMEOUT = 5
     READ_TIMEOUT = 60
+    # A GET writes only its request line and headers, so a stalled write is a dead connection.
+    READ_WRITE_TIMEOUT = 5
 
     # ERROR_BODY_LIMIT caps the message; this caps the body the exception object itself carries.
     RETAINED_ERROR_BODY_LIMIT = 8_000
@@ -74,6 +76,7 @@ module Coolhand
       http.use_ssl = (uri.scheme == "https")
       http.open_timeout = READ_OPEN_TIMEOUT
       http.read_timeout = READ_TIMEOUT
+      http.write_timeout = READ_WRITE_TIMEOUT
       http
     end
 
