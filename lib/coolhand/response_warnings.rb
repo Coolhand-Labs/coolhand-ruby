@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 module Coolhand
-  # Prints the `warnings` a Coolhand log response carries, for {ApiService}.
+  # Prints the `warnings` a Coolhand log response carries, for {ApiService}. Also owns
+  # `strip_control_characters`, which {ApiService#format_error_body} (and so every
+  # {ReadRequests}/{WriteRequests} caller) uses on the error body.
   #
   # Warnings come from the response body and are written to the host app's stdout, so they are
   # untrusted: each is coerced to a string, stripped of control characters and length-capped, and

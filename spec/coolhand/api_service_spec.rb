@@ -346,6 +346,22 @@ RSpec.describe Coolhand::ApiService do
         .to output(/500 - boom \[31mred \[0m forged line$/).to_stdout
     end
 
+    it "survives an invalid UTF-8 body" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: "bin \xFF\xFE".b.freeze)
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/500 - bin/).to_stdout
+    end
+
+    it "only sanitizes a bounded prefix of an oversized body and marks it truncated" do
+      stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
+        .to_return(status: 500, body: "#{"\n" * 20_000}tail")
+
+      expect { service.send_llm_request_log(request_data) }
+        .to output(/500 - \.\.\. \[truncated\]$/).to_stdout
+    end
+
     it "logs the full body for non-HTML error responses" do
       stub_request(:post, "https://coolhandlabs.com/api/v2/llm_request_logs")
         .to_return(status: 500, body: "plain text error")
