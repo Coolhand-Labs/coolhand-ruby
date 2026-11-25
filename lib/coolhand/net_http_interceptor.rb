@@ -417,7 +417,9 @@ module Coolhand
         return false unless google_api_host_configured?(addresses)
         return false unless host == "googleapis.com" || host.end_with?(".googleapis.com")
 
-        Coolhand.configuration.intercept_path_patterns.any? { |p| path.include?(p) }
+        # A colon action is always a path's last segment, so a pattern only matches at the end:
+        # a Cloud Storage object whose name merely contains ":generateContent" is not Gemini traffic.
+        Coolhand.configuration.intercept_path_patterns.any? { |p| path.end_with?(p) }
       end
 
       # The capture decision runs before the host's real request, so a bad config value (e.g. a
